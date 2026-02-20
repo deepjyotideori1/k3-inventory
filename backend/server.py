@@ -575,11 +575,13 @@ async def create_inventory_item(data: InventoryItemCreate, user: dict = Depends(
 
 @api_router.post("/reports/daily", response_model=DailyReportResponse)
 async def create_daily_report(data: DailyReportCreate, user: dict = Depends(get_current_user)):
-    # Calculate expected closing based on formula (including received from plant)
-    expected_15kg_filled = data.opening_15kg_filled - data.sold_15kg_filled + data.refilling_15kg + data.refilling_plant_15kg + data.received_from_plant_15kg
-    expected_21kg_filled = data.opening_21kg_filled - data.sold_21kg_filled + data.refilling_21kg + data.refilling_plant_21kg + data.received_from_plant_21kg
-    expected_15kg_empty = data.opening_15kg_empty + data.sold_15kg_filled - data.refilling_15kg - data.refilling_plant_15kg
-    expected_21kg_empty = data.opening_21kg_empty + data.sold_21kg_filled - data.refilling_21kg - data.refilling_plant_21kg
+    # Calculate expected closing based on formula
+    # Filled = Opening - Sold - Refilling (local) + Received from Plant
+    # Empty = Opening + Refilling (Local) - Refilling at Plant Hollongi
+    expected_15kg_filled = data.opening_15kg_filled - data.sold_15kg_filled - data.refilling_15kg + data.received_from_plant_15kg
+    expected_21kg_filled = data.opening_21kg_filled - data.sold_21kg_filled - data.refilling_21kg + data.received_from_plant_21kg
+    expected_15kg_empty = data.opening_15kg_empty + data.refilling_15kg - data.refilling_plant_15kg
+    expected_21kg_empty = data.opening_21kg_empty + data.refilling_21kg - data.refilling_plant_21kg
     
     # Calculate discrepancies
     discrepancy_15kg_filled = data.closing_15kg_filled - expected_15kg_filled
