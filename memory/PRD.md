@@ -132,3 +132,8 @@ Closing = Opening + Refilling (Local) - Refilling at Plant Hollongi
 - `/api/dashboard/stats` - Dashboard statistics
 - `/api/export/pdf` - PDF export
 - `/api/export/excel` - Excel export
+- `/api/dealers` - CRUD for dealers
+- `/api/dealer-entries` - Dealer daily entries
+- `/api/dealer-entries/summary` - Dealer-wise summary with totals
+- `/api/export/dealer-pdf` - Dealer report PDF export
+- `/api/export/dealer-excel` - Dealer report Excel export
