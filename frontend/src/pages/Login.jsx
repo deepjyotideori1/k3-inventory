@@ -65,9 +65,11 @@ const Login = () => {
           {/* Logo */}
           <div className="mb-8">
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 rounded-xl bg-green-700 flex items-center justify-center shadow-lg">
-                <span className="text-white font-bold text-xl">K3</span>
-              </div>
+              <img 
+                src="https://customer-assets.emergentagent.com/job_gas-stock-master/artifacts/nww68qmn_customcolor_icon_customcolor_background.png" 
+                alt="K3 Logo" 
+                className="w-14 h-14 object-contain"
+              />
               <div>
                 <h1 className="logo-text text-2xl">K3 GAS SERVICE</h1>
                 <p className="text-slate-500 text-sm">Khayal Hamesha</p>

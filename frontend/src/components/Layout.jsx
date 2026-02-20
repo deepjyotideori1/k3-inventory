@@ -67,9 +67,11 @@ const Layout = ({ children }) => {
       {/* Mobile Header */}
       <div className="lg:hidden flex items-center justify-between p-4 bg-white border-b">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-green-700 flex items-center justify-center">
-            <span className="text-white font-bold text-sm">K3</span>
-          </div>
+          <img 
+            src="https://customer-assets.emergentagent.com/job_gas-stock-master/artifacts/nww68qmn_customcolor_icon_customcolor_background.png" 
+            alt="K3 Logo" 
+            className="w-10 h-10 object-contain"
+          />
           <span className="font-bold text-green-700">K3 GAS SERVICE</span>
         </div>
         <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(!sidebarOpen)}>
@@ -90,9 +92,11 @@ const Layout = ({ children }) => {
             {/* Logo */}
             <div className="p-6 border-b border-white/10">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
-                  <span className="text-white font-bold text-lg">K3</span>
-                </div>
+                <img 
+                  src="https://customer-assets.emergentagent.com/job_gas-stock-master/artifacts/nww68qmn_customcolor_icon_customcolor_background.png" 
+                  alt="K3 Logo" 
+                  className="w-12 h-12 object-contain bg-white/90 rounded-lg p-1"
+                />
                 <div>
                   <h1 className="text-white font-bold text-lg leading-tight">K3 GAS SERVICE</h1>
                   <p className="text-green-200 text-xs">Khayal Hamesha</p>
