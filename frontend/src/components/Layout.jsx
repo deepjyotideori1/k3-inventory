@@ -13,7 +13,8 @@ import {
   AlertTriangle,
   Menu,
   X,
-  UserCheck
+  UserCheck,
+  Boxes
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
@@ -35,6 +36,7 @@ const Layout = ({ children }) => {
     { path: '/reports', label: 'Reports', icon: FileText },
     { path: '/plant-hollongi', label: 'Plant Hollongi', icon: Factory },
     { path: '/dealer-reports', label: 'Dealer Reports', icon: UserCheck },
+    { path: '/accessory-reports', label: 'LPG Accessories', icon: Boxes },
     { path: '/users', label: 'Users', icon: Users },
     { path: '/settings', label: 'Settings', icon: Settings },
   ];
