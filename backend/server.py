@@ -284,6 +284,56 @@ class DealerEntryResponse(BaseModel):
     submitted_by: str
     submitted_at: str
 
+# LPG Accessories Models
+class AccessoryCreate(BaseModel):
+    name: str
+    description: str = ""
+    unit: str = "pcs"
+
+class AccessoryResponse(BaseModel):
+    id: str
+    name: str
+    description: str
+    unit: str
+    created_at: str
+    is_active: bool
+
+class AccessoryDealerCreate(BaseModel):
+    name: str
+    contact: str = ""
+    address: str = ""
+
+class AccessoryDealerResponse(BaseModel):
+    id: str
+    name: str
+    contact: str
+    address: str
+    created_at: str
+    is_active: bool
+
+class AccessoryEntryCreate(BaseModel):
+    accessory_id: str
+    dealer_id: str
+    date: str
+    total_issued: int = 0
+    total_sold: int = 0
+    total_remaining: int = 0
+    remarks: str = ""
+
+class AccessoryEntryResponse(BaseModel):
+    id: str
+    accessory_id: str
+    accessory_name: str
+    dealer_id: str
+    dealer_name: str
+    date: str
+    total_issued: int
+    total_sold: int
+    total_remaining: int
+    remarks: str
+    submitted_by: str
+    submitted_at: str
+
 
 # ============ HELPER FUNCTIONS ============
 
