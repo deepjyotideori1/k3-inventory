@@ -118,4 +118,57 @@ export const exportExcel = async (params) => {
   }
 };
 
+// Dealers
+export const getDealers = () => api.get('/dealers');
+export const createDealer = (data) => api.post('/dealers', data);
+export const updateDealer = (dealerId, data) => api.put(`/dealers/${dealerId}`, data);
+export const deleteDealer = (dealerId) => api.delete(`/dealers/${dealerId}`);
+
+// Dealer Entries
+export const createDealerEntry = (data) => api.post('/dealer-entries', data);
+export const getDealerEntries = (params) => api.get('/dealer-entries', { params });
+export const getDealerSummary = (params) => api.get('/dealer-entries/summary', { params });
+export const updateDealerEntry = (entryId, data) => api.put(`/dealer-entries/${entryId}`, data);
+
+// Dealer Report Exports
+export const exportDealerPDF = async (params) => {
+  try {
+    const response = await api.get('/export/dealer-pdf', { 
+      params,
+      responseType: 'blob'
+    });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `dealer_report_${new Date().toISOString().split('T')[0]}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Dealer PDF export failed:', error);
+    throw error;
+  }
+};
+
+export const exportDealerExcel = async (params) => {
+  try {
+    const response = await api.get('/export/dealer-excel', { 
+      params,
+      responseType: 'blob'
+    });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `dealer_report_${new Date().toISOString().split('T')[0]}.xlsx`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Dealer Excel export failed:', error);
+    throw error;
+  }
+};
+
 export default api;
