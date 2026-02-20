@@ -71,6 +71,12 @@ const DailyEntry = () => {
   }, [user]);
 
   useEffect(() => {
+    if (user?.warehouse_id && formData.date) {
+      fetchPlantDeliveries(formData.date);
+    }
+  }, [user, formData.date]);
+
+  useEffect(() => {
     calculateDiscrepancies();
   }, [formData]);
 
@@ -90,6 +96,31 @@ const DailyEntry = () => {
       console.error('Failed to fetch opening stock:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchPlantDeliveries = async (date) => {
+    if (!user?.warehouse_id) return;
+    
+    setLoadingPlantDelivery(true);
+    try {
+      const response = await getWarehouseReceivedFromPlant(user.warehouse_id, date);
+      const data = response.data;
+      
+      setFormData(prev => ({
+        ...prev,
+        received_from_plant_15kg: data.received_15kg_filled || 0,
+        received_from_plant_21kg: data.received_21kg_filled || 0
+      }));
+      
+      setPlantDeliverySync({
+        synced: data.synced_from_plant,
+        date: date
+      });
+    } catch (error) {
+      console.error('Failed to fetch plant deliveries:', error);
+    } finally {
+      setLoadingPlantDelivery(false);
     }
   };
 
