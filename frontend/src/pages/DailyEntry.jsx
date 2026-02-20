@@ -612,7 +612,7 @@ const DailyEntry = () => {
                 </div>
               </div>
               <p className="text-xs text-slate-500 mt-3 italic">
-                Formula: Filled = Opening - Sold + Refilled + Received from Plant | Empty = Opening + Sold - Sent for Refilling
+                Formula: Filled = Opening - Sold - Refilling (Local) + Received from Plant | Empty = Opening + Refilling (Local) - Refilling at Plant
               </p>
             </CardContent>
           </Card>
