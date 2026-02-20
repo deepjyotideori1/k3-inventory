@@ -130,11 +130,14 @@ class DailyReportCreate(BaseModel):
     refilling_21kg: int = 0
     refilling_plant_15kg: int = 0
     refilling_plant_21kg: int = 0
+    received_from_plant_15kg: int = 0
+    received_from_plant_21kg: int = 0
     closing_15kg_filled: int = 0
     closing_21kg_filled: int = 0
     closing_15kg_empty: int = 0
     closing_21kg_empty: int = 0
     remarks: str = ""
+    status: str = "draft"  # draft or submitted
 
 class DailyReportResponse(BaseModel):
     id: str
@@ -151,6 +154,12 @@ class DailyReportResponse(BaseModel):
     refilling_21kg: int
     refilling_plant_15kg: int
     refilling_plant_21kg: int
+    received_from_plant_15kg: int = 0
+    received_from_plant_21kg: int = 0
+    calculated_closing_15kg_filled: int = 0
+    calculated_closing_21kg_filled: int = 0
+    calculated_closing_15kg_empty: int = 0
+    calculated_closing_21kg_empty: int = 0
     closing_15kg_filled: int
     closing_21kg_filled: int
     closing_15kg_empty: int
@@ -161,6 +170,7 @@ class DailyReportResponse(BaseModel):
     discrepancy_15kg_empty: int
     discrepancy_21kg_empty: int
     has_discrepancy: bool
+    status: str = "submitted"
     submitted_by: str
     submitted_at: str
     created_at: str
