@@ -1211,8 +1211,12 @@ async def export_pdf(
     
     if report_type == "daily":
         query = {}
-        if warehouse_id:
+        # Filter by warehouse - non-admin users can only see their own warehouse
+        if user['role'] != 'admin':
+            query['warehouse_id'] = user.get('warehouse_id')
+        elif warehouse_id:
             query['warehouse_id'] = warehouse_id
+        
         if start_date:
             query['date'] = {'$gte': start_date}
         if end_date:
@@ -1223,7 +1227,15 @@ async def export_pdf(
         
         reports = await db.daily_reports.find(query, {'_id': 0}).sort('date', -1).to_list(1000)
         
-        elements.append(Paragraph(f"Daily Inventory Report", styles['Heading2']))
+        # Get warehouse name for title
+        warehouse_name = "All Warehouses"
+        if user['role'] != 'admin':
+            warehouse_name = user.get('warehouse_name', 'My Warehouse')
+        elif warehouse_id:
+            wh = await db.warehouses.find_one({'id': warehouse_id}, {'_id': 0})
+            warehouse_name = wh['name'] if wh else warehouse_id
+        
+        elements.append(Paragraph(f"Daily Inventory Report - {warehouse_name}", styles['Heading2']))
         if start_date and end_date:
             elements.append(Paragraph(f"Period: {start_date} to {end_date}", styles['Normal']))
         elements.append(Spacer(1, 10))
