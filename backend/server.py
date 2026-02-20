@@ -848,8 +848,12 @@ async def get_daily_reports(
     user: dict = Depends(get_current_user)
 ):
     query = {}
-    if warehouse_id:
+    # Filter by warehouse - non-admin users can only see their own warehouse
+    if user['role'] != 'admin':
+        query['warehouse_id'] = user.get('warehouse_id')
+    elif warehouse_id:
         query['warehouse_id'] = warehouse_id
+    
     if start_date:
         query['date'] = {'$gte': start_date}
     if end_date:
