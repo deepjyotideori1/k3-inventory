@@ -4,8 +4,8 @@
 Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Hamesha". The system manages LPG cylinder inventory across multiple warehouses with comprehensive reporting and discrepancy detection.
 
 ## User Personas
-1. **Master Admin** - Full system access, manages warehouses, users, settings, views all reports
-2. **Warehouse Manager** - Manages daily stock entries for assigned warehouse, views own reports
+1. **Master Admin** - Full system access, manages warehouses, users, settings, views all reports, can edit any report
+2. **Warehouse Manager** - Manages daily stock entries for assigned warehouse, views own reports, can save drafts and edit own reports
 3. **Plant Hollongi Manager** - Special role for managing the refilling plant with bullet tank tracking
 
 ## Core Requirements (Static)
@@ -21,9 +21,9 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - Maintenance mode toggle for admin
 - Ability to add new warehouses and inventory items
 
-## What's Been Implemented (Jan 2026)
+## What's Been Implemented
 
-### Backend (FastAPI + MongoDB)
+### Session 1 (Feb 2026) - Core System
 - [x] JWT authentication with role-based access
 - [x] User management CRUD operations
 - [x] Warehouse management with stock tracking
@@ -33,18 +33,30 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] PDF export using ReportLab
 - [x] Excel export using XlsxWriter
 - [x] Maintenance mode settings
-- [x] Inventory items management
 
-### Frontend (React + Tailwind + Shadcn UI)
+### Session 2 (Feb 20, 2026) - Enhanced Features
+- [x] **System Calculated Closing Stock** - Auto-calculated read-only fields showing expected closing for 15kg/21kg filled/empty
+- [x] **Delivery Received from Plant** - Auto-synced filled cylinders from Plant Hollongi deliveries
+- [x] **Save as Draft** - Warehouse managers can save reports as draft before final submission
+- [x] **Edit Report** - Warehouse managers can edit their draft reports
+- [x] **Admin Edit Access** - Master admin can edit any report (submitted or draft) from Reports page
+
+### Frontend Features
 - [x] Professional login page with split-screen design
 - [x] Master Admin Dashboard with Bento grid layout
 - [x] Warehouse Manager Dashboard with quick actions
-- [x] Daily Stock Entry Form with discrepancy detection
+- [x] Daily Stock Entry Form with:
+  - Opening stock (auto-filled from previous day)
+  - Day activity (sold, refilling local, refilling at plant)
+  - Delivery received from plant (auto-synced, read-only)
+  - System calculated closing stock (read-only)
+  - Actual closing stock (physical count)
+  - Discrepancy detection and warning
+  - Save as Draft / Submit buttons
+  - Edit Report for submitted reports
 - [x] Plant Hollongi Entry Form with warehouse selection
-- [x] Reports page with filters (period, warehouse, date range)
-- [x] Warehouses management page
-- [x] Users management page with password change
-- [x] Settings page with maintenance mode toggle
+- [x] Reports page with filters and admin edit functionality
+- [x] Admin Edit Report page with full override access
 - [x] Green theme matching gas/energy industry
 - [x] Responsive design with mobile sidebar
 
@@ -55,6 +67,17 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - Doimukh: doimukh@k3gas.com / Doimukh@123
 - Plant Hollongi: hollongi@k3gas.com / Hollongi@123
 
+## Key Formulas
+### Filled Cylinders Closing Stock
+```
+Closing = Opening - Sold + Refilled (Local) + Refilled (from Plant) + Received from Plant
+```
+
+### Empty Cylinders Closing Stock
+```
+Closing = Opening + Sold - Sent for Refilling (Local) - Sent for Refilling (to Plant)
+```
+
 ## Prioritized Backlog
 
 ### P0 (Critical) - COMPLETED
@@ -62,30 +85,43 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] Daily stock entry and reports
 - [x] Discrepancy detection
 - [x] PDF/Excel exports
+- [x] System calculated closing stock
+- [x] Delivery received from plant sync
+- [x] Save as Draft / Edit Report
+- [x] Admin edit access
 
 ### P1 (Important)
+- [ ] Auto-sync warehouse 'refilling at plant' to Plant Hollongi's received empties (backend done)
 - [ ] Email notifications for discrepancies
 - [ ] Audit log for stock changes
-- [ ] Bulk import/export of data
 - [ ] Dashboard charts/graphs using Recharts
+- [ ] Admin UI to add new inventory stock items
+- [ ] Admin UI to add new warehouses with credentials
 
 ### P2 (Nice to Have)
+- [ ] Weekly, Monthly, Yearly aggregated reports
+- [ ] Under Maintenance mode UI
+- [ ] Bulk import/export of data
 - [ ] Mobile app version
 - [ ] SMS alerts for low stock
-- [ ] Barcode/QR scanning for cylinders
-- [ ] Customer management module
-- [ ] Sales order integration
-
-## Next Tasks
-1. Add dashboard charts for stock trends visualization
-2. Implement email notifications for discrepancies
-3. Add audit logging for all stock changes
-4. Create print-friendly report layouts
-5. Add bulk data import feature
 
 ## Technical Stack
-- Frontend: React 19, Tailwind CSS, Shadcn UI, Recharts
+- Frontend: React 19, Tailwind CSS, Shadcn UI
 - Backend: FastAPI, Motor (MongoDB async driver)
 - Database: MongoDB
 - Authentication: JWT with bcrypt password hashing
 - Exports: ReportLab (PDF), XlsxWriter (Excel)
+
+## API Endpoints
+- `/api/auth/login` - User login
+- `/api/auth/me` - Get current user
+- `/api/reports/daily` - Create/list daily reports
+- `/api/reports/daily/today/{warehouse_id}` - Get today's report (including drafts)
+- `/api/reports/daily/{report_id}` - Update report (PUT)
+- `/api/reports/warehouse-received-from-plant/{warehouse_id}/{date}` - Get plant deliveries
+- `/api/reports/plant` - Plant Hollongi reports
+- `/api/stock/update` - Admin stock update
+- `/api/stock/plant-update` - Admin plant stock update
+- `/api/dashboard/stats` - Dashboard statistics
+- `/api/export/pdf` - PDF export
+- `/api/export/excel` - Excel export
