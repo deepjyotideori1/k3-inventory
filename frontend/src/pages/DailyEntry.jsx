@@ -15,7 +15,10 @@ import {
   AlertTriangle,
   Package,
   ArrowRight,
-  Calculator
+  Calculator,
+  Truck,
+  RefreshCw,
+  CheckCircle
 } from 'lucide-react';
 import { getTodayDate, formatDate } from '../lib/utils';
 import { toast } from 'sonner';
