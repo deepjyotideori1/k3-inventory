@@ -72,17 +72,45 @@ export const updateStock = (data) => api.post('/stock/update', data);
 // Dashboard
 export const getDashboardStats = () => api.get('/dashboard/stats');
 
-// Export
-export const exportPDF = (params) => {
-  const token = localStorage.getItem('k3gas_token');
-  const queryString = new URLSearchParams(params).toString();
-  window.open(`${API_URL}/api/export/pdf?${queryString}`, '_blank');
+// Export - Download files with authentication
+export const exportPDF = async (params) => {
+  try {
+    const response = await api.get('/export/pdf', { 
+      params,
+      responseType: 'blob'
+    });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `k3_gas_report_${new Date().toISOString().split('T')[0]}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('PDF export failed:', error);
+    throw error;
+  }
 };
 
-export const exportExcel = (params) => {
-  const token = localStorage.getItem('k3gas_token');
-  const queryString = new URLSearchParams(params).toString();
-  window.open(`${API_URL}/api/export/excel?${queryString}`, '_blank');
+export const exportExcel = async (params) => {
+  try {
+    const response = await api.get('/export/excel', { 
+      params,
+      responseType: 'blob'
+    });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `k3_gas_report_${new Date().toISOString().split('T')[0]}.xlsx`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Excel export failed:', error);
+    throw error;
+  }
 };
 
 export default api;
