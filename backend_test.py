@@ -5,7 +5,7 @@ import sys
 from datetime import datetime
 
 class K3GasAPITester:
-    def __init__(self, base_url="https://gas-stock-master.preview.emergentagent.com"):
+    def __init__(self, base_url="https://k3-gas-inventory.preview.emergentagent.com"):
         self.base_url = base_url
         self.admin_token = None
         self.manager_token = None
