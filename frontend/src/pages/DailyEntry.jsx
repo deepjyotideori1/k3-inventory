@@ -309,19 +309,77 @@ const DailyEntry = () => {
             </CardContent>
           </Card>
 
-          {/* Closing Stock */}
+          {/* System Calculated Closing Stock */}
+          <Card className="mb-6" data-testid="calculated-closing-section">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Calculator className="w-5 h-5 text-blue-700" />
+                System Calculated Closing Stock
+              </CardTitle>
+              <CardDescription>Auto-calculated based on opening stock and day activities (read-only)</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div>
+                  <Label className="text-slate-600">15kg Filled</Label>
+                  <Input 
+                    type="number" 
+                    value={calculatedClosing.closing_15kg_filled}
+                    readOnly
+                    className="mt-1 bg-blue-50 font-semibold text-blue-900"
+                    data-testid="calculated-15kg-filled"
+                  />
+                </div>
+                <div>
+                  <Label className="text-slate-600">21kg Filled</Label>
+                  <Input 
+                    type="number" 
+                    value={calculatedClosing.closing_21kg_filled}
+                    readOnly
+                    className="mt-1 bg-blue-50 font-semibold text-blue-900"
+                    data-testid="calculated-21kg-filled"
+                  />
+                </div>
+                <div>
+                  <Label className="text-slate-600">15kg Empty</Label>
+                  <Input 
+                    type="number" 
+                    value={calculatedClosing.closing_15kg_empty}
+                    readOnly
+                    className="mt-1 bg-blue-50 font-semibold text-blue-900"
+                    data-testid="calculated-15kg-empty"
+                  />
+                </div>
+                <div>
+                  <Label className="text-slate-600">21kg Empty</Label>
+                  <Input 
+                    type="number" 
+                    value={calculatedClosing.closing_21kg_empty}
+                    readOnly
+                    className="mt-1 bg-blue-50 font-semibold text-blue-900"
+                    data-testid="calculated-21kg-empty"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-slate-500 mt-3 italic">
+                Formula: Filled = Opening - Sold + Refilled | Empty = Opening + Sold - Sent for Refilling
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Actual Closing Stock */}
           <Card className="mb-6" data-testid="closing-stock-section">
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <Package className="w-5 h-5 text-orange-700" />
-                Closing Stock (Actual Count)
+                Actual Closing Stock (Physical Count)
               </CardTitle>
               <CardDescription>Enter the actual physical count at end of day</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div>
-                  <Label className="text-slate-600">15kg Filled Closing</Label>
+                  <Label className="text-slate-600">15kg Filled</Label>
                   <Input 
                     type="number" 
                     value={formData.closing_15kg_filled}
@@ -336,7 +394,7 @@ const DailyEntry = () => {
                   )}
                 </div>
                 <div>
-                  <Label className="text-slate-600">21kg Filled Closing</Label>
+                  <Label className="text-slate-600">21kg Filled</Label>
                   <Input 
                     type="number" 
                     value={formData.closing_21kg_filled}
@@ -351,7 +409,7 @@ const DailyEntry = () => {
                   )}
                 </div>
                 <div>
-                  <Label className="text-slate-600">15kg Empty Closing</Label>
+                  <Label className="text-slate-600">15kg Empty</Label>
                   <Input 
                     type="number" 
                     value={formData.closing_15kg_empty}
@@ -366,7 +424,7 @@ const DailyEntry = () => {
                   )}
                 </div>
                 <div>
-                  <Label className="text-slate-600">21kg Empty Closing</Label>
+                  <Label className="text-slate-600">21kg Empty</Label>
                   <Input 
                     type="number" 
                     value={formData.closing_21kg_empty}
@@ -387,7 +445,7 @@ const DailyEntry = () => {
                   <AlertTriangle className="w-5 h-5 text-orange-600 mt-0.5" />
                   <div>
                     <p className="font-medium text-orange-800">Stock Discrepancy Detected</p>
-                    <p className="text-sm text-orange-700">The actual closing stock differs from the calculated expected stock. Please verify the counts or add a remark explaining the difference.</p>
+                    <p className="text-sm text-orange-700">The actual closing stock differs from the system calculated stock. Please verify the counts or add a remark explaining the difference.</p>
                   </div>
                 </div>
               )}
