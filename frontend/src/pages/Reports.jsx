@@ -29,7 +29,7 @@ const Reports = () => {
   const [activeTab, setActiveTab] = useState('daily');
   
   const [filters, setFilters] = useState({
-    warehouse_id: '',
+    warehouse_id: 'all',
     period: 'weekly',
     start_date: '',
     end_date: ''
