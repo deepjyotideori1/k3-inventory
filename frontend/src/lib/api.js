@@ -171,4 +171,62 @@ export const exportDealerExcel = async (params) => {
   }
 };
 
+// LPG Accessories
+export const getAccessories = () => api.get('/accessories');
+export const createAccessory = (data) => api.post('/accessories', data);
+export const updateAccessory = (accessoryId, data) => api.put(`/accessories/${accessoryId}`, data);
+export const deleteAccessory = (accessoryId) => api.delete(`/accessories/${accessoryId}`);
+
+// Accessory Dealers
+export const getAccessoryDealers = () => api.get('/accessory-dealers');
+export const createAccessoryDealer = (data) => api.post('/accessory-dealers', data);
+export const updateAccessoryDealer = (dealerId, data) => api.put(`/accessory-dealers/${dealerId}`, data);
+export const deleteAccessoryDealer = (dealerId) => api.delete(`/accessory-dealers/${dealerId}`);
+
+// Accessory Entries
+export const createAccessoryEntry = (data) => api.post('/accessory-entries', data);
+export const getAccessoryEntries = (params) => api.get('/accessory-entries', { params });
+export const getAccessorySummary = (params) => api.get('/accessory-entries/summary', { params });
+
+// Accessory Report Exports
+export const exportAccessoryPDF = async (params) => {
+  try {
+    const response = await api.get('/export/accessory-pdf', { 
+      params,
+      responseType: 'blob'
+    });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `accessory_report_${new Date().toISOString().split('T')[0]}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Accessory PDF export failed:', error);
+    throw error;
+  }
+};
+
+export const exportAccessoryExcel = async (params) => {
+  try {
+    const response = await api.get('/export/accessory-excel', { 
+      params,
+      responseType: 'blob'
+    });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `accessory_report_${new Date().toISOString().split('T')[0]}.xlsx`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Accessory Excel export failed:', error);
+    throw error;
+  }
+};
+
 export default api;
