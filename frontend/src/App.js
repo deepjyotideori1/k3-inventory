@@ -116,6 +116,14 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/admin/edit-report/:reportId"
+        element={
+          <ProtectedRoute adminOnly>
+            <AdminEditReport />
+          </ProtectedRoute>
+        }
+      />
 
       {/* Manager Routes */}
       <Route
