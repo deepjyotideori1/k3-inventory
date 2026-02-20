@@ -1,0 +1,175 @@
+{
+  "identity": {
+    "persona": "E1 - The Anti-AI Designer",
+    "mission": "Create a professional, reliable, and high-performance inventory dashboard for K3 GAS SERVICE. Move away from generic templates to a bespoke industrial-grade interface.",
+    "tone": "Reliability, Efficiency, Clarity, Safety.",
+    "theme_preference": "Light Mode (Primary) with Industrial Green accents. Dark mode optional but secondary."
+  },
+  "typography": {
+    "heading_font": "Manrope",
+    "body_font": "Public Sans",
+    "scale": {
+      "h1": "text-4xl font-bold tracking-tight",
+      "h2": "text-3xl font-bold tracking-tight",
+      "h3": "text-2xl font-semibold tracking-tight",
+      "h4": "text-xl font-semibold tracking-tight",
+      "p": "text-base font-normal leading-relaxed",
+      "small": "text-sm font-medium leading-none"
+    },
+    "utility_classes": [
+      "tracking-tight",
+      "leading-none for headings",
+      "leading-relaxed for body"
+    ]
+  },
+  "colors": {
+    "palette_name": "Industrial Green Archetype",
+    "primary": {
+      "DEFAULT": "#15803d",
+      "foreground": "#ffffff",
+      "hover": "#166534",
+      "active": "#14532d"
+    },
+    "secondary": {
+      "DEFAULT": "#f1f5f9",
+      "foreground": "#0f172a",
+      "hover": "#e2e8f0"
+    },
+    "accent": {
+      "DEFAULT": "#f0fdf4",
+      "foreground": "#15803d"
+    },
+    "destructive": {
+      "DEFAULT": "#dc2626",
+      "foreground": "#ffffff"
+    },
+    "warning": {
+      "DEFAULT": "#ea580c",
+      "foreground": "#ffffff"
+    },
+    "background": {
+      "DEFAULT": "#f8fafc",
+      "paper": "#ffffff"
+    },
+    "border": {
+      "DEFAULT": "#e2e8f0"
+    },
+    "text": {
+      "primary": "#0f172a",
+      "secondary": "#64748b",
+      "muted": "#94a3b8"
+    }
+  },
+  "visual_enhancers": {
+    "radius": "0.5rem",
+    "shadows": {
+      "card": "0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)",
+      "dropdown": "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+      "hover": "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)"
+    },
+    "borders": "1px solid #e2e8f0",
+    "glassmorphism": "backdrop-blur-xl bg-white/70 border-white/20 shadow-sm"
+  },
+  "layout_strategy": {
+    "grid_system": "Bento Grid Mode B (High Density)",
+    "container_padding": "p-6 md:p-8 lg:p-12",
+    "gap": "gap-6",
+    "dashboard_grid": "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6",
+    "sidebar_width": "w-64",
+    "header_height": "h-16"
+  },
+  "components": {
+    "button": {
+      "default": "h-10 px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-md transition-colors font-medium",
+      "outline": "h-10 px-4 py-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground rounded-md transition-colors",
+      "ghost": "hover:bg-accent hover:text-accent-foreground rounded-md transition-colors"
+    },
+    "card": {
+      "wrapper": "rounded-xl border bg-card text-card-foreground shadow-sm",
+      "header": "flex flex-col space-y-1.5 p-6",
+      "content": "p-6 pt-0",
+      "footer": "flex items-center p-6 pt-0"
+    },
+    "table": {
+      "wrapper": "w-full caption-bottom text-sm",
+      "header": "[&_tr]:border-b",
+      "row": "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
+      "cell": "p-4 align-middle [&:has([role=checkbox])]:pr-0"
+    },
+    "input": "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+  },
+  "specific_pages": {
+    "login": {
+      "layout": "Split Screen",
+      "left_panel": "Form container, centered, white background, p-12",
+      "right_panel": "Image cover, relative, hidden lg:block w-1/2 bg-muted",
+      "image_url": "https://images.pexels.com/photos/20820493/pexels-photo-20820493.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "overlay": "absolute inset-0 bg-primary/20 mix-blend-multiply"
+    },
+    "master_dashboard": {
+      "layout": "Bento Grid",
+      "widgets": [
+        "Total Stock Summary (Cards)",
+        "Warehouse Performance (Bar Chart)",
+        "Recent Discrepancies (Alert List)",
+        "Stock Trends (Line Chart)"
+      ]
+    },
+    "warehouse_manager_dashboard": {
+      "layout": "Action-Focused",
+      "primary_action": "Large 'Daily Entry' Button",
+      "key_metrics": "Current Stock, Yesterday's Closing, Today's Sales"
+    },
+    "daily_entry_form": {
+      "layout": "Step-by-step or Tabular",
+      "logic": "Auto-calculate Closing Balance based on Opening + Received - Sold. User inputs 'Actual Closing'. System highlights Difference."
+    },
+    "plant_hollongi": {
+      "special_component": "Bullet Tank Level Indicator (Vertical Bar or Gauge)",
+      "fields": "Liquid Level, Pressure, Temperature (optional but realistic)"
+    }
+  },
+  "assets": {
+    "icons_library": "lucide-react",
+    "logo_placeholder": "Text 'K3 GAS SERVICE' in Manrope Bold, Green-700",
+    "images": [
+      {
+        "url": "https://images.pexels.com/photos/20820493/pexels-photo-20820493.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "category": "Login Background",
+        "alt": "Industrial Gas Silo"
+      }
+    ]
+  },
+  "motion": {
+    "transitions": "transition-all duration-200 ease-in-out",
+    "hover_effects": "hover:shadow-md hover:-translate-y-0.5",
+    "loading": "animate-pulse bg-muted rounded"
+  },
+  "accessibility": {
+    "contrast_check": "Ensure text-primary on bg-background is > 4.5:1",
+    "focus_states": "focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+    "aria_labels": "Required for all icon-only buttons"
+  },
+  "universal_guidelines": [
+    "You tend to converge toward generic, 'on distribution' outputs. In frontend design, this creates what users call the 'AI slop' aesthetic. Avoid this: make creative, distinctive frontends that surprise and delight.",
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients",
+    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
+    "Create depth through layered design elements with z-index hierarchy",
+    "Use glass-morphism effects with backdrop filters (12-24px blur)",
+    "You MUST NOT apply universal transition. Eg: transition: all. This results in breaking transforms. Always add transitions for specific interactive elements like button, input excluding transforms",
+    "You MUST NOT center align the app container, ie do not add .App { text-align: center; } in the css file. This disrupts the human natural reading flow of text",
+    "Always use modern button styles like pill-shaped, or sharp button with interaction animations & color relevant to the app style",
+    "NEVER: use AI assistant Emoji characters like 🤖🧠💭💡🔮🎯📚🎭🎬🎪🎉🎊🎁🎀🎂🍰🎈🎨🎰💰💵💳🏦💎🪙💸🤑📊📈📉💹🔢🏆🥇 etc for icons.",
+    "Every interaction needs micro-animations - hover states, transitions, parallax effects, and entrance animations. Static = dead.",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
+    "Subtle grain textures, noise overlays, custom cursors, selection states, and loading animations: separates good from extraordinary.",
+    "Main agent relies on these image URLs. Missing categories (especially sponsor logos) = main agent will use placeholder text which is FORBIDDEN",
+    "Prioritize using pre-existing components from src/components/ui when applicable",
+    "Create new components that match the style and conventions of existing components when needed",
+    "Examine existing components to understand the project's component patterns before creating new ones",
+    "Components MUST use named exports (export const ComponentName = ...)",
+    "Pages MUST use default exports (export default function PageName() {...})",
+    "Use sonner for toasts",
+    "Sonner component are located in /app/src/components/ui/sonner.tsx"
+  ]
+}
