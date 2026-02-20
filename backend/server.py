@@ -661,20 +661,16 @@ async def get_today_report(warehouse_id: str, date: str = None, user: dict = Dep
 
 @api_router.put("/reports/daily/{report_id}")
 async def update_daily_report(report_id: str, data: DailyReportCreate, user: dict = Depends(get_current_user)):
-    """Update an existing daily report - for editing drafts or admin edits"""
+    """Update an existing daily report - for editing drafts or own submitted reports"""
     existing = await db.daily_reports.find_one({'id': report_id}, {'_id': 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Report not found")
     
-    # Get existing status (default to 'submitted' for backward compatibility)
-    existing_status = existing.get('status', 'submitted')
-    
-    # Check permissions: admin can edit any, managers can only edit their own warehouse's drafts
+    # Check permissions: admin can edit any, managers can edit their own warehouse reports
     if user['role'] != 'admin':
         if existing['warehouse_id'] != user.get('warehouse_id'):
             raise HTTPException(status_code=403, detail="Cannot edit reports from other warehouses")
-        if existing_status == 'submitted':
-            raise HTTPException(status_code=403, detail="Cannot edit submitted reports. Contact admin for changes.")
+        # Managers can edit their own reports (both draft and submitted)
     
     # Get warehouse name
     warehouse = await db.warehouses.find_one({'id': data.warehouse_id}, {'_id': 0})
