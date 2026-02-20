@@ -435,14 +435,16 @@ async def update_settings(data: SettingsUpdate, user: dict = Depends(require_adm
 
 @api_router.get("/users", response_model=List[UserResponse])
 async def get_users(user: dict = Depends(require_admin)):
+    # Batch fetch warehouses to avoid N+1 queries
+    warehouses_list = await db.warehouses.find({}, {'_id': 0}).to_list(1000)
+    warehouses_dict = {w['id']: w for w in warehouses_list}
+    
     users = await db.users.find({}, {'_id': 0, 'password': 0}).to_list(1000)
     result = []
     for u in users:
         warehouse_name = None
-        if u.get('warehouse_id'):
-            warehouse = await db.warehouses.find_one({'id': u['warehouse_id']}, {'_id': 0})
-            if warehouse:
-                warehouse_name = warehouse['name']
+        if u.get('warehouse_id') and u['warehouse_id'] in warehouses_dict:
+            warehouse_name = warehouses_dict[u['warehouse_id']]['name']
         result.append(UserResponse(
             id=u['id'],
             email=u['email'],
@@ -772,6 +774,18 @@ async def update_stock(data: StockUpdateRequest, user: dict = Depends(require_ad
 async def get_dashboard_stats(user: dict = Depends(get_current_user)):
     warehouses = await db.warehouses.find({'is_plant': False}, {'_id': 0}).to_list(100)
     
+    # Batch fetch latest reports using aggregation to avoid N+1 queries
+    warehouse_ids = [w['id'] for w in warehouses]
+    pipeline = [
+        {'$match': {'warehouse_id': {'$in': warehouse_ids}}},
+        {'$sort': {'date': -1}},
+        {'$group': {'_id': '$warehouse_id', 'latest': {'$first': '$$ROOT'}}}
+    ]
+    latest_reports_cursor = db.daily_reports.aggregate(pipeline)
+    latest_reports = {}
+    async for r in latest_reports_cursor:
+        latest_reports[r['_id']] = r['latest']
+    
     stats = {
         'total_warehouses': len(warehouses),
         'warehouses': [],
@@ -783,11 +797,7 @@ async def get_dashboard_stats(user: dict = Depends(get_current_user)):
     }
     
     for w in warehouses:
-        latest = await db.daily_reports.find_one(
-            {'warehouse_id': w['id']},
-            {'_id': 0},
-            sort=[('date', -1)]
-        )
+        latest = latest_reports.get(w['id'])
         
         warehouse_stat = {
             'id': w['id'],
