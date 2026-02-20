@@ -60,6 +60,8 @@ export const createInventoryItem = (data) => api.post('/inventory-items', data);
 export const createDailyReport = (data) => api.post('/reports/daily', data);
 export const getDailyReports = (params) => api.get('/reports/daily', { params });
 export const getLatestClosing = (warehouseId) => api.get(`/reports/daily/latest/${warehouseId}`);
+export const getTodayReport = (warehouseId, date) => api.get(`/reports/daily/today/${warehouseId}`, { params: { date } });
+export const updateDailyReport = (reportId, data) => api.put(`/reports/daily/${reportId}`, data);
 
 // Plant Reports
 export const createPlantReport = (data) => api.post('/reports/plant', data);
