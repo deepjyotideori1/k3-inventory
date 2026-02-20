@@ -263,6 +263,7 @@ const Reports = () => {
                             <th>15kg Empty</th>
                             <th>21kg Empty</th>
                             <th>Status</th>
+                            <th>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -275,13 +276,30 @@ const Reports = () => {
                               <td>{report.closing_15kg_empty}</td>
                               <td>{report.closing_21kg_empty}</td>
                               <td>
-                                {report.has_discrepancy ? (
-                                  <Badge variant="destructive" className="bg-red-100 text-red-700">
-                                    Discrepancy
-                                  </Badge>
-                                ) : (
-                                  <Badge className="bg-green-100 text-green-700">OK</Badge>
-                                )}
+                                <div className="flex gap-1">
+                                  {report.status === 'draft' && (
+                                    <Badge className="bg-amber-100 text-amber-700">Draft</Badge>
+                                  )}
+                                  {report.has_discrepancy ? (
+                                    <Badge variant="destructive" className="bg-red-100 text-red-700">
+                                      Discrepancy
+                                    </Badge>
+                                  ) : report.status !== 'draft' ? (
+                                    <Badge className="bg-green-100 text-green-700">OK</Badge>
+                                  ) : null}
+                                </div>
+                              </td>
+                              <td>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => navigate(`/admin/edit-report/${report.id}`)}
+                                  className="text-blue-600 hover:text-blue-800 hover:bg-blue-50"
+                                  data-testid={`edit-report-${report.id}`}
+                                >
+                                  <FileEdit className="w-4 h-4 mr-1" />
+                                  Edit
+                                </Button>
                               </td>
                             </tr>
                           ))}
