@@ -520,14 +520,18 @@ const AccessoryReports = () => {
                       />
                     </div>
                     <div>
-                      <Label className="text-green-700">Total Remaining</Label>
+                      <Label className="text-green-700 flex items-center gap-1">
+                        Total Remaining
+                        <span className="text-xs text-slate-500">(Auto-calculated)</span>
+                      </Label>
                       <Input 
                         type="number" 
-                        value={entryForm.total_remaining}
-                        onChange={(e) => setEntryForm({ ...entryForm, total_remaining: parseInt(e.target.value) || 0 })}
-                        className="mt-1"
+                        value={calculatedRemaining}
+                        readOnly
+                        className="mt-1 bg-green-50 font-semibold text-green-900"
                         data-testid="acc-total-remaining"
                       />
+                      <p className="text-xs text-slate-500 mt-1">Formula: Issued - Sold</p>
                     </div>
                   </div>
 
