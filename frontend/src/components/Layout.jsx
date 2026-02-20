@@ -12,7 +12,8 @@ import {
   ClipboardList,
   AlertTriangle,
   Menu,
-  X
+  X,
+  UserCheck
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
@@ -33,6 +34,7 @@ const Layout = ({ children }) => {
     { path: '/warehouses', label: 'Warehouses', icon: Warehouse },
     { path: '/reports', label: 'Reports', icon: FileText },
     { path: '/plant-hollongi', label: 'Plant Hollongi', icon: Factory },
+    { path: '/dealer-reports', label: 'Dealer Reports', icon: UserCheck },
     { path: '/users', label: 'Users', icon: Users },
     { path: '/settings', label: 'Settings', icon: Settings },
   ];
@@ -49,8 +51,12 @@ const Layout = ({ children }) => {
   const isPlantManager = user?.warehouse_name === 'Plant Hollongi';
   if (!isAdmin && isPlantManager) {
     const plantLink = { path: '/plant-entry', label: 'Plant Entry', icon: Factory };
+    const dealerLink = { path: '/dealer-reports', label: 'Dealer Reports', icon: UserCheck };
     if (!links.find(l => l.path === '/plant-entry')) {
       links.splice(1, 1, plantLink);
+    }
+    if (!links.find(l => l.path === '/dealer-reports')) {
+      links.push(dealerLink);
     }
   }
 
