@@ -77,12 +77,12 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 ## Key Formulas
 ### Filled Cylinders Closing Stock
 ```
-Closing = Opening - Sold + Refilled (Local) + Refilled (from Plant) + Received from Plant
+Closing = Opening - Sold - Refilling (Local) + Received from Plant
 ```
 
 ### Empty Cylinders Closing Stock
 ```
-Closing = Opening + Sold - Sent for Refilling (Local) - Sent for Refilling (to Plant)
+Closing = Opening + Refilling (Local) - Refilling at Plant Hollongi
 ```
 
 ## Prioritized Backlog
