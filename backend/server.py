@@ -248,6 +248,43 @@ class PasswordChangeRequest(BaseModel):
     current_password: str
     new_password: str
 
+# Dealer Models
+class DealerCreate(BaseModel):
+    name: str
+    contact: str = ""
+    address: str = ""
+
+class DealerResponse(BaseModel):
+    id: str
+    name: str
+    contact: str
+    address: str
+    created_at: str
+    is_active: bool
+
+class DealerEntryCreate(BaseModel):
+    dealer_id: str
+    date: str
+    issued_15kg: int = 0
+    issued_21kg: int = 0
+    refilled_15kg: int = 0
+    refilled_21kg: int = 0
+    remarks: str = ""
+
+class DealerEntryResponse(BaseModel):
+    id: str
+    dealer_id: str
+    dealer_name: str
+    date: str
+    issued_15kg: int
+    issued_21kg: int
+    refilled_15kg: int
+    refilled_21kg: int
+    remarks: str
+    submitted_by: str
+    submitted_at: str
+
+
 # ============ HELPER FUNCTIONS ============
 
 def hash_password(password: str) -> str:
