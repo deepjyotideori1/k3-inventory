@@ -666,11 +666,14 @@ async def update_daily_report(report_id: str, data: DailyReportCreate, user: dic
     if not existing:
         raise HTTPException(status_code=404, detail="Report not found")
     
+    # Get existing status (default to 'submitted' for backward compatibility)
+    existing_status = existing.get('status', 'submitted')
+    
     # Check permissions: admin can edit any, managers can only edit their own warehouse's drafts
     if user['role'] != 'admin':
         if existing['warehouse_id'] != user.get('warehouse_id'):
             raise HTTPException(status_code=403, detail="Cannot edit reports from other warehouses")
-        if existing['status'] == 'submitted':
+        if existing_status == 'submitted':
             raise HTTPException(status_code=403, detail="Cannot edit submitted reports. Contact admin for changes.")
     
     # Get warehouse name
