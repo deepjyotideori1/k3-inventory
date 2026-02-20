@@ -730,24 +730,52 @@ const DailyEntry = () => {
             >
               Cancel
             </Button>
-            <Button 
-              type="submit" 
-              className="bg-green-700 hover:bg-green-800"
-              disabled={submitting}
-              data-testid="submit-report-btn"
-            >
-              {submitting ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Submitting...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4 mr-2" />
-                  Submit Report
-                </>
-              )}
-            </Button>
+            
+            {/* Save as Draft Button - show when no report exists or report is draft */}
+            {(!existingReport || isDraft) && (
+              <Button 
+                type="button"
+                variant="outline"
+                onClick={handleSaveDraft}
+                disabled={savingDraft || submitting}
+                className="border-amber-300 text-amber-700 hover:bg-amber-50"
+                data-testid="save-draft-btn"
+              >
+                {savingDraft ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <FileText className="w-4 h-4 mr-2" />
+                    Save as Draft
+                  </>
+                )}
+              </Button>
+            )}
+            
+            {/* Submit Button - always show except when submitted and not in edit mode */}
+            {(!isSubmitted || isEditMode) && (
+              <Button 
+                type="submit" 
+                className="bg-green-700 hover:bg-green-800"
+                disabled={submitting || savingDraft}
+                data-testid="submit-report-btn"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4 mr-2" />
+                    {isSubmitted ? 'Update & Submit' : 'Submit Report'}
+                  </>
+                )}
+              </Button>
+            )}
           </div>
         </form>
       </div>
