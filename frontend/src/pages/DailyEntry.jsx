@@ -74,7 +74,7 @@ const DailyEntry = () => {
   });
 
   useEffect(() => {
-    fetchOpeningStock();
+    fetchInitialData();
   }, [user]);
 
   useEffect(() => {
@@ -87,20 +87,68 @@ const DailyEntry = () => {
     calculateDiscrepancies();
   }, [formData]);
 
-  const fetchOpeningStock = async () => {
+  const fetchInitialData = async () => {
     if (!user?.warehouse_id) return;
     
     try {
-      const response = await getLatestClosing(user.warehouse_id);
-      setFormData(prev => ({
-        ...prev,
-        opening_15kg_filled: response.data.opening_15kg_filled || 0,
-        opening_21kg_filled: response.data.opening_21kg_filled || 0,
-        opening_15kg_empty: response.data.opening_15kg_empty || 0,
-        opening_21kg_empty: response.data.opening_21kg_empty || 0
-      }));
+      // First check if there's an existing report for today
+      const todayReportRes = await getTodayReport(user.warehouse_id, getTodayDate());
+      
+      if (todayReportRes.data) {
+        // Existing report found - load it
+        const report = todayReportRes.data;
+        setExistingReport(report);
+        setFormData({
+          date: report.date,
+          opening_15kg_filled: report.opening_15kg_filled || 0,
+          opening_21kg_filled: report.opening_21kg_filled || 0,
+          opening_15kg_empty: report.opening_15kg_empty || 0,
+          opening_21kg_empty: report.opening_21kg_empty || 0,
+          sold_15kg_filled: report.sold_15kg_filled || 0,
+          sold_21kg_filled: report.sold_21kg_filled || 0,
+          refilling_15kg: report.refilling_15kg || 0,
+          refilling_21kg: report.refilling_21kg || 0,
+          refilling_plant_15kg: report.refilling_plant_15kg || 0,
+          refilling_plant_21kg: report.refilling_plant_21kg || 0,
+          received_from_plant_15kg: report.received_from_plant_15kg || 0,
+          received_from_plant_21kg: report.received_from_plant_21kg || 0,
+          closing_15kg_filled: report.closing_15kg_filled || 0,
+          closing_21kg_filled: report.closing_21kg_filled || 0,
+          closing_15kg_empty: report.closing_15kg_empty || 0,
+          closing_21kg_empty: report.closing_21kg_empty || 0,
+          remarks: report.remarks || ''
+        });
+        
+        // If it's a draft, enable edit mode
+        if (report.status === 'draft') {
+          setIsEditMode(true);
+        }
+      } else {
+        // No existing report - fetch opening stock from previous day
+        const openingRes = await getLatestClosing(user.warehouse_id);
+        setFormData(prev => ({
+          ...prev,
+          opening_15kg_filled: openingRes.data.opening_15kg_filled || 0,
+          opening_21kg_filled: openingRes.data.opening_21kg_filled || 0,
+          opening_15kg_empty: openingRes.data.opening_15kg_empty || 0,
+          opening_21kg_empty: openingRes.data.opening_21kg_empty || 0
+        }));
+      }
     } catch (error) {
-      console.error('Failed to fetch opening stock:', error);
+      console.error('Failed to fetch initial data:', error);
+      // Fallback to opening stock
+      try {
+        const response = await getLatestClosing(user.warehouse_id);
+        setFormData(prev => ({
+          ...prev,
+          opening_15kg_filled: response.data.opening_15kg_filled || 0,
+          opening_21kg_filled: response.data.opening_21kg_filled || 0,
+          opening_15kg_empty: response.data.opening_15kg_empty || 0,
+          opening_21kg_empty: response.data.opening_21kg_empty || 0
+        }));
+      } catch (err) {
+        console.error('Failed to fetch opening stock:', err);
+      }
     } finally {
       setLoading(false);
     }
@@ -114,11 +162,14 @@ const DailyEntry = () => {
       const response = await getWarehouseReceivedFromPlant(user.warehouse_id, date);
       const data = response.data;
       
-      setFormData(prev => ({
-        ...prev,
-        received_from_plant_15kg: data.received_15kg_filled || 0,
-        received_from_plant_21kg: data.received_21kg_filled || 0
-      }));
+      // Only update if not editing existing report's plant delivery data
+      if (!existingReport || existingReport.received_from_plant_15kg === 0) {
+        setFormData(prev => ({
+          ...prev,
+          received_from_plant_15kg: data.received_15kg_filled || 0,
+          received_from_plant_21kg: data.received_21kg_filled || 0
+        }));
+      }
       
       setPlantDeliverySync({
         synced: data.synced_from_plant,
