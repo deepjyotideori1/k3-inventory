@@ -634,6 +634,33 @@ async def create_daily_report(data: DailyReportCreate, user: dict = Depends(get_
     
     return DailyReportResponse(**report)
 
+@api_router.get("/reports/warehouse-received-from-plant/{warehouse_id}/{date}")
+async def get_warehouse_received_from_plant(warehouse_id: str, date: str, user: dict = Depends(get_current_user)):
+    """Get filled cylinders delivered to a specific warehouse from Plant Hollongi for a specific date"""
+    # Find plant report for this date
+    plant_report = await db.plant_reports.find_one({'date': date}, {'_id': 0})
+    
+    received_15kg = 0
+    received_21kg = 0
+    
+    if plant_report:
+        # Check deliveries to this warehouse
+        for delivery in plant_report.get('delivery_15kg', []):
+            if delivery.get('warehouse_id') == warehouse_id:
+                received_15kg += delivery.get('quantity', 0)
+        
+        for delivery in plant_report.get('delivery_21kg', []):
+            if delivery.get('warehouse_id') == warehouse_id:
+                received_21kg += delivery.get('quantity', 0)
+    
+    return {
+        'date': date,
+        'warehouse_id': warehouse_id,
+        'received_15kg_filled': received_15kg,
+        'received_21kg_filled': received_21kg,
+        'synced_from_plant': plant_report is not None
+    }
+
 @api_router.get("/reports/plant-received/{date}")
 async def get_plant_received_from_warehouses(date: str, user: dict = Depends(get_current_user)):
     """Get all warehouse refilling at plant entries for a specific date - these are empties sent to plant"""
