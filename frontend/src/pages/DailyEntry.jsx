@@ -50,6 +50,14 @@ const DailyEntry = () => {
     closing_21kg_empty: 0
   });
 
+  // System-calculated closing stock (read-only)
+  const [calculatedClosing, setCalculatedClosing] = useState({
+    closing_15kg_filled: 0,
+    closing_21kg_filled: 0,
+    closing_15kg_empty: 0,
+    closing_21kg_empty: 0
+  });
+
   useEffect(() => {
     fetchOpeningStock();
   }, [user]);
