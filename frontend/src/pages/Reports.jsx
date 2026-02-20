@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { getDailyReports, getPlantReports, getWarehouses, exportPDF, exportExcel } from '../lib/api';
@@ -15,7 +16,8 @@ import {
   Filter,
   Loader2,
   Calendar,
-  RefreshCw
+  RefreshCw,
+  FileEdit
 } from 'lucide-react';
 import { formatDate, getDateRange } from '../lib/utils';
 import { toast } from 'sonner';
