@@ -653,6 +653,10 @@ async def get_today_report(warehouse_id: str, date: str = None, user: dict = Dep
     if not report:
         return None
     
+    # Ensure status field exists (for backward compatibility with old reports)
+    if 'status' not in report:
+        report['status'] = 'submitted'  # Old reports without status are considered submitted
+    
     return report
 
 @api_router.put("/reports/daily/{report_id}")
