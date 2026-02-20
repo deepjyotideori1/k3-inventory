@@ -126,11 +126,10 @@ const DailyEntry = () => {
 
   const calculateDiscrepancies = () => {
     // System-calculated expected closing stock
-    // Formula: Opening + Received - Sold - Sent for refilling
-    // For Filled: Opening - Sold + Refilling (local) + Refilling (from plant)
-    // For Empty: Opening + Sold - Refilling (local) - Refilling (to plant)
-    const expected15kgFilled = formData.opening_15kg_filled - formData.sold_15kg_filled + formData.refilling_15kg + formData.refilling_plant_15kg;
-    const expected21kgFilled = formData.opening_21kg_filled - formData.sold_21kg_filled + formData.refilling_21kg + formData.refilling_plant_21kg;
+    // Formula for Filled: Opening - Sold + Refilling (local) + Refilling (from plant) + Received from Plant
+    // Formula for Empty: Opening + Sold - Refilling (local) - Refilling (to plant)
+    const expected15kgFilled = formData.opening_15kg_filled - formData.sold_15kg_filled + formData.refilling_15kg + formData.refilling_plant_15kg + formData.received_from_plant_15kg;
+    const expected21kgFilled = formData.opening_21kg_filled - formData.sold_21kg_filled + formData.refilling_21kg + formData.refilling_plant_21kg + formData.received_from_plant_21kg;
     const expected15kgEmpty = formData.opening_15kg_empty + formData.sold_15kg_filled - formData.refilling_15kg - formData.refilling_plant_15kg;
     const expected21kgEmpty = formData.opening_21kg_empty + formData.sold_21kg_filled - formData.refilling_21kg - formData.refilling_plant_21kg;
 
