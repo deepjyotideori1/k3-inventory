@@ -218,6 +218,14 @@ class SettingsUpdate(BaseModel):
     maintenance_mode: Optional[bool] = None
     maintenance_message: Optional[str] = None
 
+class PlantStockUpdateRequest(BaseModel):
+    bullet_tank_kg: float = 0
+    stock_15kg_filled: int = 0
+    stock_21kg_filled: int = 0
+    stock_15kg_empty: int = 0
+    stock_21kg_empty: int = 0
+    reason: str = ""
+
 class StockUpdateRequest(BaseModel):
     warehouse_id: str
     stock_15kg_filled: int
