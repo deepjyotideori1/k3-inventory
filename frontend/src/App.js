@@ -16,6 +16,7 @@ import SettingsPage from "./pages/Settings";
 import PlantHollongi from "./pages/PlantHollongi";
 import AdminEditReport from "./pages/AdminEditReport";
 import DealerReports from "./pages/DealerReports";
+import AccessoryReports from "./pages/AccessoryReports";
 
 // Protected Route Component
 const ProtectedRoute = ({ children, adminOnly = false }) => {
