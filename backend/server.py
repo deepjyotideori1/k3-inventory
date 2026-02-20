@@ -609,6 +609,8 @@ async def create_daily_report(data: DailyReportCreate, user: dict = Depends(get_
         'refilling_21kg': data.refilling_21kg,
         'refilling_plant_15kg': data.refilling_plant_15kg,
         'refilling_plant_21kg': data.refilling_plant_21kg,
+        'received_from_plant_15kg': data.received_from_plant_15kg,
+        'received_from_plant_21kg': data.received_from_plant_21kg,
         'closing_15kg_filled': data.closing_15kg_filled,
         'closing_21kg_filled': data.closing_21kg_filled,
         'closing_15kg_empty': data.closing_15kg_empty,
