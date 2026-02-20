@@ -764,7 +764,9 @@ async def update_stock(data: StockUpdateRequest, user: dict = Depends(require_ad
         'updated_at': datetime.now(timezone.utc).isoformat()
     }
     
-    await db.stock_updates.insert_one(stock_update)
+    # Create a copy for insertion to avoid _id modification affecting response
+    doc_to_insert = stock_update.copy()
+    await db.stock_updates.insert_one(doc_to_insert)
     
     return {"message": "Stock updated successfully", "update": stock_update}
 
