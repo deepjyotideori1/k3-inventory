@@ -28,6 +28,8 @@ const DailyEntry = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [loadingPlantDelivery, setLoadingPlantDelivery] = useState(false);
+  const [plantDeliverySync, setPlantDeliverySync] = useState({ synced: false, date: null });
   const [formData, setFormData] = useState({
     date: getTodayDate(),
     opening_15kg_filled: 0,
@@ -40,6 +42,8 @@ const DailyEntry = () => {
     refilling_21kg: 0,
     refilling_plant_15kg: 0,
     refilling_plant_21kg: 0,
+    received_from_plant_15kg: 0,
+    received_from_plant_21kg: 0,
     closing_15kg_filled: 0,
     closing_21kg_filled: 0,
     closing_15kg_empty: 0,
