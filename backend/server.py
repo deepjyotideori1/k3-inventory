@@ -1412,7 +1412,6 @@ async def create_dealer(data: DealerCreate, user: dict = Depends(get_current_use
         'is_active': True
     }
     await db.dealers.insert_one(dealer)
-    del dealer['_id'] if '_id' in dealer else None
     return DealerResponse(**dealer)
 
 @api_router.get("/dealers")
