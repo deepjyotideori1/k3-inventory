@@ -66,6 +66,7 @@ export const createPlantReport = (data) => api.post('/reports/plant', data);
 export const getPlantReports = (params) => api.get('/reports/plant', { params });
 export const getLatestPlantClosing = () => api.get('/reports/plant/latest');
 export const getPlantReceivedFromWarehouses = (date) => api.get(`/reports/plant-received/${date}`);
+export const getWarehouseReceivedFromPlant = (warehouseId, date) => api.get(`/reports/warehouse-received-from-plant/${warehouseId}/${date}`);
 
 // Stock Update
 export const updateStock = (data) => api.post('/stock/update', data);
