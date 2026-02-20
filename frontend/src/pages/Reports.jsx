@@ -64,7 +64,7 @@ const Reports = () => {
           start_date: filters.start_date,
           end_date: filters.end_date
         };
-        if (filters.warehouse_id) {
+        if (filters.warehouse_id && filters.warehouse_id !== 'all') {
           params.warehouse_id = filters.warehouse_id;
         }
         if (!isAdmin && user?.warehouse_id) {
