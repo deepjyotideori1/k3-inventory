@@ -624,6 +624,52 @@ async def create_daily_report(data: DailyReportCreate, user: dict = Depends(get_
     
     return DailyReportResponse(**report)
 
+@api_router.get("/reports/plant-received/{date}")
+async def get_plant_received_from_warehouses(date: str, user: dict = Depends(get_current_user)):
+    """Get all warehouse refilling at plant entries for a specific date - these are empties sent to plant"""
+    # Find all daily reports for this date where refilling_plant_15kg or refilling_plant_21kg > 0
+    reports = await db.daily_reports.find({
+        'date': date,
+        '$or': [
+            {'refilling_plant_15kg': {'$gt': 0}},
+            {'refilling_plant_21kg': {'$gt': 0}}
+        ]
+    }, {'_id': 0}).to_list(100)
+    
+    received_15kg = []
+    received_21kg = []
+    total_15kg = 0
+    total_21kg = 0
+    
+    for r in reports:
+        if r.get('refilling_plant_15kg', 0) > 0:
+            received_15kg.append({
+                'warehouse_id': r['warehouse_id'],
+                'warehouse_name': r['warehouse_name'],
+                'quantity': r['refilling_plant_15kg'],
+                'submitted_by': r.get('submitted_by', 'Unknown'),
+                'submitted_at': r.get('submitted_at', '')
+            })
+            total_15kg += r['refilling_plant_15kg']
+        
+        if r.get('refilling_plant_21kg', 0) > 0:
+            received_21kg.append({
+                'warehouse_id': r['warehouse_id'],
+                'warehouse_name': r['warehouse_name'],
+                'quantity': r['refilling_plant_21kg'],
+                'submitted_by': r.get('submitted_by', 'Unknown'),
+                'submitted_at': r.get('submitted_at', '')
+            })
+            total_21kg += r['refilling_plant_21kg']
+    
+    return {
+        'date': date,
+        'received_15kg': received_15kg,
+        'received_21kg': received_21kg,
+        'total_15kg': total_15kg,
+        'total_21kg': total_21kg
+    }
+
 @api_router.get("/reports/daily", response_model=List[DailyReportResponse])
 async def get_daily_reports(
     warehouse_id: Optional[str] = None,
