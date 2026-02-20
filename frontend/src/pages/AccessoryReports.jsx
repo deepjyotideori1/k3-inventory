@@ -57,10 +57,12 @@ const AccessoryReports = () => {
   const [entryForm, setEntryForm] = useState({
     total_issued: 0,
     total_sold: 0,
-    total_remaining: 0,
     remarks: ''
   });
   const [submitting, setSubmitting] = useState(false);
+  
+  // System calculated remaining
+  const calculatedRemaining = entryForm.total_issued - entryForm.total_sold;
   
   // New accessory form
   const [newAccessory, setNewAccessory] = useState({ name: '', description: '', unit: 'pcs' });
