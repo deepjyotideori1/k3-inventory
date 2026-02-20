@@ -220,10 +220,17 @@ const DailyEntry = () => {
     setSubmitting(true);
 
     try {
-      await createDailyReport({
+      const reportData = {
         warehouse_id: user.warehouse_id,
-        ...formData
-      });
+        ...formData,
+        status: 'submitted'
+      };
+      
+      if (existingReport) {
+        await updateDailyReport(existingReport.id, reportData);
+      } else {
+        await createDailyReport(reportData);
+      }
       toast.success('Daily report submitted successfully!');
       navigate('/manager-dashboard');
     } catch (error) {
@@ -234,7 +241,40 @@ const DailyEntry = () => {
     }
   };
 
+  const handleSaveDraft = async () => {
+    setSavingDraft(true);
+
+    try {
+      const reportData = {
+        warehouse_id: user.warehouse_id,
+        ...formData,
+        status: 'draft'
+      };
+      
+      if (existingReport) {
+        await updateDailyReport(existingReport.id, reportData);
+        setExistingReport({ ...existingReport, ...reportData, id: existingReport.id });
+      } else {
+        const response = await createDailyReport(reportData);
+        setExistingReport(response.data);
+      }
+      setIsEditMode(true);
+      toast.success('Report saved as draft!');
+    } catch (error) {
+      console.error('Failed to save draft:', error);
+      toast.error('Failed to save draft. Please try again.');
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
+  const handleEnableEdit = () => {
+    setIsEditMode(true);
+  };
+
   const hasDiscrepancy = Object.values(discrepancies).some(d => d !== 0);
+  const isDraft = existingReport?.status === 'draft';
+  const isSubmitted = existingReport?.status === 'submitted';
 
   if (loading) {
     return (
@@ -250,10 +290,62 @@ const DailyEntry = () => {
     <Layout>
       <div className="max-w-4xl mx-auto space-y-6" data-testid="daily-entry-page">
         {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold text-slate-800">Daily Stock Entry</h1>
-          <p className="text-slate-500 mt-1">{user?.warehouse_name} - {formatDate(formData.date)}</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-800">Daily Stock Entry</h1>
+            <p className="text-slate-500 mt-1">{user?.warehouse_name} - {formatDate(formData.date)}</p>
+          </div>
+          {existingReport && (
+            <div className="flex items-center gap-2">
+              {isDraft && (
+                <Badge className="bg-amber-100 text-amber-700 border-amber-300">
+                  <FileText className="w-3 h-3 mr-1" />
+                  Draft
+                </Badge>
+              )}
+              {isSubmitted && (
+                <Badge className="bg-green-100 text-green-700 border-green-300">
+                  <CheckCircle className="w-3 h-3 mr-1" />
+                  Submitted
+                </Badge>
+              )}
+            </div>
+          )}
         </div>
+
+        {/* Submitted Report Notice */}
+        {isSubmitted && !isEditMode && (
+          <div className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <CheckCircle className="w-5 h-5 text-green-600" />
+              <div>
+                <p className="font-medium text-green-800">Report Already Submitted</p>
+                <p className="text-sm text-green-700">Submitted by {existingReport?.submitted_by} at {new Date(existingReport?.submitted_at).toLocaleString()}</p>
+              </div>
+            </div>
+            <Button 
+              type="button"
+              variant="outline"
+              onClick={handleEnableEdit}
+              className="border-green-300 text-green-700 hover:bg-green-100"
+              data-testid="edit-submitted-btn"
+            >
+              <FileEdit className="w-4 h-4 mr-2" />
+              Edit Report
+            </Button>
+          </div>
+        )}
+
+        {/* Draft Notice */}
+        {isDraft && (
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-3">
+            <FileText className="w-5 h-5 text-amber-600" />
+            <div>
+              <p className="font-medium text-amber-800">Draft Report</p>
+              <p className="text-sm text-amber-700">This report is saved as draft. Complete the form and submit to finalize.</p>
+            </div>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit}>
           {/* Opening Stock */}
