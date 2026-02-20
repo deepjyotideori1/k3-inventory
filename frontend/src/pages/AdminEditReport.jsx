@@ -125,10 +125,12 @@ const AdminEditReport = () => {
   };
 
   const calculateDiscrepancies = () => {
-    const expected15kgFilled = formData.opening_15kg_filled - formData.sold_15kg_filled + formData.refilling_15kg + formData.refilling_plant_15kg + formData.received_from_plant_15kg;
-    const expected21kgFilled = formData.opening_21kg_filled - formData.sold_21kg_filled + formData.refilling_21kg + formData.refilling_plant_21kg + formData.received_from_plant_21kg;
-    const expected15kgEmpty = formData.opening_15kg_empty + formData.sold_15kg_filled - formData.refilling_15kg - formData.refilling_plant_15kg;
-    const expected21kgEmpty = formData.opening_21kg_empty + formData.sold_21kg_filled - formData.refilling_21kg - formData.refilling_plant_21kg;
+    // Formula: Filled = Opening - Sold - Refilling (local) + Received from Plant
+    // Formula: Empty = Opening + Refilling (Local) - Refilling at Plant Hollongi
+    const expected15kgFilled = formData.opening_15kg_filled - formData.sold_15kg_filled - formData.refilling_15kg + formData.received_from_plant_15kg;
+    const expected21kgFilled = formData.opening_21kg_filled - formData.sold_21kg_filled - formData.refilling_21kg + formData.received_from_plant_21kg;
+    const expected15kgEmpty = formData.opening_15kg_empty + formData.refilling_15kg - formData.refilling_plant_15kg;
+    const expected21kgEmpty = formData.opening_21kg_empty + formData.refilling_21kg - formData.refilling_plant_21kg;
 
     setCalculatedClosing({
       closing_15kg_filled: expected15kgFilled,
