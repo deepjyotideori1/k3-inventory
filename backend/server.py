@@ -759,6 +759,7 @@ async def update_stock(data: StockUpdateRequest, user: dict = Depends(require_ad
     if not warehouse:
         raise HTTPException(status_code=404, detail="Warehouse not found")
     
+    # Log the stock update
     stock_update = {
         'id': str(uuid.uuid4()),
         'warehouse_id': data.warehouse_id,
@@ -775,6 +776,57 @@ async def update_stock(data: StockUpdateRequest, user: dict = Depends(require_ad
     # Create a copy for insertion to avoid _id modification affecting response
     doc_to_insert = stock_update.copy()
     await db.stock_updates.insert_one(doc_to_insert)
+    
+    # Also create/update a daily report so it shows in dashboard
+    daily_report = {
+        'id': str(uuid.uuid4()),
+        'warehouse_id': data.warehouse_id,
+        'warehouse_name': warehouse['name'],
+        'date': today,
+        'opening_15kg_filled': data.stock_15kg_filled,
+        'opening_21kg_filled': data.stock_21kg_filled,
+        'opening_15kg_empty': data.stock_15kg_empty,
+        'opening_21kg_empty': data.stock_21kg_empty,
+        'sold_15kg_filled': 0,
+        'sold_21kg_filled': 0,
+        'refilling_15kg': 0,
+        'refilling_21kg': 0,
+        'refilling_plant_15kg': 0,
+        'refilling_plant_21kg': 0,
+        'closing_15kg_filled': data.stock_15kg_filled,
+        'closing_21kg_filled': data.stock_21kg_filled,
+        'closing_15kg_empty': data.stock_15kg_empty,
+        'closing_21kg_empty': data.stock_21kg_empty,
+        'remarks': data.reason or 'Stock updated by admin',
+        'discrepancy_15kg_filled': 0,
+        'discrepancy_21kg_filled': 0,
+        'discrepancy_15kg_empty': 0,
+        'discrepancy_21kg_empty': 0,
+        'has_discrepancy': False,
+        'submitted_by': user['name'],
+        'submitted_at': datetime.now(timezone.utc).isoformat(),
+        'created_at': datetime.now(timezone.utc).isoformat()
+    }
+    
+    # Check if report exists for today
+    existing = await db.daily_reports.find_one({'warehouse_id': data.warehouse_id, 'date': today}, {'_id': 0})
+    if existing:
+        # Update the closing stock values
+        await db.daily_reports.update_one(
+            {'id': existing['id']}, 
+            {'$set': {
+                'closing_15kg_filled': data.stock_15kg_filled,
+                'closing_21kg_filled': data.stock_21kg_filled,
+                'closing_15kg_empty': data.stock_15kg_empty,
+                'closing_21kg_empty': data.stock_21kg_empty,
+                'remarks': (existing.get('remarks', '') + '\n' + (data.reason or 'Stock adjusted by admin')).strip(),
+                'submitted_by': user['name'],
+                'submitted_at': datetime.now(timezone.utc).isoformat()
+            }}
+        )
+    else:
+        report_to_insert = daily_report.copy()
+        await db.daily_reports.insert_one(report_to_insert)
     
     return {"message": "Stock updated successfully", "update": stock_update}
 
