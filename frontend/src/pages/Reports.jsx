@@ -98,7 +98,7 @@ const Reports = () => {
     }));
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     const params = {
       report_type: activeTab,
       start_date: filters.start_date,
@@ -107,11 +107,15 @@ const Reports = () => {
     if (filters.warehouse_id && filters.warehouse_id !== 'all') {
       params.warehouse_id = filters.warehouse_id;
     }
-    exportPDF(params);
-    toast.success('PDF export started');
+    try {
+      await exportPDF(params);
+      toast.success('PDF downloaded successfully');
+    } catch (error) {
+      toast.error('Failed to download PDF');
+    }
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     const params = {
       report_type: activeTab,
       start_date: filters.start_date,
@@ -120,8 +124,12 @@ const Reports = () => {
     if (filters.warehouse_id && filters.warehouse_id !== 'all') {
       params.warehouse_id = filters.warehouse_id;
     }
-    exportExcel(params);
-    toast.success('Excel export started');
+    try {
+      await exportExcel(params);
+      toast.success('Excel downloaded successfully');
+    } catch (error) {
+      toast.error('Failed to download Excel');
+    }
   };
 
   return (
