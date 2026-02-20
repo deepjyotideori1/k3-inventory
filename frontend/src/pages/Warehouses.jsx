@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
-import { getWarehouses, createWarehouse, updateWarehouse, deleteWarehouse, updateStock, getDailyReports } from '../lib/api';
+import { getWarehouses, createWarehouse, updateWarehouse, deleteWarehouse, updateStock, updatePlantStock, getDailyReports, getLatestPlantClosing } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -18,17 +18,20 @@ import {
   Package,
   MapPin,
   Factory,
-  AlertTriangle
+  AlertTriangle,
+  Fuel
 } from 'lucide-react';
 import { formatDate } from '../lib/utils';
 import { toast } from 'sonner';
 
 const Warehouses = () => {
   const [warehouses, setWarehouses] = useState([]);
+  const [plantStock, setPlantStock] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showStockDialog, setShowStockDialog] = useState(false);
+  const [showPlantStockDialog, setShowPlantStockDialog] = useState(false);
   const [selectedWarehouse, setSelectedWarehouse] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -47,6 +50,15 @@ const Warehouses = () => {
     reason: ''
   });
 
+  const [plantStockForm, setPlantStockForm] = useState({
+    bullet_tank_kg: 0,
+    stock_15kg_filled: 0,
+    stock_21kg_filled: 0,
+    stock_15kg_empty: 0,
+    stock_21kg_empty: 0,
+    reason: ''
+  });
+
   useEffect(() => {
     fetchWarehouses();
   }, []);
@@ -54,9 +66,14 @@ const Warehouses = () => {
   const fetchWarehouses = async () => {
     try {
       const response = await getWarehouses();
-      // Get latest stock for each warehouse
+      
+      // Get latest stock for each non-plant warehouse
       const warehousesWithStock = await Promise.all(
         response.data.map(async (w) => {
+          if (w.is_plant) {
+            // For plant, get plant stock separately
+            return { ...w, current_stock: null };
+          }
           try {
             const reportsRes = await getDailyReports({ warehouse_id: w.id });
             const latestReport = reportsRes.data[0];
@@ -76,6 +93,15 @@ const Warehouses = () => {
           }
         })
       );
+      
+      // Get plant stock
+      try {
+        const plantRes = await getLatestPlantClosing();
+        setPlantStock(plantRes.data);
+      } catch {
+        setPlantStock(null);
+      }
+      
       setWarehouses(warehousesWithStock);
     } catch (error) {
       console.error('Failed to fetch warehouses:', error);
@@ -151,6 +177,22 @@ const Warehouses = () => {
     }
   };
 
+  const handleUpdatePlantStock = async () => {
+    setSubmitting(true);
+    try {
+      await updatePlantStock(plantStockForm);
+      toast.success('Plant Hollongi stock updated successfully');
+      setShowPlantStockDialog(false);
+      setPlantStockForm({ bullet_tank_kg: 0, stock_15kg_filled: 0, stock_21kg_filled: 0, stock_15kg_empty: 0, stock_21kg_empty: 0, reason: '' });
+      fetchWarehouses();
+    } catch (error) {
+      console.error('Failed to update plant stock:', error);
+      toast.error('Failed to update plant stock');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const openEditDialog = (warehouse) => {
     setSelectedWarehouse(warehouse);
     setFormData({
@@ -175,6 +217,24 @@ const Warehouses = () => {
     }
     setShowStockDialog(true);
   };
+
+  const openPlantStockDialog = () => {
+    if (plantStock && plantStock.last_date) {
+      setPlantStockForm({
+        bullet_tank_kg: plantStock.opening_bullet_tank_kg || 0,
+        stock_15kg_filled: plantStock.opening_15kg_filled || 0,
+        stock_21kg_filled: plantStock.opening_21kg_filled || 0,
+        stock_15kg_empty: plantStock.opening_15kg_empty || 0,
+        stock_21kg_empty: plantStock.opening_21kg_empty || 0,
+        reason: ''
+      });
+    }
+    setShowPlantStockDialog(true);
+  };
+
+  // Separate plant and regular warehouses
+  const regularWarehouses = warehouses.filter(w => !w.is_plant);
+  const plantWarehouse = warehouses.find(w => w.is_plant);
 
   if (loading) {
     return (
@@ -248,89 +308,184 @@ const Warehouses = () => {
           </Dialog>
         </div>
 
-        {/* Warehouse Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {warehouses.map((warehouse) => (
-            <Card key={warehouse.id} className="card-hover" data-testid={`warehouse-card-${warehouse.id}`}>
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${warehouse.is_plant ? 'bg-amber-100' : 'bg-green-100'}`}>
-                      {warehouse.is_plant ? (
-                        <Factory className="w-6 h-6 text-amber-700" />
-                      ) : (
-                        <Warehouse className="w-6 h-6 text-green-700" />
-                      )}
-                    </div>
-                    <div>
-                      <CardTitle className="text-lg">{warehouse.name}</CardTitle>
-                      <div className="flex items-center gap-1 text-sm text-slate-500 mt-0.5">
-                        <MapPin className="w-3 h-3" />
-                        {warehouse.location}
-                      </div>
-                    </div>
+        {/* Plant Hollongi Section */}
+        {plantWarehouse && (
+          <Card className="border-2 border-amber-200 bg-amber-50" data-testid="plant-hollongi-card">
+            <CardHeader className="pb-3">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-14 h-14 rounded-xl bg-amber-100 flex items-center justify-center">
+                    <Factory className="w-7 h-7 text-amber-700" />
                   </div>
-                  <div className="flex gap-1">
-                    <Button variant="ghost" size="icon" onClick={() => openEditDialog(warehouse)}>
-                      <Edit className="w-4 h-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(warehouse)}>
-                      <Trash2 className="w-4 h-4 text-red-500" />
-                    </Button>
+                  <div>
+                    <CardTitle className="text-xl text-amber-800">{plantWarehouse.name}</CardTitle>
+                    <div className="flex items-center gap-1 text-sm text-amber-600 mt-0.5">
+                      <MapPin className="w-3 h-3" />
+                      {plantWarehouse.location}
+                    </div>
                   </div>
                 </div>
-              </CardHeader>
-              <CardContent>
-                {warehouse.current_stock ? (
-                  <>
-                    <div className="grid grid-cols-2 gap-3 mb-3">
-                      <div className="p-3 bg-slate-50 rounded-lg text-center">
-                        <p className="text-xs text-slate-500">15kg Filled</p>
-                        <p className="font-bold text-slate-800">{warehouse.current_stock.closing_15kg_filled}</p>
+                <div className="flex gap-1">
+                  <Button variant="ghost" size="icon" onClick={() => openEditDialog(plantWarehouse)}>
+                    <Edit className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {plantStock && plantStock.last_date ? (
+                <>
+                  {/* Bullet Tank - Prominent Display */}
+                  <div className="p-4 bg-amber-100 rounded-lg mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-full bg-amber-200 flex items-center justify-center">
+                        <Fuel className="w-6 h-6 text-amber-700" />
                       </div>
-                      <div className="p-3 bg-slate-50 rounded-lg text-center">
-                        <p className="text-xs text-slate-500">21kg Filled</p>
-                        <p className="font-bold text-slate-800">{warehouse.current_stock.closing_21kg_filled}</p>
-                      </div>
-                      <div className="p-3 bg-slate-50 rounded-lg text-center">
-                        <p className="text-xs text-slate-500">15kg Empty</p>
-                        <p className="font-bold text-slate-800">{warehouse.current_stock.closing_15kg_empty}</p>
-                      </div>
-                      <div className="p-3 bg-slate-50 rounded-lg text-center">
-                        <p className="text-xs text-slate-500">21kg Empty</p>
-                        <p className="font-bold text-slate-800">{warehouse.current_stock.closing_21kg_empty}</p>
+                      <div>
+                        <p className="text-sm text-amber-700 font-medium">Bullet Tank Stock</p>
+                        <p className="text-3xl font-bold text-amber-800">{plantStock.opening_bullet_tank_kg} <span className="text-lg">kg</span></p>
                       </div>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        {warehouse.current_stock.has_discrepancy && (
-                          <Badge variant="destructive" className="bg-red-100 text-red-700 text-xs">
-                            <AlertTriangle className="w-3 h-3 mr-1" />
-                            Discrepancy
-                          </Badge>
-                        )}
-                        <span className="text-xs text-slate-500">
-                          Last: {formatDate(warehouse.current_stock.last_report_date)}
-                        </span>
-                      </div>
-                      <Button variant="outline" size="sm" onClick={() => openStockDialog(warehouse)} data-testid={`update-stock-${warehouse.id}`}>
-                        <Package className="w-3 h-3 mr-1" />
-                        Update Stock
-                      </Button>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                    <div className="p-3 bg-white rounded-lg text-center border border-amber-200">
+                      <p className="text-xs text-slate-500">15kg Filled</p>
+                      <p className="font-bold text-slate-800 text-lg">{plantStock.opening_15kg_filled}</p>
                     </div>
-                  </>
-                ) : (
-                  <div className="text-center py-4">
-                    <p className="text-slate-500 text-sm">No stock data available</p>
-                    <Button variant="outline" size="sm" className="mt-2" onClick={() => openStockDialog(warehouse)}>
+                    <div className="p-3 bg-white rounded-lg text-center border border-amber-200">
+                      <p className="text-xs text-slate-500">21kg Filled</p>
+                      <p className="font-bold text-slate-800 text-lg">{plantStock.opening_21kg_filled}</p>
+                    </div>
+                    <div className="p-3 bg-white rounded-lg text-center border border-amber-200">
+                      <p className="text-xs text-slate-500">15kg Empty</p>
+                      <p className="font-bold text-slate-800 text-lg">{plantStock.opening_15kg_empty}</p>
+                    </div>
+                    <div className="p-3 bg-white rounded-lg text-center border border-amber-200">
+                      <p className="text-xs text-slate-500">21kg Empty</p>
+                      <p className="font-bold text-slate-800 text-lg">{plantStock.opening_21kg_empty}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-amber-600">
+                      Last update: {formatDate(plantStock.last_date)}
+                    </span>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="border-amber-300 text-amber-700 hover:bg-amber-100"
+                      onClick={openPlantStockDialog}
+                      data-testid="update-plant-stock-btn"
+                    >
                       <Package className="w-3 h-3 mr-1" />
-                      Set Initial Stock
+                      Update Stock
                     </Button>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                </>
+              ) : (
+                <div className="text-center py-6">
+                  <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-3">
+                    <Fuel className="w-8 h-8 text-amber-600" />
+                  </div>
+                  <p className="text-amber-700 font-medium">No stock data available</p>
+                  <p className="text-amber-600 text-sm mt-1">Set initial stock for Plant Hollongi including Bullet Tank</p>
+                  <Button 
+                    className="mt-4 bg-amber-600 hover:bg-amber-700"
+                    onClick={openPlantStockDialog}
+                    data-testid="set-initial-plant-stock-btn"
+                  >
+                    <Package className="w-4 h-4 mr-2" />
+                    Set Initial Stock
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Regular Warehouses Grid */}
+        <div>
+          <h2 className="text-lg font-semibold text-slate-700 mb-4">Distribution Warehouses</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {regularWarehouses.map((warehouse) => (
+              <Card key={warehouse.id} className="card-hover" data-testid={`warehouse-card-${warehouse.id}`}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
+                        <Warehouse className="w-6 h-6 text-green-700" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg">{warehouse.name}</CardTitle>
+                        <div className="flex items-center gap-1 text-sm text-slate-500 mt-0.5">
+                          <MapPin className="w-3 h-3" />
+                          {warehouse.location}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" onClick={() => openEditDialog(warehouse)}>
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(warehouse)}>
+                        <Trash2 className="w-4 h-4 text-red-500" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {warehouse.current_stock ? (
+                    <>
+                      <div className="grid grid-cols-2 gap-3 mb-3">
+                        <div className="p-3 bg-slate-50 rounded-lg text-center">
+                          <p className="text-xs text-slate-500">15kg Filled</p>
+                          <p className="font-bold text-slate-800">{warehouse.current_stock.closing_15kg_filled}</p>
+                        </div>
+                        <div className="p-3 bg-slate-50 rounded-lg text-center">
+                          <p className="text-xs text-slate-500">21kg Filled</p>
+                          <p className="font-bold text-slate-800">{warehouse.current_stock.closing_21kg_filled}</p>
+                        </div>
+                        <div className="p-3 bg-slate-50 rounded-lg text-center">
+                          <p className="text-xs text-slate-500">15kg Empty</p>
+                          <p className="font-bold text-slate-800">{warehouse.current_stock.closing_15kg_empty}</p>
+                        </div>
+                        <div className="p-3 bg-slate-50 rounded-lg text-center">
+                          <p className="text-xs text-slate-500">21kg Empty</p>
+                          <p className="font-bold text-slate-800">{warehouse.current_stock.closing_21kg_empty}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {warehouse.current_stock.has_discrepancy && (
+                            <Badge variant="destructive" className="bg-red-100 text-red-700 text-xs">
+                              <AlertTriangle className="w-3 h-3 mr-1" />
+                              Discrepancy
+                            </Badge>
+                          )}
+                          <span className="text-xs text-slate-500">
+                            Last: {formatDate(warehouse.current_stock.last_report_date)}
+                          </span>
+                        </div>
+                        <Button variant="outline" size="sm" onClick={() => openStockDialog(warehouse)} data-testid={`update-stock-${warehouse.id}`}>
+                          <Package className="w-3 h-3 mr-1" />
+                          Update Stock
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center py-4">
+                      <p className="text-slate-500 text-sm">No stock data available</p>
+                      <Button variant="outline" size="sm" className="mt-2" onClick={() => openStockDialog(warehouse)}>
+                        <Package className="w-3 h-3 mr-1" />
+                        Set Initial Stock
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
 
         {/* Edit Dialog */}
@@ -380,7 +535,7 @@ const Warehouses = () => {
           </DialogContent>
         </Dialog>
 
-        {/* Update Stock Dialog */}
+        {/* Update Stock Dialog (Regular Warehouses) */}
         <Dialog open={showStockDialog} onOpenChange={setShowStockDialog}>
           <DialogContent>
             <DialogHeader>
@@ -438,6 +593,94 @@ const Warehouses = () => {
                 <Button variant="outline" onClick={() => setShowStockDialog(false)}>Cancel</Button>
                 <Button onClick={handleUpdateStock} disabled={submitting} className="bg-green-700 hover:bg-green-800">
                   {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Update Stock'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Update Plant Stock Dialog */}
+        <Dialog open={showPlantStockDialog} onOpenChange={setShowPlantStockDialog}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Factory className="w-5 h-5 text-amber-600" />
+                Update Plant Hollongi Stock
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {/* Bullet Tank - Prominent */}
+              <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+                <Label className="text-amber-800 font-semibold flex items-center gap-2">
+                  <Fuel className="w-4 h-4" />
+                  Bullet Tank Stock (kg)
+                </Label>
+                <Input 
+                  type="number"
+                  step="0.01"
+                  value={plantStockForm.bullet_tank_kg}
+                  onChange={(e) => setPlantStockForm(prev => ({ ...prev, bullet_tank_kg: parseFloat(e.target.value) || 0 }))}
+                  className="mt-2 text-lg font-semibold"
+                  data-testid="bullet-tank-input"
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>15kg Filled</Label>
+                  <Input 
+                    type="number"
+                    value={plantStockForm.stock_15kg_filled}
+                    onChange={(e) => setPlantStockForm(prev => ({ ...prev, stock_15kg_filled: parseInt(e.target.value) || 0 }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>21kg Filled</Label>
+                  <Input 
+                    type="number"
+                    value={plantStockForm.stock_21kg_filled}
+                    onChange={(e) => setPlantStockForm(prev => ({ ...prev, stock_21kg_filled: parseInt(e.target.value) || 0 }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>15kg Empty</Label>
+                  <Input 
+                    type="number"
+                    value={plantStockForm.stock_15kg_empty}
+                    onChange={(e) => setPlantStockForm(prev => ({ ...prev, stock_15kg_empty: parseInt(e.target.value) || 0 }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>21kg Empty</Label>
+                  <Input 
+                    type="number"
+                    value={plantStockForm.stock_21kg_empty}
+                    onChange={(e) => setPlantStockForm(prev => ({ ...prev, stock_21kg_empty: parseInt(e.target.value) || 0 }))}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label>Reason for Update</Label>
+                <Textarea 
+                  value={plantStockForm.reason}
+                  onChange={(e) => setPlantStockForm(prev => ({ ...prev, reason: e.target.value }))}
+                  placeholder="Enter reason for stock update (e.g., Initial stock setup, Physical count adjustment)..."
+                  className="mt-1"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowPlantStockDialog(false)}>Cancel</Button>
+                <Button 
+                  onClick={handleUpdatePlantStock} 
+                  disabled={submitting} 
+                  className="bg-amber-600 hover:bg-amber-700"
+                  data-testid="save-plant-stock-btn"
+                >
+                  {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Update Plant Stock'}
                 </Button>
               </div>
             </div>
