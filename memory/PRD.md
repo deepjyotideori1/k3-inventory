@@ -40,6 +40,13 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] **Save as Draft** - Warehouse managers can save reports as draft before final submission
 - [x] **Edit Report** - Warehouse managers can edit their draft reports
 - [x] **Admin Edit Access** - Master admin can edit any report (submitted or draft) from Reports page
+- [x] **Updated Stock Formula** - Filled = Opening - Sold - Refilling (Local) + Received from Plant | Empty = Opening + Refilling (Local) - Refilling at Plant
+- [x] **Dealer Reports** - Full dealer management for Plant Hollongi with:
+  - Add/manage dealers
+  - Daily entry for cylinder issuance (15kg/21kg issued, 15kg/21kg refilled)
+  - Date-wise entries with dealer selection
+  - Dealer-wise summary with grand totals
+  - PDF and Excel export for dealer reports
 
 ### Frontend Features
 - [x] Professional login page with split-screen design
