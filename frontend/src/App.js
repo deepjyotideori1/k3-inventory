@@ -168,6 +168,14 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/accessory-reports"
+        element={
+          <ProtectedRoute adminOnly>
+            <AccessoryReports />
+          </ProtectedRoute>
+        }
+      />
 
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />
