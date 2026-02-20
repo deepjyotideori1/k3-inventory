@@ -811,15 +811,30 @@ async def update_stock(data: StockUpdateRequest, user: dict = Depends(require_ad
     # Check if report exists for today
     existing = await db.daily_reports.find_one({'warehouse_id': data.warehouse_id, 'date': today}, {'_id': 0})
     if existing:
-        # Update the closing stock values
+        # Update the closing stock values AND reset discrepancies (admin override)
         await db.daily_reports.update_one(
             {'id': existing['id']}, 
             {'$set': {
+                'opening_15kg_filled': data.stock_15kg_filled,
+                'opening_21kg_filled': data.stock_21kg_filled,
+                'opening_15kg_empty': data.stock_15kg_empty,
+                'opening_21kg_empty': data.stock_21kg_empty,
+                'sold_15kg_filled': 0,
+                'sold_21kg_filled': 0,
+                'refilling_15kg': 0,
+                'refilling_21kg': 0,
+                'refilling_plant_15kg': 0,
+                'refilling_plant_21kg': 0,
                 'closing_15kg_filled': data.stock_15kg_filled,
                 'closing_21kg_filled': data.stock_21kg_filled,
                 'closing_15kg_empty': data.stock_15kg_empty,
                 'closing_21kg_empty': data.stock_21kg_empty,
-                'remarks': (existing.get('remarks', '') + '\n' + (data.reason or 'Stock adjusted by admin')).strip(),
+                'discrepancy_15kg_filled': 0,
+                'discrepancy_21kg_filled': 0,
+                'discrepancy_15kg_empty': 0,
+                'discrepancy_21kg_empty': 0,
+                'has_discrepancy': False,
+                'remarks': data.reason or 'Stock reset by admin',
                 'submitted_by': user['name'],
                 'submitted_at': datetime.now(timezone.utc).isoformat()
             }}
