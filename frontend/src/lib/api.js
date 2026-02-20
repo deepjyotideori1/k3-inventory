@@ -68,6 +68,7 @@ export const getLatestPlantClosing = () => api.get('/reports/plant/latest');
 
 // Stock Update
 export const updateStock = (data) => api.post('/stock/update', data);
+export const updatePlantStock = (data) => api.post('/stock/plant-update', data);
 
 // Dashboard
 export const getDashboardStats = () => api.get('/dashboard/stats');
