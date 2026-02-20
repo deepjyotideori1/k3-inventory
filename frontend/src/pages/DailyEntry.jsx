@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
-import { getLatestClosing, createDailyReport, getWarehouseReceivedFromPlant } from '../lib/api';
+import { getLatestClosing, createDailyReport, getWarehouseReceivedFromPlant, getTodayReport, updateDailyReport } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Separator } from '../components/ui/separator';
+import { Badge } from '../components/ui/badge';
 import { 
   Save,
   Loader2,
@@ -18,7 +19,10 @@ import {
   Calculator,
   Truck,
   RefreshCw,
-  CheckCircle
+  CheckCircle,
+  FileEdit,
+  Send,
+  FileText
 } from 'lucide-react';
 import { getTodayDate, formatDate } from '../lib/utils';
 import { toast } from 'sonner';
@@ -28,8 +32,11 @@ const DailyEntry = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
   const [loadingPlantDelivery, setLoadingPlantDelivery] = useState(false);
   const [plantDeliverySync, setPlantDeliverySync] = useState({ synced: false, date: null });
+  const [existingReport, setExistingReport] = useState(null);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [formData, setFormData] = useState({
     date: getTodayDate(),
     opening_15kg_filled: 0,
