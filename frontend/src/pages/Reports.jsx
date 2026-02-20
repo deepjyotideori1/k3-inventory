@@ -24,6 +24,7 @@ import { toast } from 'sonner';
 
 const Reports = () => {
   const { isAdmin, user } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [dailyReports, setDailyReports] = useState([]);
   const [plantReports, setPlantReports] = useState([]);
