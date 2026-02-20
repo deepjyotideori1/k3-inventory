@@ -233,10 +233,13 @@ const AccessoryReports = () => {
         accessory_id: selectedAccessory,
         dealer_id: selectedDealer,
         date: entryDate,
-        ...entryForm
+        total_issued: entryForm.total_issued,
+        total_sold: entryForm.total_sold,
+        total_remaining: calculatedRemaining,
+        remarks: entryForm.remarks
       });
       toast.success('Entry submitted successfully');
-      setEntryForm({ total_issued: 0, total_sold: 0, total_remaining: 0, remarks: '' });
+      setEntryForm({ total_issued: 0, total_sold: 0, remarks: '' });
       fetchEntries();
       fetchSummary();
     } catch (error) {
