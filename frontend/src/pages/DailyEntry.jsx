@@ -14,7 +14,8 @@ import {
   Loader2,
   AlertTriangle,
   Package,
-  ArrowRight
+  ArrowRight,
+  Calculator
 } from 'lucide-react';
 import { getTodayDate, formatDate } from '../lib/utils';
 import { toast } from 'sonner';
