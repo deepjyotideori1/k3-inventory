@@ -621,6 +621,7 @@ async def create_daily_report(data: DailyReportCreate, user: dict = Depends(get_
         'discrepancy_15kg_empty': discrepancy_15kg_empty,
         'discrepancy_21kg_empty': discrepancy_21kg_empty,
         'has_discrepancy': has_discrepancy,
+        'status': data.status,
         'submitted_by': user['name'],
         'submitted_at': datetime.now(timezone.utc).isoformat(),
         'created_at': datetime.now(timezone.utc).isoformat()
@@ -629,12 +630,98 @@ async def create_daily_report(data: DailyReportCreate, user: dict = Depends(get_
     # Check if report exists for same date and warehouse
     existing = await db.daily_reports.find_one({'warehouse_id': data.warehouse_id, 'date': data.date}, {'_id': 0})
     if existing:
+        # Preserve original created_at
+        report['created_at'] = existing.get('created_at', report['created_at'])
         await db.daily_reports.update_one({'id': existing['id']}, {'$set': report})
         report['id'] = existing['id']
     else:
         await db.daily_reports.insert_one(report)
     
     return DailyReportResponse(**report)
+
+@api_router.get("/reports/daily/today/{warehouse_id}")
+async def get_today_report(warehouse_id: str, date: str = None, user: dict = Depends(get_current_user)):
+    """Get today's report (including drafts) for a warehouse"""
+    if not date:
+        date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    
+    report = await db.daily_reports.find_one(
+        {'warehouse_id': warehouse_id, 'date': date},
+        {'_id': 0}
+    )
+    
+    if not report:
+        return None
+    
+    return report
+
+@api_router.put("/reports/daily/{report_id}")
+async def update_daily_report(report_id: str, data: DailyReportCreate, user: dict = Depends(get_current_user)):
+    """Update an existing daily report - for editing drafts or admin edits"""
+    existing = await db.daily_reports.find_one({'id': report_id}, {'_id': 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Report not found")
+    
+    # Check permissions: admin can edit any, managers can only edit their own warehouse's drafts
+    if user['role'] != 'admin':
+        if existing['warehouse_id'] != user.get('warehouse_id'):
+            raise HTTPException(status_code=403, detail="Cannot edit reports from other warehouses")
+        if existing['status'] == 'submitted':
+            raise HTTPException(status_code=403, detail="Cannot edit submitted reports. Contact admin for changes.")
+    
+    # Get warehouse name
+    warehouse = await db.warehouses.find_one({'id': data.warehouse_id}, {'_id': 0})
+    if not warehouse:
+        raise HTTPException(status_code=404, detail="Warehouse not found")
+    
+    # Calculate expected closing (including received from plant)
+    expected_15kg_filled = data.opening_15kg_filled - data.sold_15kg_filled + data.refilling_15kg + data.refilling_plant_15kg + data.received_from_plant_15kg
+    expected_21kg_filled = data.opening_21kg_filled - data.sold_21kg_filled + data.refilling_21kg + data.refilling_plant_21kg + data.received_from_plant_21kg
+    expected_15kg_empty = data.opening_15kg_empty + data.sold_15kg_filled - data.refilling_15kg - data.refilling_plant_15kg
+    expected_21kg_empty = data.opening_21kg_empty + data.sold_21kg_filled - data.refilling_21kg - data.refilling_plant_21kg
+    
+    discrepancy_15kg_filled = data.closing_15kg_filled - expected_15kg_filled
+    discrepancy_21kg_filled = data.closing_21kg_filled - expected_21kg_filled
+    discrepancy_15kg_empty = data.closing_15kg_empty - expected_15kg_empty
+    discrepancy_21kg_empty = data.closing_21kg_empty - expected_21kg_empty
+    
+    has_discrepancy = any([discrepancy_15kg_filled, discrepancy_21kg_filled, discrepancy_15kg_empty, discrepancy_21kg_empty])
+    
+    update_data = {
+        'warehouse_id': data.warehouse_id,
+        'warehouse_name': warehouse['name'],
+        'date': data.date,
+        'opening_15kg_filled': data.opening_15kg_filled,
+        'opening_21kg_filled': data.opening_21kg_filled,
+        'opening_15kg_empty': data.opening_15kg_empty,
+        'opening_21kg_empty': data.opening_21kg_empty,
+        'sold_15kg_filled': data.sold_15kg_filled,
+        'sold_21kg_filled': data.sold_21kg_filled,
+        'refilling_15kg': data.refilling_15kg,
+        'refilling_21kg': data.refilling_21kg,
+        'refilling_plant_15kg': data.refilling_plant_15kg,
+        'refilling_plant_21kg': data.refilling_plant_21kg,
+        'received_from_plant_15kg': data.received_from_plant_15kg,
+        'received_from_plant_21kg': data.received_from_plant_21kg,
+        'closing_15kg_filled': data.closing_15kg_filled,
+        'closing_21kg_filled': data.closing_21kg_filled,
+        'closing_15kg_empty': data.closing_15kg_empty,
+        'closing_21kg_empty': data.closing_21kg_empty,
+        'remarks': data.remarks[:500] if data.remarks else "",
+        'discrepancy_15kg_filled': discrepancy_15kg_filled,
+        'discrepancy_21kg_filled': discrepancy_21kg_filled,
+        'discrepancy_15kg_empty': discrepancy_15kg_empty,
+        'discrepancy_21kg_empty': discrepancy_21kg_empty,
+        'has_discrepancy': has_discrepancy,
+        'status': data.status,
+        'submitted_by': user['name'],
+        'submitted_at': datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.daily_reports.update_one({'id': report_id}, {'$set': update_data})
+    
+    updated = await db.daily_reports.find_one({'id': report_id}, {'_id': 0})
+    return DailyReportResponse(**updated)
 
 @api_router.get("/reports/warehouse-received-from-plant/{warehouse_id}/{date}")
 async def get_warehouse_received_from_plant(warehouse_id: str, date: str, user: dict = Depends(get_current_user)):
