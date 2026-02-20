@@ -14,6 +14,7 @@ import Warehouses from "./pages/Warehouses";
 import UsersPage from "./pages/Users";
 import SettingsPage from "./pages/Settings";
 import PlantHollongi from "./pages/PlantHollongi";
+import AdminEditReport from "./pages/AdminEditReport";
 
 // Protected Route Component
 const ProtectedRoute = ({ children, adminOnly = false }) => {
