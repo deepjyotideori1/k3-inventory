@@ -16,7 +16,8 @@ import {
   UserCheck,
   Boxes,
   UserPlus,
-  ShoppingCart
+  ShoppingCart,
+  MessageSquare
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
@@ -38,6 +39,7 @@ const Layout = ({ children }) => {
     { path: '/reports', label: 'Reports', icon: FileText },
     { path: '/customers', label: 'Customers', icon: UserPlus },
     { path: '/orders', label: 'Orders', icon: ShoppingCart },
+    { path: '/bulk-messaging', label: 'Bulk Messaging', icon: MessageSquare },
     { path: '/plant-hollongi', label: 'Plant Hollongi', icon: Factory },
     { path: '/dealer-reports', label: 'Dealer Reports', icon: UserCheck },
     { path: '/accessory-reports', label: 'LPG Accessories', icon: Boxes },
