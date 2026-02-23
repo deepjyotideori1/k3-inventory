@@ -879,9 +879,9 @@ const OrderManagement = () => {
                           <th>Order No</th>
                           <th>Customer</th>
                           <th>Mobile</th>
-                          <th>Address</th>
                           <th>Type</th>
                           <th>Payment</th>
+                          <th>Status</th>
                           {isAdmin && <th>Warehouse</th>}
                           <th>Actions</th>
                         </tr>
@@ -898,7 +898,6 @@ const OrderManagement = () => {
                             </td>
                             <td className="font-medium">{o.customer_name}</td>
                             <td>{o.mobile_number || '-'}</td>
-                            <td className="text-sm text-slate-600 max-w-[150px] truncate">{o.address_landmark || '-'}</td>
                             <td>
                               <Badge variant={o.connection_type === 'domestic' ? 'default' : 'secondary'}>
                                 {o.connection_type === 'domestic' ? <Home className="w-3 h-3 mr-1" /> : <Building2 className="w-3 h-3 mr-1" />}
@@ -906,6 +905,34 @@ const OrderManagement = () => {
                               </Badge>
                             </td>
                             <td>{getPaymentBadge(o.payment_mode)}</td>
+                            <td>
+                              {updatingStatus === o.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Select 
+                                  value={o.status || 'pending'} 
+                                  onValueChange={(v) => handleStatusChange(o.id, v)}
+                                >
+                                  <SelectTrigger className="w-32 h-8 text-xs" data-testid={`status-select-${o.id}`}>
+                                    <SelectValue>
+                                      {getStatusBadge(o.status || 'pending')}
+                                    </SelectValue>
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="pending">
+                                      <div className="flex items-center gap-2">
+                                        <Package className="w-3 h-3 text-orange-600" /> Pending
+                                      </div>
+                                    </SelectItem>
+                                    <SelectItem value="delivered">
+                                      <div className="flex items-center gap-2">
+                                        <CheckCircle2 className="w-3 h-3 text-green-600" /> Delivered
+                                      </div>
+                                    </SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              )}
+                            </td>
                             {isAdmin && <td className="text-sm">{o.warehouse_name}</td>}
                             <td>
                               <div className="flex gap-1">
