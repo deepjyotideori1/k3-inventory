@@ -33,31 +33,31 @@ export function getTodayDate() {
 
 export function getDateRange(period) {
   const today = new Date();
-  let startDate, endDate;
+  let start, end;
   
   switch(period) {
     case 'daily':
-      startDate = endDate = today.toISOString().split('T')[0];
+      start = end = today.toISOString().split('T')[0];
       break;
     case 'weekly':
       const weekStart = new Date(today);
       weekStart.setDate(today.getDate() - 7);
-      startDate = weekStart.toISOString().split('T')[0];
-      endDate = today.toISOString().split('T')[0];
+      start = weekStart.toISOString().split('T')[0];
+      end = today.toISOString().split('T')[0];
       break;
     case 'monthly':
       const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-      startDate = monthStart.toISOString().split('T')[0];
-      endDate = today.toISOString().split('T')[0];
+      start = monthStart.toISOString().split('T')[0];
+      end = today.toISOString().split('T')[0];
       break;
     case 'yearly':
       const yearStart = new Date(today.getFullYear(), 0, 1);
-      startDate = yearStart.toISOString().split('T')[0];
-      endDate = today.toISOString().split('T')[0];
+      start = yearStart.toISOString().split('T')[0];
+      end = today.toISOString().split('T')[0];
       break;
     default:
-      startDate = endDate = today.toISOString().split('T')[0];
+      start = end = today.toISOString().split('T')[0];
   }
   
-  return { startDate, endDate };
+  return { start, end };
 }
