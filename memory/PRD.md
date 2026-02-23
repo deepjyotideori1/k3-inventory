@@ -4,9 +4,9 @@
 Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Hamesha". The system manages LPG cylinder inventory across multiple warehouses with comprehensive reporting and discrepancy detection.
 
 ## User Personas
-1. **Master Admin** - Full system access, manages warehouses, users, settings, views all reports, can edit any report/customer
-2. **Warehouse Manager** - Manages daily stock entries and customers for assigned warehouse, views own reports
-3. **Plant Hollongi Manager** - Special role for managing the refilling plant with bullet tank tracking and dealer reports
+1. **Master Admin** - Full system access, manages warehouses, users, settings, views all reports, can edit any report/customer/order
+2. **Warehouse Manager** - Manages daily stock entries, customers, and orders for assigned warehouse, views own reports
+3. **Plant Hollongi Manager** - Special role for managing the refilling plant with bullet tank tracking and dealer reports (NO order management)
 
 ## Core Requirements
 - JWT-based authentication with role-based access control
@@ -19,6 +19,7 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - Dealer management for Plant Hollongi
 - LPG Accessories management for admin
 - Customer management per warehouse
+- Order management per warehouse (except Plant Hollongi)
 
 ---
 
@@ -73,7 +74,7 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] Accessory-wise dealer summary
 - [x] PDF and Excel export for accessory reports
 
-### Customer Management (NEW - Feb 23, 2026)
+### Customer Management (Feb 23, 2026)
 - [x] **Warehouse-specific customers** - Each warehouse stores customers separately
 - [x] Customer data fields:
   - Date, Connection Type (Domestic/Commercial), Customer Name, Address
@@ -88,6 +89,27 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] **PDF Export** - Category-wise customer list
 - [x] **Excel Export** - Category-wise customer list
 - [x] **Summary Cards** - Total, Domestic, Commercial, Gas Card Issued, KYC Done
+
+### Order Management (NEW - Feb 23, 2026)
+- [x] **Order Generation Dashboard** - All warehouses except Plant Hollongi
+- [x] **Auto Order Sequence** - A1, A2, A3... per warehouse (endless sequence)
+- [x] Order data fields:
+  - Order Date, Order No (Auto-generated), Customer Name, Mobile Number
+  - Address/Landmark, Connection Type (Domestic/Commercial)
+  - Payment Mode (Cash/Online/Credit-Pending), Remarks
+- [x] **Select Existing Customer** - Select from customer database with category filter
+- [x] **Add New Customer** - Option to add customer while creating order
+- [x] **Individual Order PDF** - Download single order as PDF
+- [x] **Order Reports View** with filters:
+  - Period: Daily, Weekly, Monthly, Yearly, Custom
+  - Payment Mode filter
+  - Connection Type filter
+  - Search by name, mobile, order no, address
+- [x] **PDF/Excel Export** - Export order reports
+- [x] **Edit Order** - Managers can edit same-day orders; Admin can edit any
+- [x] **Delete Order** - Admin only
+- [x] **Plant Hollongi Exclusion** - No Orders link in sidebar, API returns 403
+- [x] **Summary Cards** - Total Orders, Domestic, Commercial, Cash, Online, Credit/Pending
 
 ### Export Features
 - [x] PDF export using ReportLab
@@ -127,7 +149,8 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
   - users, warehouses, daily_reports, plant_reports, plant_stock
   - dealers, dealer_entries
   - accessories, accessory_dealers, accessory_entries
-  - **customers** (NEW)
+  - customers
+  - **orders** (NEW)
 
 ---
 
@@ -140,51 +163,35 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 ### Daily Reports
 - `POST /api/reports/daily` - Create daily report
 - `GET /api/reports/daily` - List reports (filtered by role)
-- `GET /api/reports/daily/today/{warehouse_id}` - Get today's report
 - `PUT /api/reports/daily/{report_id}` - Update report
-- `GET /api/reports/daily/latest/{warehouse_id}` - Get latest closing stock
 
-### Plant Hollongi
-- `POST /api/reports/plant` - Create plant report
-- `GET /api/reports/plant` - List plant reports
-- `GET /api/reports/warehouse-received-from-plant/{warehouse_id}/{date}` - Get deliveries
-
-### Dealers (Cylinder)
-- `GET /api/dealers` - List dealers
-- `POST /api/dealers` - Create dealer
-- `DELETE /api/dealers/{dealer_id}` - Delete dealer
-- `POST /api/dealer-entries` - Create dealer entry
-- `GET /api/dealer-entries` - List entries
-- `GET /api/dealer-entries/summary` - Dealer summary
-
-### Accessories
-- `GET /api/accessories` - List accessories
-- `POST /api/accessories` - Create accessory
-- `DELETE /api/accessories/{accessory_id}` - Delete accessory
-- `GET /api/accessory-dealers` - List accessory dealers
-- `POST /api/accessory-dealers` - Create accessory dealer
-- `POST /api/accessory-entries` - Create accessory entry
-
-### Customers (NEW)
-- `GET /api/customers` - List customers (filtered by warehouse for managers)
-- `POST /api/customers` - Create customer (manager's warehouse)
-- `POST /api/customers/warehouse/{warehouse_id}` - Create customer (admin only)
-- `PUT /api/customers/{customer_id}` - Update customer (admin only)
-- `DELETE /api/customers/{customer_id}` - Delete customer (admin only)
+### Customers
+- `GET /api/customers` - List customers (filtered by warehouse)
+- `POST /api/customers` - Create customer
+- `PUT /api/customers/{customer_id}` - Update customer (admin)
+- `DELETE /api/customers/{customer_id}` - Delete customer (admin)
 - `POST /api/customers/bulk` - Bulk upload customers
-- `POST /api/customers/bulk/warehouse/{warehouse_id}` - Admin bulk upload
-- `GET /api/customers/summary` - Customer statistics
 - `GET /api/customers/sample-excel` - Download template
+
+### Orders (NEW)
+- `GET /api/orders` - List orders (filtered by warehouse)
+- `POST /api/orders` - Create order (warehouse user)
+- `POST /api/orders/warehouse/{warehouse_id}` - Create order (admin)
+- `GET /api/orders/{order_id}` - Get single order
+- `PUT /api/orders/{order_id}` - Update order
+- `DELETE /api/orders/{order_id}` - Delete order (admin)
+- `GET /api/orders/summary/stats` - Order statistics
+- `GET /api/orders/pdf/{order_id}` - Download single order PDF
+- `GET /api/export/orders-pdf` - Export orders report PDF
+- `GET /api/export/orders-excel` - Export orders report Excel
 
 ### Exports
 - `GET /api/export/pdf` - Export daily reports PDF
 - `GET /api/export/excel` - Export daily reports Excel
 - `GET /api/export/dealer-pdf` - Export dealer reports PDF
 - `GET /api/export/dealer-excel` - Export dealer reports Excel
-- `GET /api/export/accessory-pdf` - Export accessory reports PDF
-- `GET /api/export/accessory-excel` - Export accessory reports Excel
-- `GET /api/export/customers-pdf` - Export customers PDF (NEW)
-- `GET /api/export/customers-excel` - Export customers Excel (NEW)
+- `GET /api/export/customers-pdf` - Export customers PDF
+- `GET /api/export/customers-excel` - Export customers Excel
 
 ---
 
@@ -208,7 +215,7 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [ ] Admin UI to add new inventory stock items
 
 ### P2 (Nice to Have)
-- [ ] Weekly, Monthly, Yearly aggregated reports
+- [ ] Weekly, Monthly, Yearly aggregated reports for dashboard
 - [ ] Dashboard charts/graphs using Recharts
 - [ ] Email notifications for discrepancies
 - [ ] Audit log for stock changes
@@ -226,7 +233,8 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 │   ├── server.py
 │   └── tests/
 │       ├── test_dealer_reports.py
-│       └── test_customer_management.py
+│       ├── test_customer_management.py
+│       └── test_order_management.py
 ├── frontend/
 │   ├── .env
 │   ├── package.json
@@ -236,6 +244,7 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 │       ├── App.js
 │       ├── context/AuthContext.jsx
 │       ├── lib/api.js
+│       ├── lib/utils.js
 │       ├── components/
 │       │   ├── Layout.jsx
 │       │   └── ui/ (Shadcn components)
@@ -248,7 +257,8 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 │           ├── AdminEditReport.jsx
 │           ├── DealerReports.jsx
 │           ├── AccessoryReports.jsx
-│           ├── CustomerManagement.jsx (NEW)
+│           ├── CustomerManagement.jsx
+│           ├── OrderManagement.jsx (NEW)
 │           ├── Warehouses.jsx
 │           ├── Users.jsx
 │           ├── Settings.jsx
@@ -258,7 +268,8 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 └── test_reports/
     ├── iteration_1.json
     ├── iteration_2.json
-    └── iteration_3.json
+    ├── iteration_3.json
+    └── iteration_4.json
 ```
 
 ---
