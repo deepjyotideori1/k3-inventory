@@ -101,8 +101,10 @@ const OrderManagement = () => {
   const [endDate, setEndDate] = useState(getTodayDate());
   const [filterPayment, setFilterPayment] = useState('all');
   const [filterConnection, setFilterConnection] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState(null);
 
   useEffect(() => {
     fetchCustomers();
@@ -114,7 +116,7 @@ const OrderManagement = () => {
   useEffect(() => {
     fetchOrders();
     fetchSummary();
-  }, [startDate, endDate, filterPayment, filterConnection, searchQuery]);
+  }, [startDate, endDate, filterPayment, filterConnection, filterStatus, searchQuery]);
 
   const fetchWarehouses = async () => {
     try {
