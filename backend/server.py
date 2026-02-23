@@ -2655,7 +2655,7 @@ async def download_sample_excel(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Download sample Excel template for bulk upload"""
-    await verify_token(credentials)
+    await get_current_user(credentials)
     
     output = BytesIO()
     workbook = xlsxwriter.Workbook(output)
