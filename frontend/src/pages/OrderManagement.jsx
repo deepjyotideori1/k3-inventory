@@ -438,46 +438,60 @@ const OrderManagement = () => {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
           <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
-            <CardContent className="p-4 text-center">
+            <CardContent className="p-3 text-center">
               <ShoppingCart className="w-5 h-5 text-green-600 mx-auto mb-1" />
-              <p className="text-sm text-green-700 font-medium">Total Orders</p>
-              <p className="text-3xl font-bold text-green-800">{summary.total_orders || 0}</p>
+              <p className="text-xs text-green-700 font-medium">Total Orders</p>
+              <p className="text-2xl font-bold text-green-800">{summary.total_orders || 0}</p>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-orange-50 to-amber-50 border-orange-200">
+            <CardContent className="p-3 text-center">
+              <Package className="w-5 h-5 text-orange-600 mx-auto mb-1" />
+              <p className="text-xs text-orange-700 font-medium">Pending</p>
+              <p className="text-2xl font-bold text-orange-800">{summary.total_pending || 0}</p>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-teal-50 to-emerald-50 border-teal-200">
+            <CardContent className="p-3 text-center">
+              <CheckCircle2 className="w-5 h-5 text-teal-600 mx-auto mb-1" />
+              <p className="text-xs text-teal-700 font-medium">Delivered</p>
+              <p className="text-2xl font-bold text-teal-800">{summary.total_delivered || 0}</p>
             </CardContent>
           </Card>
           <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
-            <CardContent className="p-4 text-center">
+            <CardContent className="p-3 text-center">
               <Home className="w-5 h-5 text-blue-600 mx-auto mb-1" />
-              <p className="text-sm text-blue-700 font-medium">Domestic</p>
+              <p className="text-xs text-blue-700 font-medium">Domestic</p>
               <p className="text-2xl font-bold text-blue-800">{summary.total_domestic || 0}</p>
             </CardContent>
           </Card>
           <Card className="bg-gradient-to-br from-purple-50 to-violet-50 border-purple-200">
-            <CardContent className="p-4 text-center">
+            <CardContent className="p-3 text-center">
               <Building2 className="w-5 h-5 text-purple-600 mx-auto mb-1" />
-              <p className="text-sm text-purple-700 font-medium">Commercial</p>
+              <p className="text-xs text-purple-700 font-medium">Commercial</p>
               <p className="text-2xl font-bold text-purple-800">{summary.total_commercial || 0}</p>
             </CardContent>
           </Card>
-          <Card className="bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-200">
-            <CardContent className="p-4 text-center">
+          <Card className="bg-gradient-to-br from-emerald-50 to-green-50 border-emerald-200">
+            <CardContent className="p-3 text-center">
               <Banknote className="w-5 h-5 text-emerald-600 mx-auto mb-1" />
-              <p className="text-sm text-emerald-700 font-medium">Cash</p>
+              <p className="text-xs text-emerald-700 font-medium">Cash</p>
               <p className="text-2xl font-bold text-emerald-800">{summary.total_cash || 0}</p>
             </CardContent>
           </Card>
           <Card className="bg-gradient-to-br from-sky-50 to-cyan-50 border-sky-200">
-            <CardContent className="p-4 text-center">
+            <CardContent className="p-3 text-center">
               <Smartphone className="w-5 h-5 text-sky-600 mx-auto mb-1" />
-              <p className="text-sm text-sky-700 font-medium">Online</p>
+              <p className="text-xs text-sky-700 font-medium">Online</p>
               <p className="text-2xl font-bold text-sky-800">{summary.total_online || 0}</p>
             </CardContent>
           </Card>
           <Card className="bg-gradient-to-br from-amber-50 to-yellow-50 border-amber-200">
-            <CardContent className="p-4 text-center">
+            <CardContent className="p-3 text-center">
               <Clock className="w-5 h-5 text-amber-600 mx-auto mb-1" />
-              <p className="text-sm text-amber-700 font-medium">Credit/Pending</p>
+              <p className="text-xs text-amber-700 font-medium">Credit</p>
               <p className="text-2xl font-bold text-amber-800">{summary.total_credit_pending || 0}</p>
             </CardContent>
           </Card>
