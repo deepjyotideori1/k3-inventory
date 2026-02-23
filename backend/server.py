@@ -2998,6 +2998,7 @@ async def get_orders(
     end_date: Optional[str] = None,
     payment_mode: Optional[str] = None,
     connection_type: Optional[str] = None,
+    status: Optional[str] = None,
     search: Optional[str] = None,
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
@@ -3026,6 +3027,10 @@ async def get_orders(
     # Connection type filter
     if connection_type and connection_type != 'all':
         query['connection_type'] = connection_type
+    
+    # Status filter
+    if status and status != 'all':
+        query['status'] = status
     
     # Search
     if search:
@@ -3058,9 +3063,11 @@ async def get_orders(
             'address_landmark': o.get('address_landmark', ''),
             'connection_type': o['connection_type'],
             'payment_mode': o['payment_mode'],
+            'status': o.get('status', 'pending'),
             'remarks': o.get('remarks', ''),
             'created_by': o.get('created_by', ''),
-            'created_at': o.get('created_at', '')
+            'created_at': o.get('created_at', ''),
+            'delivered_at': o.get('delivered_at')
         })
     
     return result
