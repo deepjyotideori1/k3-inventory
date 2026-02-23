@@ -312,6 +312,7 @@ const DealerReports = () => {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Add New Dealer</DialogTitle>
+                <DialogDescription>Enter dealer information below to add a new dealer to the system.</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div>
