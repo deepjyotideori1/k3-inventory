@@ -294,7 +294,8 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 │           ├── DealerReports.jsx
 │           ├── AccessoryReports.jsx
 │           ├── CustomerManagement.jsx
-│           ├── OrderManagement.jsx (NEW)
+│           ├── OrderManagement.jsx
+│           ├── BulkMessaging.jsx (NEW)
 │           ├── Warehouses.jsx
 │           ├── Users.jsx
 │           ├── Settings.jsx
