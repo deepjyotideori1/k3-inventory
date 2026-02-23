@@ -15,7 +15,8 @@ import {
   X,
   UserCheck,
   Boxes,
-  UserPlus
+  UserPlus,
+  ShoppingCart
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
@@ -36,6 +37,7 @@ const Layout = ({ children }) => {
     { path: '/warehouses', label: 'Warehouses', icon: Warehouse },
     { path: '/reports', label: 'Reports', icon: FileText },
     { path: '/customers', label: 'Customers', icon: UserPlus },
+    { path: '/orders', label: 'Orders', icon: ShoppingCart },
     { path: '/plant-hollongi', label: 'Plant Hollongi', icon: Factory },
     { path: '/dealer-reports', label: 'Dealer Reports', icon: UserCheck },
     { path: '/accessory-reports', label: 'LPG Accessories', icon: Boxes },
@@ -47,6 +49,7 @@ const Layout = ({ children }) => {
     { path: '/manager-dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/daily-entry', label: 'Daily Entry', icon: ClipboardList },
     { path: '/customers', label: 'Customers', icon: UserPlus },
+    { path: '/orders', label: 'Orders', icon: ShoppingCart },
     { path: '/my-reports', label: 'My Reports', icon: FileText },
   ];
 
@@ -62,6 +65,11 @@ const Layout = ({ children }) => {
     }
     if (!links.find(l => l.path === '/dealer-reports')) {
       links.push(dealerLink);
+    }
+    // Remove orders link for Plant Hollongi
+    const orderIndex = links.findIndex(l => l.path === '/orders');
+    if (orderIndex !== -1) {
+      links.splice(orderIndex, 1);
     }
   }
 
