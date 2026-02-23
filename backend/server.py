@@ -2297,6 +2297,7 @@ class CustomerResponse(BaseModel):
     connection_type: str
     customer_name: str
     address: str
+    phone: str
     consumer_no: str
     cash_memo_no: str
     cylinder_nos: str
