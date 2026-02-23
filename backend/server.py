@@ -2936,25 +2936,26 @@ async def export_customers_excel(
     no_format = workbook.add_format({'border': 1, 'align': 'center', 'bg_color': '#f8d7da'})
     
     # Headers
-    headers = ['Date', 'Connection Type', 'Customer Name', 'Address', 'Consumer No', 'Cash Memo No', 'Cylinder Nos', 'Gas Card Issued', 'KYC Done', 'Remarks', 'Warehouse']
+    headers = ['Date', 'Connection Type', 'Customer Name', 'Phone', 'Address', 'Consumer No', 'Cash Memo No', 'Cylinder Nos', 'Gas Card Issued', 'KYC Done', 'Remarks', 'Warehouse']
     
     for col, header in enumerate(headers):
         worksheet.write(0, col, header, header_format)
-        worksheet.set_column(col, col, 15 if col < 3 else 20)
+        worksheet.set_column(col, col, 15 if col < 4 else 20)
     
     # Data
     for row, c in enumerate(customers, start=1):
         worksheet.write(row, 0, c.get('date', ''), data_format)
         worksheet.write(row, 1, c.get('connection_type', '').capitalize(), data_format)
         worksheet.write(row, 2, c.get('customer_name', ''), data_format)
-        worksheet.write(row, 3, c.get('address', ''), data_format)
-        worksheet.write(row, 4, c.get('consumer_no', ''), data_format)
-        worksheet.write(row, 5, c.get('cash_memo_no', ''), data_format)
-        worksheet.write(row, 6, c.get('cylinder_nos', ''), data_format)
-        worksheet.write(row, 7, 'Yes' if c.get('gas_card_issued') else 'No', yes_format if c.get('gas_card_issued') else no_format)
-        worksheet.write(row, 8, 'Yes' if c.get('kyc_done') else 'No', yes_format if c.get('kyc_done') else no_format)
-        worksheet.write(row, 9, c.get('remarks', ''), data_format)
-        worksheet.write(row, 10, warehouse_map.get(c.get('warehouse_id', ''), 'Unknown'), data_format)
+        worksheet.write(row, 3, c.get('phone', ''), data_format)
+        worksheet.write(row, 4, c.get('address', ''), data_format)
+        worksheet.write(row, 5, c.get('consumer_no', ''), data_format)
+        worksheet.write(row, 6, c.get('cash_memo_no', ''), data_format)
+        worksheet.write(row, 7, c.get('cylinder_nos', ''), data_format)
+        worksheet.write(row, 8, 'Yes' if c.get('gas_card_issued') else 'No', yes_format if c.get('gas_card_issued') else no_format)
+        worksheet.write(row, 9, 'Yes' if c.get('kyc_done') else 'No', yes_format if c.get('kyc_done') else no_format)
+        worksheet.write(row, 10, c.get('remarks', ''), data_format)
+        worksheet.write(row, 11, warehouse_map.get(c.get('warehouse_id', ''), 'Unknown'), data_format)
     
     workbook.close()
     output.seek(0)
