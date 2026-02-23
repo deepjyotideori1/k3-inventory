@@ -377,4 +377,20 @@ export const exportOrdersExcel = async (params) => {
   }
 };
 
+// ============ BULK MESSAGING ============
+
+// Messaging Settings
+export const getMessagingSettings = () => api.get('/messaging/settings');
+export const updateMessagingSettings = (data) => api.post('/messaging/settings', data);
+
+// Recipients
+export const getRecipientCount = (params) => api.get('/messaging/recipients/count', { params });
+
+// Send Messages
+export const sendBulkMessage = (data) => api.post('/messaging/send', data);
+
+// Message Logs
+export const getMessageLogs = (limit = 50) => api.get('/messaging/logs', { params: { limit } });
+export const getMessageLogDetail = (logId) => api.get(`/messaging/logs/${logId}`);
+
 export default api;
