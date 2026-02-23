@@ -146,6 +146,7 @@ const OrderManagement = () => {
       const params = { start_date: startDate, end_date: endDate };
       if (filterPayment !== 'all') params.payment_mode = filterPayment;
       if (filterConnection !== 'all') params.connection_type = filterConnection;
+      if (filterStatus !== 'all') params.status = filterStatus;
       if (searchQuery) params.search = searchQuery;
       
       const response = await getOrders(params);
