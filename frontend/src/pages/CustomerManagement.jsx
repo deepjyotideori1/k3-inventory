@@ -662,6 +662,16 @@ const CustomerManagement = () => {
                         data-testid="customer-name"
                       />
                     </div>
+                    <div>
+                      <Label>Phone (for SMS/WhatsApp)</Label>
+                      <Input 
+                        value={formData.phone}
+                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                        placeholder="e.g., 9876543210"
+                        className="mt-1"
+                        data-testid="customer-phone"
+                      />
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
