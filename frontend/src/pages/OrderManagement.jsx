@@ -6,6 +6,7 @@ import {
   createOrder,
   createOrderForWarehouse,
   updateOrder,
+  updateOrderStatus,
   deleteOrder,
   getOrderSummary,
   downloadOrderPDF,
@@ -47,7 +48,10 @@ import {
   User,
   Phone,
   MapPin,
-  Hash
+  Hash,
+  CheckCircle2,
+  Package,
+  Truck
 } from 'lucide-react';
 import { getTodayDate, formatDate, getDateRange } from '../lib/utils';
 import { toast } from 'sonner';
