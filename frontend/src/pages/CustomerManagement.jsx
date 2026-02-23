@@ -510,10 +510,9 @@ const CustomerManagement = () => {
                           <th>Date</th>
                           <th>Type</th>
                           <th>Customer Name</th>
+                          <th>Phone</th>
                           <th>Address</th>
                           <th>Consumer No</th>
-                          <th>Cash Memo</th>
-                          <th>Cylinders</th>
                           <th>Gas Card</th>
                           <th>KYC</th>
                           {isAdmin && <th>Warehouse</th>}
@@ -531,10 +530,9 @@ const CustomerManagement = () => {
                               </Badge>
                             </td>
                             <td className="font-medium">{c.customer_name}</td>
+                            <td>{c.phone || '-'}</td>
                             <td className="text-sm text-slate-600 max-w-[200px] truncate">{c.address}</td>
                             <td>{c.consumer_no}</td>
-                            <td>{c.cash_memo_no}</td>
-                            <td>{c.cylinder_nos}</td>
                             <td>
                               {c.gas_card_issued ? 
                                 <CheckCircle className="w-5 h-5 text-green-600" /> : 
