@@ -63,6 +63,7 @@ const CustomerManagement = () => {
     connection_type: 'domestic',
     customer_name: '',
     address: '',
+    phone: '',
     consumer_no: '',
     cash_memo_no: '',
     cylinder_nos: '',
