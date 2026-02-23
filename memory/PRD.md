@@ -121,6 +121,23 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] **Delivered Timestamp** - Tracks when order was marked as delivered
 - [x] **PATCH API** - `/orders/{id}/status` endpoint for status updates
 
+### Bulk Messaging (Feb 23, 2026) - PLACEHOLDER
+- [x] **Admin-only Feature** - Only Master Admin can access
+- [x] **Bulk Messaging Page** - Accessible at /bulk-messaging
+- [x] **Compose Message Tab** - Channel selection (SMS/WhatsApp/Both), message textarea
+- [x] **Recipients Selection** - Filter by All Customers, By Warehouse, By Category
+- [x] **Recipient Count Display** - Shows total recipients with phone numbers
+- [x] **Message History Tab** - View past sent messages with status
+- [x] **API Settings Tab** - Configure SMS and WhatsApp API credentials
+- [x] **Provider Configuration** - Support for Twilio, MSG91, Meta WhatsApp Business API
+- [x] **Simulated Mode** - Messages simulated when API not configured
+- [x] **Customer Phone Field** - Added phone field to customer schema for messaging
+- [x] **Phone in Customer Table** - Phone column visible in Customer Management
+- [x] **Phone in Add/Edit Forms** - Phone input field in customer forms
+- [x] **Updated Excel Template** - Bulk upload template includes Phone column
+- [x] **Message Logs API** - Track sent messages with success/failure counts
+- **Note:** This is a PLACEHOLDER implementation. Real message sending requires API integration.
+
 ### Export Features
 - [x] PDF export using ReportLab
 - [x] Excel export using XlsxWriter
