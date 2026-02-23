@@ -2725,6 +2725,7 @@ async def download_sample_excel(
         'Connection Type (domestic/commercial)',
         'Customer Name',
         'Address',
+        'Phone',
         'Consumer No',
         'Cash Memo No',
         'Cylinder Nos',
@@ -2734,7 +2735,7 @@ async def download_sample_excel(
     ]
     
     # Set column widths
-    column_widths = [18, 30, 25, 35, 15, 15, 15, 22, 18, 30]
+    column_widths = [18, 30, 25, 35, 15, 15, 15, 15, 22, 18, 30]
     for i, width in enumerate(column_widths):
         worksheet.set_column(i, i, width)
     
@@ -2744,9 +2745,9 @@ async def download_sample_excel(
     
     # Sample data rows
     sample_data = [
-        ['2026-02-23', 'domestic', 'Rahul Sharma', 'House No. 123, Itanagar', 'CON001', 'CM001', 'CYL-001, CYL-002', 'yes', 'yes', 'Regular customer'],
-        ['2026-02-23', 'commercial', 'ABC Restaurant', 'Market Complex, Naharlagun', 'CON002', 'CM002', 'CYL-003', 'no', 'yes', 'New connection'],
-        ['2026-02-22', 'domestic', 'Priya Devi', 'Ward No. 5, Doimukh', 'CON003', 'CM003', 'CYL-004, CYL-005', 'yes', 'no', ''],
+        ['2026-02-23', 'domestic', 'Rahul Sharma', 'House No. 123, Itanagar', '9876543210', 'CON001', 'CM001', 'CYL-001, CYL-002', 'yes', 'yes', 'Regular customer'],
+        ['2026-02-23', 'commercial', 'ABC Restaurant', 'Market Complex, Naharlagun', '9876543211', 'CON002', 'CM002', 'CYL-003', 'no', 'yes', 'New connection'],
+        ['2026-02-22', 'domestic', 'Priya Devi', 'Ward No. 5, Doimukh', '9876543212', 'CON003', 'CM003', 'CYL-004, CYL-005', 'yes', 'no', ''],
     ]
     
     for row_num, row_data in enumerate(sample_data, start=1):
@@ -2764,10 +2765,11 @@ async def download_sample_excel(
     instructions.write(2, 0, '1. Date Format: Use YYYY-MM-DD format (e.g., 2026-02-23)', instruction_format)
     instructions.write(3, 0, '2. Connection Type: Must be either "domestic" or "commercial" (lowercase)', instruction_format)
     instructions.write(4, 0, '3. Customer Name: Required field - cannot be empty', instruction_format)
-    instructions.write(5, 0, '4. Gas Card Issued: Use "yes" or "no" (lowercase)', instruction_format)
-    instructions.write(6, 0, '5. KYC Done: Use "yes" or "no" (lowercase)', instruction_format)
-    instructions.write(7, 0, '6. Delete the sample data rows before uploading your actual data', instruction_format)
-    instructions.write(8, 0, '7. Do not modify the header row', instruction_format)
+    instructions.write(5, 0, '4. Phone: Customer mobile number for SMS/WhatsApp messaging (10+ digits)', instruction_format)
+    instructions.write(6, 0, '5. Gas Card Issued: Use "yes" or "no" (lowercase)', instruction_format)
+    instructions.write(7, 0, '6. KYC Done: Use "yes" or "no" (lowercase)', instruction_format)
+    instructions.write(8, 0, '7. Delete the sample data rows before uploading your actual data', instruction_format)
+    instructions.write(9, 0, '8. Do not modify the header row', instruction_format)
     
     workbook.close()
     output.seek(0)
