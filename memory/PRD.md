@@ -270,7 +270,8 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 │   └── tests/
 │       ├── test_dealer_reports.py
 │       ├── test_customer_management.py
-│       └── test_order_management.py
+│       ├── test_order_management.py
+│       └── test_bulk_messaging.py (NEW)
 ├── frontend/
 │   ├── .env
 │   ├── package.json
