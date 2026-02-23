@@ -3298,10 +3298,57 @@ async def update_order(
         'address_landmark': updated.get('address_landmark', ''),
         'connection_type': updated['connection_type'],
         'payment_mode': updated['payment_mode'],
+        'status': updated.get('status', 'pending'),
         'remarks': updated.get('remarks', ''),
         'created_by': updated.get('created_by', ''),
         'created_at': updated.get('created_at', ''),
-        'updated_at': updated.get('updated_at')
+        'updated_at': updated.get('updated_at'),
+        'delivered_at': updated.get('delivered_at')
+    }
+
+@api_router.patch("/orders/{order_id}/status")
+async def update_order_status(
+    order_id: str,
+    status_update: OrderStatusUpdate,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Update order status (Pending → Delivered)"""
+    user = await get_current_user(credentials)
+    
+    existing = await db.orders.find_one({'id': order_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Check warehouse access
+    if user['role'] != 'admin' and existing.get('warehouse_id') != user.get('warehouse_id'):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    if status_update.status not in ['pending', 'delivered']:
+        raise HTTPException(status_code=400, detail="Invalid status. Must be 'pending' or 'delivered'")
+    
+    update_data = {
+        'status': status_update.status,
+        'updated_at': datetime.now(timezone.utc).isoformat()
+    }
+    
+    if status_update.status == 'delivered':
+        update_data['delivered_at'] = datetime.now(timezone.utc).isoformat()
+    elif status_update.status == 'pending':
+        update_data['delivered_at'] = None
+    
+    await db.orders.update_one({'id': order_id}, {'$set': update_data})
+    
+    updated = await db.orders.find_one({'id': order_id})
+    warehouse = await db.warehouses.find_one({'id': updated.get('warehouse_id')})
+    
+    return {
+        'id': updated['id'],
+        'warehouse_id': updated.get('warehouse_id', ''),
+        'warehouse_name': warehouse['name'] if warehouse else 'Unknown',
+        'order_no': updated['order_no'],
+        'status': updated['status'],
+        'delivered_at': updated.get('delivered_at'),
+        'message': f"Order {updated['order_no']} marked as {status_update.status}"
     }
 
 @api_router.delete("/orders/{order_id}")
