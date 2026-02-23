@@ -3107,6 +3107,7 @@ async def create_order(
         'address_landmark': order.address_landmark,
         'connection_type': order.connection_type,
         'payment_mode': order.payment_mode,
+        'status': 'pending',
         'remarks': order.remarks,
         'created_by': user['id'],
         'created_at': datetime.now(timezone.utc).isoformat()
@@ -3129,9 +3130,11 @@ async def create_order(
         'address_landmark': order_doc['address_landmark'],
         'connection_type': order_doc['connection_type'],
         'payment_mode': order_doc['payment_mode'],
+        'status': order_doc['status'],
         'remarks': order_doc['remarks'],
         'created_by': order_doc['created_by'],
-        'created_at': order_doc['created_at']
+        'created_at': order_doc['created_at'],
+        'delivered_at': None
     }
 
 @api_router.post("/orders/warehouse/{warehouse_id}")
