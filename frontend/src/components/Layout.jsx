@@ -14,7 +14,8 @@ import {
   Menu,
   X,
   UserCheck,
-  Boxes
+  Boxes,
+  UserPlus
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
@@ -34,6 +35,7 @@ const Layout = ({ children }) => {
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/warehouses', label: 'Warehouses', icon: Warehouse },
     { path: '/reports', label: 'Reports', icon: FileText },
+    { path: '/customers', label: 'Customers', icon: UserPlus },
     { path: '/plant-hollongi', label: 'Plant Hollongi', icon: Factory },
     { path: '/dealer-reports', label: 'Dealer Reports', icon: UserCheck },
     { path: '/accessory-reports', label: 'LPG Accessories', icon: Boxes },
@@ -44,6 +46,7 @@ const Layout = ({ children }) => {
   const managerLinks = [
     { path: '/manager-dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/daily-entry', label: 'Daily Entry', icon: ClipboardList },
+    { path: '/customers', label: 'Customers', icon: UserPlus },
     { path: '/my-reports', label: 'My Reports', icon: FileText },
   ];
 
