@@ -2523,6 +2523,8 @@ async def update_customer(
         update_data['customer_name'] = customer.customer_name
     if customer.address is not None:
         update_data['address'] = customer.address
+    if customer.phone is not None:
+        update_data['phone'] = customer.phone
     if customer.consumer_no is not None:
         update_data['consumer_no'] = customer.consumer_no
     if customer.cash_memo_no is not None:
@@ -2551,6 +2553,7 @@ async def update_customer(
         'connection_type': updated['connection_type'],
         'customer_name': updated['customer_name'],
         'address': updated.get('address', ''),
+        'phone': updated.get('phone', ''),
         'consumer_no': updated.get('consumer_no', ''),
         'cash_memo_no': updated.get('cash_memo_no', ''),
         'cylinder_nos': updated.get('cylinder_nos', ''),
