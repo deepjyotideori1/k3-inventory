@@ -2317,7 +2317,7 @@ async def get_customers(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Get customers for the user's warehouse (or all for admin)"""
-    user = await verify_token(credentials)
+    user = await get_current_user(credentials)
     
     query = {}
     
@@ -2382,7 +2382,7 @@ async def create_customer(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Create a new customer"""
-    user = await verify_token(credentials)
+    user = await get_current_user(credentials)
     
     warehouse_id = user.get('warehouse_id')
     if user['role'] == 'admin':
@@ -2428,7 +2428,7 @@ async def create_customer_for_warehouse(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Create a customer for a specific warehouse (admin only)"""
-    user = await verify_token(credentials)
+    user = await get_current_user(credentials)
     
     if user['role'] != 'admin':
         raise HTTPException(status_code=403, detail="Only admin can create customers for other warehouses")
@@ -2470,7 +2470,7 @@ async def update_customer(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Update a customer (admin only)"""
-    user = await verify_token(credentials)
+    user = await get_current_user(credentials)
     
     if user['role'] != 'admin':
         raise HTTPException(status_code=403, detail="Only admin can edit customers")
@@ -2533,7 +2533,7 @@ async def delete_customer(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Delete a customer (admin only)"""
-    user = await verify_token(credentials)
+    user = await get_current_user(credentials)
     
     if user['role'] != 'admin':
         raise HTTPException(status_code=403, detail="Only admin can delete customers")
@@ -2551,7 +2551,7 @@ async def bulk_upload_customers(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Bulk upload customers"""
-    user = await verify_token(credentials)
+    user = await get_current_user(credentials)
     
     warehouse_id = user.get('warehouse_id')
     if user['role'] == 'admin':
@@ -2591,7 +2591,7 @@ async def bulk_upload_customers_for_warehouse(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Bulk upload customers for a specific warehouse (admin only)"""
-    user = await verify_token(credentials)
+    user = await get_current_user(credentials)
     
     if user['role'] != 'admin':
         raise HTTPException(status_code=403, detail="Only admin can upload customers for other warehouses")
@@ -2630,7 +2630,7 @@ async def get_customer_summary(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Get customer summary statistics"""
-    user = await verify_token(credentials)
+    user = await get_current_user(credentials)
     
     query = {}
     if user['role'] != 'admin':
@@ -2745,7 +2745,7 @@ async def export_customers_pdf(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Export customers to PDF"""
-    user = await verify_token(credentials)
+    user = await get_current_user(credentials)
     
     query = {}
     if user['role'] != 'admin':
@@ -2852,7 +2852,7 @@ async def export_customers_excel(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Export customers to Excel"""
-    user = await verify_token(credentials)
+    user = await get_current_user(credentials)
     
     query = {}
     if user['role'] != 'admin':
