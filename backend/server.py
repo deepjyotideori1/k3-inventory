@@ -2261,6 +2261,669 @@ async def export_dealer_excel(
         headers={"Content-Disposition": f"attachment; filename=dealer_report_{datetime.now().strftime('%Y%m%d')}.xlsx"}
     )
 
+# ============ CUSTOMER MANAGEMENT ============
+
+class CustomerCreate(BaseModel):
+    date: str
+    connection_type: str  # 'domestic' or 'commercial'
+    customer_name: str
+    address: str = ""
+    consumer_no: str = ""
+    cash_memo_no: str = ""
+    cylinder_nos: str = ""
+    gas_card_issued: bool = False
+    kyc_done: bool = False
+    remarks: str = ""
+
+class CustomerUpdate(BaseModel):
+    date: Optional[str] = None
+    connection_type: Optional[str] = None
+    customer_name: Optional[str] = None
+    address: Optional[str] = None
+    consumer_no: Optional[str] = None
+    cash_memo_no: Optional[str] = None
+    cylinder_nos: Optional[str] = None
+    gas_card_issued: Optional[bool] = None
+    kyc_done: Optional[bool] = None
+    remarks: Optional[str] = None
+
+class CustomerResponse(BaseModel):
+    id: str
+    warehouse_id: str
+    warehouse_name: str
+    date: str
+    connection_type: str
+    customer_name: str
+    address: str
+    consumer_no: str
+    cash_memo_no: str
+    cylinder_nos: str
+    gas_card_issued: bool
+    kyc_done: bool
+    remarks: str
+    created_by: str
+    created_at: str
+    updated_at: Optional[str] = None
+
+class BulkCustomerUpload(BaseModel):
+    customers: List[CustomerCreate]
+
+@api_router.get("/customers")
+async def get_customers(
+    category: Optional[str] = None,
+    search: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get customers for the user's warehouse (or all for admin)"""
+    user = await verify_token(credentials)
+    
+    query = {}
+    
+    # Filter by warehouse for non-admin users
+    if user['role'] != 'admin':
+        query['warehouse_id'] = user.get('warehouse_id')
+    
+    # Filter by category (domestic/commercial)
+    if category and category != 'all':
+        query['connection_type'] = category
+    
+    # Filter by date range
+    if start_date:
+        query['date'] = query.get('date', {})
+        query['date']['$gte'] = start_date
+    if end_date:
+        if 'date' not in query:
+            query['date'] = {}
+        query['date']['$lte'] = end_date
+    
+    # Search by customer name or consumer no
+    if search:
+        query['$or'] = [
+            {'customer_name': {'$regex': search, '$options': 'i'}},
+            {'consumer_no': {'$regex': search, '$options': 'i'}},
+            {'address': {'$regex': search, '$options': 'i'}}
+        ]
+    
+    customers = await db.customers.find(query).sort('date', -1).to_list(1000)
+    
+    # Get warehouse names
+    warehouse_ids = list(set(c.get('warehouse_id') for c in customers if c.get('warehouse_id')))
+    warehouses = await db.warehouses.find({'id': {'$in': warehouse_ids}}).to_list(100)
+    warehouse_map = {w['id']: w['name'] for w in warehouses}
+    
+    result = []
+    for c in customers:
+        result.append({
+            'id': c['id'],
+            'warehouse_id': c.get('warehouse_id', ''),
+            'warehouse_name': warehouse_map.get(c.get('warehouse_id', ''), 'Unknown'),
+            'date': c['date'],
+            'connection_type': c['connection_type'],
+            'customer_name': c['customer_name'],
+            'address': c.get('address', ''),
+            'consumer_no': c.get('consumer_no', ''),
+            'cash_memo_no': c.get('cash_memo_no', ''),
+            'cylinder_nos': c.get('cylinder_nos', ''),
+            'gas_card_issued': c.get('gas_card_issued', False),
+            'kyc_done': c.get('kyc_done', False),
+            'remarks': c.get('remarks', ''),
+            'created_by': c.get('created_by', ''),
+            'created_at': c.get('created_at', ''),
+            'updated_at': c.get('updated_at')
+        })
+    
+    return result
+
+@api_router.post("/customers")
+async def create_customer(
+    customer: CustomerCreate,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Create a new customer"""
+    user = await verify_token(credentials)
+    
+    warehouse_id = user.get('warehouse_id')
+    if user['role'] == 'admin':
+        # Admin needs to specify warehouse or use a default
+        raise HTTPException(status_code=400, detail="Admin must use warehouse-specific endpoint")
+    
+    if not warehouse_id:
+        raise HTTPException(status_code=400, detail="User has no assigned warehouse")
+    
+    customer_doc = {
+        'id': str(uuid.uuid4()),
+        'warehouse_id': warehouse_id,
+        'date': customer.date,
+        'connection_type': customer.connection_type,
+        'customer_name': customer.customer_name,
+        'address': customer.address,
+        'consumer_no': customer.consumer_no,
+        'cash_memo_no': customer.cash_memo_no,
+        'cylinder_nos': customer.cylinder_nos,
+        'gas_card_issued': customer.gas_card_issued,
+        'kyc_done': customer.kyc_done,
+        'remarks': customer.remarks,
+        'created_by': user['id'],
+        'created_at': datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.customers.insert_one(customer_doc)
+    
+    # Get warehouse name
+    warehouse = await db.warehouses.find_one({'id': warehouse_id})
+    warehouse_name = warehouse['name'] if warehouse else 'Unknown'
+    
+    return {
+        **customer_doc,
+        'warehouse_name': warehouse_name,
+        'updated_at': None
+    }
+
+@api_router.post("/customers/warehouse/{warehouse_id}")
+async def create_customer_for_warehouse(
+    warehouse_id: str,
+    customer: CustomerCreate,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Create a customer for a specific warehouse (admin only)"""
+    user = await verify_token(credentials)
+    
+    if user['role'] != 'admin':
+        raise HTTPException(status_code=403, detail="Only admin can create customers for other warehouses")
+    
+    # Verify warehouse exists
+    warehouse = await db.warehouses.find_one({'id': warehouse_id})
+    if not warehouse:
+        raise HTTPException(status_code=404, detail="Warehouse not found")
+    
+    customer_doc = {
+        'id': str(uuid.uuid4()),
+        'warehouse_id': warehouse_id,
+        'date': customer.date,
+        'connection_type': customer.connection_type,
+        'customer_name': customer.customer_name,
+        'address': customer.address,
+        'consumer_no': customer.consumer_no,
+        'cash_memo_no': customer.cash_memo_no,
+        'cylinder_nos': customer.cylinder_nos,
+        'gas_card_issued': customer.gas_card_issued,
+        'kyc_done': customer.kyc_done,
+        'remarks': customer.remarks,
+        'created_by': user['id'],
+        'created_at': datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.customers.insert_one(customer_doc)
+    
+    return {
+        **customer_doc,
+        'warehouse_name': warehouse['name'],
+        'updated_at': None
+    }
+
+@api_router.put("/customers/{customer_id}")
+async def update_customer(
+    customer_id: str,
+    customer: CustomerUpdate,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Update a customer (admin only)"""
+    user = await verify_token(credentials)
+    
+    if user['role'] != 'admin':
+        raise HTTPException(status_code=403, detail="Only admin can edit customers")
+    
+    existing = await db.customers.find_one({'id': customer_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    update_data = {}
+    if customer.date is not None:
+        update_data['date'] = customer.date
+    if customer.connection_type is not None:
+        update_data['connection_type'] = customer.connection_type
+    if customer.customer_name is not None:
+        update_data['customer_name'] = customer.customer_name
+    if customer.address is not None:
+        update_data['address'] = customer.address
+    if customer.consumer_no is not None:
+        update_data['consumer_no'] = customer.consumer_no
+    if customer.cash_memo_no is not None:
+        update_data['cash_memo_no'] = customer.cash_memo_no
+    if customer.cylinder_nos is not None:
+        update_data['cylinder_nos'] = customer.cylinder_nos
+    if customer.gas_card_issued is not None:
+        update_data['gas_card_issued'] = customer.gas_card_issued
+    if customer.kyc_done is not None:
+        update_data['kyc_done'] = customer.kyc_done
+    if customer.remarks is not None:
+        update_data['remarks'] = customer.remarks
+    
+    update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
+    
+    await db.customers.update_one({'id': customer_id}, {'$set': update_data})
+    
+    updated = await db.customers.find_one({'id': customer_id})
+    warehouse = await db.warehouses.find_one({'id': updated.get('warehouse_id')})
+    
+    return {
+        'id': updated['id'],
+        'warehouse_id': updated.get('warehouse_id', ''),
+        'warehouse_name': warehouse['name'] if warehouse else 'Unknown',
+        'date': updated['date'],
+        'connection_type': updated['connection_type'],
+        'customer_name': updated['customer_name'],
+        'address': updated.get('address', ''),
+        'consumer_no': updated.get('consumer_no', ''),
+        'cash_memo_no': updated.get('cash_memo_no', ''),
+        'cylinder_nos': updated.get('cylinder_nos', ''),
+        'gas_card_issued': updated.get('gas_card_issued', False),
+        'kyc_done': updated.get('kyc_done', False),
+        'remarks': updated.get('remarks', ''),
+        'created_by': updated.get('created_by', ''),
+        'created_at': updated.get('created_at', ''),
+        'updated_at': updated.get('updated_at')
+    }
+
+@api_router.delete("/customers/{customer_id}")
+async def delete_customer(
+    customer_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Delete a customer (admin only)"""
+    user = await verify_token(credentials)
+    
+    if user['role'] != 'admin':
+        raise HTTPException(status_code=403, detail="Only admin can delete customers")
+    
+    result = await db.customers.delete_one({'id': customer_id})
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    return {"message": "Customer deleted successfully"}
+
+@api_router.post("/customers/bulk")
+async def bulk_upload_customers(
+    data: BulkCustomerUpload,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Bulk upload customers"""
+    user = await verify_token(credentials)
+    
+    warehouse_id = user.get('warehouse_id')
+    if user['role'] == 'admin':
+        raise HTTPException(status_code=400, detail="Admin must use warehouse-specific endpoint for bulk upload")
+    
+    if not warehouse_id:
+        raise HTTPException(status_code=400, detail="User has no assigned warehouse")
+    
+    customers_to_insert = []
+    for c in data.customers:
+        customers_to_insert.append({
+            'id': str(uuid.uuid4()),
+            'warehouse_id': warehouse_id,
+            'date': c.date,
+            'connection_type': c.connection_type,
+            'customer_name': c.customer_name,
+            'address': c.address,
+            'consumer_no': c.consumer_no,
+            'cash_memo_no': c.cash_memo_no,
+            'cylinder_nos': c.cylinder_nos,
+            'gas_card_issued': c.gas_card_issued,
+            'kyc_done': c.kyc_done,
+            'remarks': c.remarks,
+            'created_by': user['id'],
+            'created_at': datetime.now(timezone.utc).isoformat()
+        })
+    
+    if customers_to_insert:
+        await db.customers.insert_many(customers_to_insert)
+    
+    return {"message": f"Successfully uploaded {len(customers_to_insert)} customers", "count": len(customers_to_insert)}
+
+@api_router.post("/customers/bulk/warehouse/{warehouse_id}")
+async def bulk_upload_customers_for_warehouse(
+    warehouse_id: str,
+    data: BulkCustomerUpload,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Bulk upload customers for a specific warehouse (admin only)"""
+    user = await verify_token(credentials)
+    
+    if user['role'] != 'admin':
+        raise HTTPException(status_code=403, detail="Only admin can upload customers for other warehouses")
+    
+    # Verify warehouse exists
+    warehouse = await db.warehouses.find_one({'id': warehouse_id})
+    if not warehouse:
+        raise HTTPException(status_code=404, detail="Warehouse not found")
+    
+    customers_to_insert = []
+    for c in data.customers:
+        customers_to_insert.append({
+            'id': str(uuid.uuid4()),
+            'warehouse_id': warehouse_id,
+            'date': c.date,
+            'connection_type': c.connection_type,
+            'customer_name': c.customer_name,
+            'address': c.address,
+            'consumer_no': c.consumer_no,
+            'cash_memo_no': c.cash_memo_no,
+            'cylinder_nos': c.cylinder_nos,
+            'gas_card_issued': c.gas_card_issued,
+            'kyc_done': c.kyc_done,
+            'remarks': c.remarks,
+            'created_by': user['id'],
+            'created_at': datetime.now(timezone.utc).isoformat()
+        })
+    
+    if customers_to_insert:
+        await db.customers.insert_many(customers_to_insert)
+    
+    return {"message": f"Successfully uploaded {len(customers_to_insert)} customers to {warehouse['name']}", "count": len(customers_to_insert)}
+
+@api_router.get("/customers/summary")
+async def get_customer_summary(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get customer summary statistics"""
+    user = await verify_token(credentials)
+    
+    query = {}
+    if user['role'] != 'admin':
+        query['warehouse_id'] = user.get('warehouse_id')
+    
+    # Get total counts
+    total_domestic = await db.customers.count_documents({**query, 'connection_type': 'domestic'})
+    total_commercial = await db.customers.count_documents({**query, 'connection_type': 'commercial'})
+    total_gas_card = await db.customers.count_documents({**query, 'gas_card_issued': True})
+    total_kyc = await db.customers.count_documents({**query, 'kyc_done': True})
+    
+    return {
+        'total_domestic': total_domestic,
+        'total_commercial': total_commercial,
+        'total_customers': total_domestic + total_commercial,
+        'total_gas_card_issued': total_gas_card,
+        'total_kyc_done': total_kyc
+    }
+
+@api_router.get("/customers/sample-excel")
+async def download_sample_excel(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Download sample Excel template for bulk upload"""
+    await verify_token(credentials)
+    
+    output = BytesIO()
+    workbook = xlsxwriter.Workbook(output)
+    worksheet = workbook.add_worksheet('Customer Template')
+    
+    # Header format
+    header_format = workbook.add_format({
+        'bold': True,
+        'bg_color': '#2d5016',
+        'font_color': 'white',
+        'border': 1,
+        'align': 'center',
+        'valign': 'vcenter'
+    })
+    
+    # Data format
+    data_format = workbook.add_format({
+        'border': 1,
+        'align': 'left',
+        'valign': 'vcenter'
+    })
+    
+    # Headers
+    headers = [
+        'Date (YYYY-MM-DD)',
+        'Connection Type (domestic/commercial)',
+        'Customer Name',
+        'Address',
+        'Consumer No',
+        'Cash Memo No',
+        'Cylinder Nos',
+        'Gas Card Issued (yes/no)',
+        'KYC Done (yes/no)',
+        'Remarks'
+    ]
+    
+    # Set column widths
+    column_widths = [18, 30, 25, 35, 15, 15, 15, 22, 18, 30]
+    for i, width in enumerate(column_widths):
+        worksheet.set_column(i, i, width)
+    
+    # Write headers
+    for col, header in enumerate(headers):
+        worksheet.write(0, col, header, header_format)
+    
+    # Sample data rows
+    sample_data = [
+        ['2026-02-23', 'domestic', 'Rahul Sharma', 'House No. 123, Itanagar', 'CON001', 'CM001', 'CYL-001, CYL-002', 'yes', 'yes', 'Regular customer'],
+        ['2026-02-23', 'commercial', 'ABC Restaurant', 'Market Complex, Naharlagun', 'CON002', 'CM002', 'CYL-003', 'no', 'yes', 'New connection'],
+        ['2026-02-22', 'domestic', 'Priya Devi', 'Ward No. 5, Doimukh', 'CON003', 'CM003', 'CYL-004, CYL-005', 'yes', 'no', ''],
+    ]
+    
+    for row_num, row_data in enumerate(sample_data, start=1):
+        for col_num, cell_data in enumerate(row_data):
+            worksheet.write(row_num, col_num, cell_data, data_format)
+    
+    # Add instructions sheet
+    instructions = workbook.add_worksheet('Instructions')
+    instructions.set_column(0, 0, 80)
+    
+    instruction_format = workbook.add_format({'text_wrap': True, 'valign': 'top'})
+    title_format = workbook.add_format({'bold': True, 'font_size': 14})
+    
+    instructions.write(0, 0, 'BULK CUSTOMER UPLOAD INSTRUCTIONS', title_format)
+    instructions.write(2, 0, '1. Date Format: Use YYYY-MM-DD format (e.g., 2026-02-23)', instruction_format)
+    instructions.write(3, 0, '2. Connection Type: Must be either "domestic" or "commercial" (lowercase)', instruction_format)
+    instructions.write(4, 0, '3. Customer Name: Required field - cannot be empty', instruction_format)
+    instructions.write(5, 0, '4. Gas Card Issued: Use "yes" or "no" (lowercase)', instruction_format)
+    instructions.write(6, 0, '5. KYC Done: Use "yes" or "no" (lowercase)', instruction_format)
+    instructions.write(7, 0, '6. Delete the sample data rows before uploading your actual data', instruction_format)
+    instructions.write(8, 0, '7. Do not modify the header row', instruction_format)
+    
+    workbook.close()
+    output.seek(0)
+    
+    return Response(
+        content=output.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=customer_upload_template.xlsx"}
+    )
+
+@api_router.get("/export/customers-pdf")
+async def export_customers_pdf(
+    category: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Export customers to PDF"""
+    user = await verify_token(credentials)
+    
+    query = {}
+    if user['role'] != 'admin':
+        query['warehouse_id'] = user.get('warehouse_id')
+    
+    if category and category != 'all':
+        query['connection_type'] = category
+    
+    if start_date:
+        query['date'] = query.get('date', {})
+        query['date']['$gte'] = start_date
+    if end_date:
+        if 'date' not in query:
+            query['date'] = {}
+        query['date']['$lte'] = end_date
+    
+    customers = await db.customers.find(query).sort('date', -1).to_list(1000)
+    
+    # Get warehouse name
+    warehouse_name = "All Warehouses"
+    if user['role'] != 'admin':
+        warehouse = await db.warehouses.find_one({'id': user.get('warehouse_id')})
+        warehouse_name = warehouse['name'] if warehouse else 'Unknown'
+    
+    # Create PDF
+    output = BytesIO()
+    doc = SimpleDocTemplate(output, pagesize=landscape(A4), topMargin=30, bottomMargin=30)
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    # Title
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=16,
+        textColor=colors.HexColor('#2d5016'),
+        spaceAfter=20,
+        alignment=1
+    )
+    
+    category_text = category.capitalize() if category and category != 'all' else 'All'
+    title = Paragraph(f"K3 GAS SERVICE - {category_text} Customer Report", title_style)
+    elements.append(title)
+    
+    subtitle = Paragraph(f"Warehouse: {warehouse_name}", styles['Normal'])
+    elements.append(subtitle)
+    elements.append(Spacer(1, 20))
+    
+    # Table data
+    table_data = [['Date', 'Type', 'Customer Name', 'Address', 'Consumer No', 'Cash Memo', 'Cylinders', 'Gas Card', 'KYC', 'Remarks']]
+    
+    for c in customers:
+        table_data.append([
+            c.get('date', ''),
+            c.get('connection_type', '').capitalize(),
+            c.get('customer_name', '')[:20],
+            c.get('address', '')[:25],
+            c.get('consumer_no', ''),
+            c.get('cash_memo_no', ''),
+            c.get('cylinder_nos', '')[:15],
+            'Yes' if c.get('gas_card_issued') else 'No',
+            'Yes' if c.get('kyc_done') else 'No',
+            c.get('remarks', '')[:20]
+        ])
+    
+    # Create table
+    table = Table(table_data, repeatRows=1)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2d5016')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f0f0f0')])
+    ]))
+    
+    elements.append(table)
+    
+    # Summary
+    elements.append(Spacer(1, 20))
+    domestic_count = sum(1 for c in customers if c.get('connection_type') == 'domestic')
+    commercial_count = sum(1 for c in customers if c.get('connection_type') == 'commercial')
+    summary = Paragraph(f"Total: {len(customers)} customers (Domestic: {domestic_count}, Commercial: {commercial_count})", styles['Normal'])
+    elements.append(summary)
+    
+    doc.build(elements)
+    output.seek(0)
+    
+    return Response(
+        content=output.getvalue(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=customers_{category or 'all'}_{datetime.now().strftime('%Y%m%d')}.pdf"}
+    )
+
+@api_router.get("/export/customers-excel")
+async def export_customers_excel(
+    category: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Export customers to Excel"""
+    user = await verify_token(credentials)
+    
+    query = {}
+    if user['role'] != 'admin':
+        query['warehouse_id'] = user.get('warehouse_id')
+    
+    if category and category != 'all':
+        query['connection_type'] = category
+    
+    if start_date:
+        query['date'] = query.get('date', {})
+        query['date']['$gte'] = start_date
+    if end_date:
+        if 'date' not in query:
+            query['date'] = {}
+        query['date']['$lte'] = end_date
+    
+    customers = await db.customers.find(query).sort('date', -1).to_list(1000)
+    
+    # Get warehouse names
+    warehouse_ids = list(set(c.get('warehouse_id') for c in customers if c.get('warehouse_id')))
+    warehouses = await db.warehouses.find({'id': {'$in': warehouse_ids}}).to_list(100)
+    warehouse_map = {w['id']: w['name'] for w in warehouses}
+    
+    # Create Excel
+    output = BytesIO()
+    workbook = xlsxwriter.Workbook(output)
+    worksheet = workbook.add_worksheet('Customers')
+    
+    # Formats
+    header_format = workbook.add_format({
+        'bold': True,
+        'bg_color': '#2d5016',
+        'font_color': 'white',
+        'border': 1,
+        'align': 'center'
+    })
+    
+    data_format = workbook.add_format({'border': 1, 'align': 'left'})
+    yes_format = workbook.add_format({'border': 1, 'align': 'center', 'bg_color': '#d4edda'})
+    no_format = workbook.add_format({'border': 1, 'align': 'center', 'bg_color': '#f8d7da'})
+    
+    # Headers
+    headers = ['Date', 'Connection Type', 'Customer Name', 'Address', 'Consumer No', 'Cash Memo No', 'Cylinder Nos', 'Gas Card Issued', 'KYC Done', 'Remarks', 'Warehouse']
+    
+    for col, header in enumerate(headers):
+        worksheet.write(0, col, header, header_format)
+        worksheet.set_column(col, col, 15 if col < 3 else 20)
+    
+    # Data
+    for row, c in enumerate(customers, start=1):
+        worksheet.write(row, 0, c.get('date', ''), data_format)
+        worksheet.write(row, 1, c.get('connection_type', '').capitalize(), data_format)
+        worksheet.write(row, 2, c.get('customer_name', ''), data_format)
+        worksheet.write(row, 3, c.get('address', ''), data_format)
+        worksheet.write(row, 4, c.get('consumer_no', ''), data_format)
+        worksheet.write(row, 5, c.get('cash_memo_no', ''), data_format)
+        worksheet.write(row, 6, c.get('cylinder_nos', ''), data_format)
+        worksheet.write(row, 7, 'Yes' if c.get('gas_card_issued') else 'No', yes_format if c.get('gas_card_issued') else no_format)
+        worksheet.write(row, 8, 'Yes' if c.get('kyc_done') else 'No', yes_format if c.get('kyc_done') else no_format)
+        worksheet.write(row, 9, c.get('remarks', ''), data_format)
+        worksheet.write(row, 10, warehouse_map.get(c.get('warehouse_id', ''), 'Unknown'), data_format)
+    
+    workbook.close()
+    output.seek(0)
+    
+    return Response(
+        content=output.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=customers_{category or 'all'}_{datetime.now().strftime('%Y%m%d')}.xlsx"}
+    )
+
 @api_router.get("/health")
 async def health():
     return {"status": "healthy"}
