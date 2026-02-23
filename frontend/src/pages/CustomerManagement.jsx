@@ -940,15 +940,16 @@ const CustomerManagement = () => {
                   className="mt-1"
                 />
               </div>
-              <div>
-                <Label>Address</Label>
-                <Textarea 
-                  value={editForm.address || ''}
-                  onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
-                  className="mt-1"
-                />
-              </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Phone (for SMS/WhatsApp)</Label>
+                  <Input 
+                    value={editForm.phone || ''}
+                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                    placeholder="e.g., 9876543210"
+                    className="mt-1"
+                  />
+                </div>
                 <div>
                   <Label>Consumer No</Label>
                   <Input 
@@ -957,6 +958,16 @@ const CustomerManagement = () => {
                     className="mt-1"
                   />
                 </div>
+              </div>
+              <div>
+                <Label>Address</Label>
+                <Textarea 
+                  value={editForm.address || ''}
+                  onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
+                  className="mt-1"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Cash Memo No</Label>
                   <Input 
