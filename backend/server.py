@@ -2268,6 +2268,7 @@ class CustomerCreate(BaseModel):
     connection_type: str  # 'domestic' or 'commercial'
     customer_name: str
     address: str = ""
+    phone: str = ""  # Mobile/WhatsApp number for messaging
     consumer_no: str = ""
     cash_memo_no: str = ""
     cylinder_nos: str = ""
@@ -2280,6 +2281,7 @@ class CustomerUpdate(BaseModel):
     connection_type: Optional[str] = None
     customer_name: Optional[str] = None
     address: Optional[str] = None
+    phone: Optional[str] = None
     consumer_no: Optional[str] = None
     cash_memo_no: Optional[str] = None
     cylinder_nos: Optional[str] = None
