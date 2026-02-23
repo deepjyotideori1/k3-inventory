@@ -2972,6 +2972,10 @@ class OrderUpdate(BaseModel):
     connection_type: Optional[str] = None
     payment_mode: Optional[str] = None
     remarks: Optional[str] = None
+    status: Optional[str] = None  # pending, delivered
+
+class OrderStatusUpdate(BaseModel):
+    status: str  # pending, delivered
 
 async def get_next_order_number(warehouse_id: str) -> str:
     """Generate next order number for a warehouse (A1, A2, A3...)"""
