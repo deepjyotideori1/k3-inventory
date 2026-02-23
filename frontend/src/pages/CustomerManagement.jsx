@@ -248,18 +248,19 @@ const CustomerManagement = () => {
         const worksheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         
-        // Skip header row
+        // Skip header row - new format with phone column
         const customers = jsonData.slice(1).filter(row => row.length > 0 && row[2]).map(row => ({
           date: row[0] || getTodayDate(),
           connection_type: (row[1] || 'domestic').toLowerCase(),
           customer_name: row[2] || '',
           address: row[3] || '',
-          consumer_no: row[4]?.toString() || '',
-          cash_memo_no: row[5]?.toString() || '',
-          cylinder_nos: row[6]?.toString() || '',
-          gas_card_issued: (row[7] || '').toLowerCase() === 'yes',
-          kyc_done: (row[8] || '').toLowerCase() === 'yes',
-          remarks: row[9] || ''
+          phone: row[4]?.toString() || '',
+          consumer_no: row[5]?.toString() || '',
+          cash_memo_no: row[6]?.toString() || '',
+          cylinder_nos: row[7]?.toString() || '',
+          gas_card_issued: (row[8] || '').toLowerCase() === 'yes',
+          kyc_done: (row[9] || '').toLowerCase() === 'yes',
+          remarks: row[10] || ''
         }));
         
         setBulkPreview(customers);
