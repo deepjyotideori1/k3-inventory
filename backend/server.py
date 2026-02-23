@@ -2366,6 +2366,7 @@ async def get_customers(
             'connection_type': c['connection_type'],
             'customer_name': c['customer_name'],
             'address': c.get('address', ''),
+            'phone': c.get('phone', ''),
             'consumer_no': c.get('consumer_no', ''),
             'cash_memo_no': c.get('cash_memo_no', ''),
             'cylinder_nos': c.get('cylinder_nos', ''),
