@@ -3398,7 +3398,7 @@ async def get_order_summary(
     cash_query = {**query, 'payment_mode': 'cash'}
     online_query = {**query, 'payment_mode': 'online'}
     credit_query = {**query, 'payment_mode': 'credit_pending'}
-    pending_query = {**query, 'status': 'pending'}
+    pending_query = {**query, '$or': [{'status': 'pending'}, {'status': {'$exists': False}}]}
     delivered_query = {**query, 'status': 'delivered'}
     
     total_domestic = await db.orders.count_documents(domestic_query)
