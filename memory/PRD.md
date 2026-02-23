@@ -90,7 +90,7 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] **Excel Export** - Category-wise customer list
 - [x] **Summary Cards** - Total, Domestic, Commercial, Gas Card Issued, KYC Done
 
-### Order Management (NEW - Feb 23, 2026)
+### Order Management (Feb 23, 2026)
 - [x] **Order Generation Dashboard** - All warehouses except Plant Hollongi
 - [x] **Auto Order Sequence** - A1, A2, A3... per warehouse (endless sequence)
 - [x] Order data fields:
@@ -104,12 +104,22 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
   - Period: Daily, Weekly, Monthly, Yearly, Custom
   - Payment Mode filter
   - Connection Type filter
+  - Status filter (Pending/Delivered)
   - Search by name, mobile, order no, address
 - [x] **PDF/Excel Export** - Export order reports
 - [x] **Edit Order** - Managers can edit same-day orders; Admin can edit any
 - [x] **Delete Order** - Admin only
 - [x] **Plant Hollongi Exclusion** - No Orders link in sidebar, API returns 403
-- [x] **Summary Cards** - Total Orders, Domestic, Commercial, Cash, Online, Credit/Pending
+- [x] **Summary Cards** - Total Orders, Pending, Delivered, Domestic, Commercial, Cash, Online, Credit
+
+### Order Status Tracking (Feb 23, 2026)
+- [x] **Status Field** - Orders have status: Pending → Delivered
+- [x] **Status Badges** - Visual indicators (Orange=Pending, Green=Delivered)
+- [x] **Status Dropdown** - Update status directly from table row
+- [x] **Status Filter** - Filter orders by Pending, Delivered, or All Status
+- [x] **Pending/Delivered Counts** - Summary cards show status counts
+- [x] **Delivered Timestamp** - Tracks when order was marked as delivered
+- [x] **PATCH API** - `/orders/{id}/status` endpoint for status updates
 
 ### Export Features
 - [x] PDF export using ReportLab
