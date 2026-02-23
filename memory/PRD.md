@@ -212,6 +212,14 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - `GET /api/export/orders-pdf` - Export orders report PDF
 - `GET /api/export/orders-excel` - Export orders report Excel
 
+### Messaging (NEW - Placeholder)
+- `GET /api/messaging/settings` - Get messaging API configuration
+- `POST /api/messaging/settings` - Update messaging API credentials
+- `GET /api/messaging/recipients/count` - Get recipient count with filters
+- `POST /api/messaging/send` - Send bulk message (simulated if no API)
+- `GET /api/messaging/logs` - Get message history
+- `GET /api/messaging/logs/{log_id}` - Get message detail
+
 ### Exports
 - `GET /api/export/pdf` - Export daily reports PDF
 - `GET /api/export/excel` - Export daily reports Excel
