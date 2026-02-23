@@ -2471,9 +2471,23 @@ async def create_customer_for_warehouse(
     
     await db.customers.insert_one(customer_doc)
     
+    # Return without _id
     return {
-        **customer_doc,
+        'id': customer_doc['id'],
+        'warehouse_id': customer_doc['warehouse_id'],
         'warehouse_name': warehouse['name'],
+        'date': customer_doc['date'],
+        'connection_type': customer_doc['connection_type'],
+        'customer_name': customer_doc['customer_name'],
+        'address': customer_doc['address'],
+        'consumer_no': customer_doc['consumer_no'],
+        'cash_memo_no': customer_doc['cash_memo_no'],
+        'cylinder_nos': customer_doc['cylinder_nos'],
+        'gas_card_issued': customer_doc['gas_card_issued'],
+        'kyc_done': customer_doc['kyc_done'],
+        'remarks': customer_doc['remarks'],
+        'created_by': customer_doc['created_by'],
+        'created_at': customer_doc['created_at'],
         'updated_at': None
     }
 
