@@ -2952,6 +2952,683 @@ async def export_customers_excel(
         headers={"Content-Disposition": f"attachment; filename=customers_{category or 'all'}_{datetime.now().strftime('%Y%m%d')}.xlsx"}
     )
 
+# ============ ORDER MANAGEMENT ============
+
+class OrderCreate(BaseModel):
+    order_date: str
+    customer_id: Optional[str] = None  # Existing customer
+    customer_name: str
+    mobile_number: str = ""
+    address_landmark: str = ""
+    connection_type: str = "domestic"  # domestic or commercial
+    payment_mode: str = "cash"  # cash, online, credit_pending
+    remarks: str = ""
+
+class OrderUpdate(BaseModel):
+    order_date: Optional[str] = None
+    customer_name: Optional[str] = None
+    mobile_number: Optional[str] = None
+    address_landmark: Optional[str] = None
+    connection_type: Optional[str] = None
+    payment_mode: Optional[str] = None
+    remarks: Optional[str] = None
+
+async def get_next_order_number(warehouse_id: str) -> str:
+    """Generate next order number for a warehouse (A1, A2, A3...)"""
+    # Find the highest order number for this warehouse
+    latest_order = await db.orders.find_one(
+        {'warehouse_id': warehouse_id},
+        sort=[('order_sequence', -1)]
+    )
+    
+    if latest_order and 'order_sequence' in latest_order:
+        next_seq = latest_order['order_sequence'] + 1
+    else:
+        next_seq = 1
+    
+    return f"A{next_seq}", next_seq
+
+@api_router.get("/orders")
+async def get_orders(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    payment_mode: Optional[str] = None,
+    connection_type: Optional[str] = None,
+    search: Optional[str] = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get orders for the user's warehouse (or all for admin)"""
+    user = await get_current_user(credentials)
+    
+    query = {}
+    
+    # Filter by warehouse for non-admin users
+    if user['role'] != 'admin':
+        query['warehouse_id'] = user.get('warehouse_id')
+    
+    # Date filters
+    if start_date:
+        query['order_date'] = query.get('order_date', {})
+        query['order_date']['$gte'] = start_date
+    if end_date:
+        if 'order_date' not in query:
+            query['order_date'] = {}
+        query['order_date']['$lte'] = end_date
+    
+    # Payment mode filter
+    if payment_mode and payment_mode != 'all':
+        query['payment_mode'] = payment_mode
+    
+    # Connection type filter
+    if connection_type and connection_type != 'all':
+        query['connection_type'] = connection_type
+    
+    # Search
+    if search:
+        query['$or'] = [
+            {'customer_name': {'$regex': search, '$options': 'i'}},
+            {'mobile_number': {'$regex': search, '$options': 'i'}},
+            {'order_no': {'$regex': search, '$options': 'i'}},
+            {'address_landmark': {'$regex': search, '$options': 'i'}}
+        ]
+    
+    orders = await db.orders.find(query).sort('order_date', -1).to_list(1000)
+    
+    # Get warehouse names
+    warehouse_ids = list(set(o.get('warehouse_id') for o in orders if o.get('warehouse_id')))
+    warehouses = await db.warehouses.find({'id': {'$in': warehouse_ids}}).to_list(100)
+    warehouse_map = {w['id']: w['name'] for w in warehouses}
+    
+    result = []
+    for o in orders:
+        result.append({
+            'id': o['id'],
+            'warehouse_id': o.get('warehouse_id', ''),
+            'warehouse_name': warehouse_map.get(o.get('warehouse_id', ''), 'Unknown'),
+            'order_date': o['order_date'],
+            'order_no': o['order_no'],
+            'order_sequence': o.get('order_sequence', 0),
+            'customer_id': o.get('customer_id'),
+            'customer_name': o['customer_name'],
+            'mobile_number': o.get('mobile_number', ''),
+            'address_landmark': o.get('address_landmark', ''),
+            'connection_type': o['connection_type'],
+            'payment_mode': o['payment_mode'],
+            'remarks': o.get('remarks', ''),
+            'created_by': o.get('created_by', ''),
+            'created_at': o.get('created_at', '')
+        })
+    
+    return result
+
+@api_router.post("/orders")
+async def create_order(
+    order: OrderCreate,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Create a new order"""
+    user = await get_current_user(credentials)
+    
+    warehouse_id = user.get('warehouse_id')
+    if user['role'] == 'admin':
+        raise HTTPException(status_code=400, detail="Admin must use warehouse-specific endpoint")
+    
+    if not warehouse_id:
+        raise HTTPException(status_code=400, detail="User has no assigned warehouse")
+    
+    # Check if this is Plant Hollongi (orders not allowed)
+    warehouse = await db.warehouses.find_one({'id': warehouse_id})
+    if warehouse and warehouse.get('is_plant'):
+        raise HTTPException(status_code=403, detail="Orders are not available for Plant Hollongi")
+    
+    # Generate order number
+    order_no, order_seq = await get_next_order_number(warehouse_id)
+    
+    order_doc = {
+        'id': str(uuid.uuid4()),
+        'warehouse_id': warehouse_id,
+        'order_date': order.order_date,
+        'order_no': order_no,
+        'order_sequence': order_seq,
+        'customer_id': order.customer_id,
+        'customer_name': order.customer_name,
+        'mobile_number': order.mobile_number,
+        'address_landmark': order.address_landmark,
+        'connection_type': order.connection_type,
+        'payment_mode': order.payment_mode,
+        'remarks': order.remarks,
+        'created_by': user['id'],
+        'created_at': datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.orders.insert_one(order_doc)
+    
+    warehouse_name = warehouse['name'] if warehouse else 'Unknown'
+    
+    return {
+        'id': order_doc['id'],
+        'warehouse_id': order_doc['warehouse_id'],
+        'warehouse_name': warehouse_name,
+        'order_date': order_doc['order_date'],
+        'order_no': order_doc['order_no'],
+        'order_sequence': order_doc['order_sequence'],
+        'customer_id': order_doc['customer_id'],
+        'customer_name': order_doc['customer_name'],
+        'mobile_number': order_doc['mobile_number'],
+        'address_landmark': order_doc['address_landmark'],
+        'connection_type': order_doc['connection_type'],
+        'payment_mode': order_doc['payment_mode'],
+        'remarks': order_doc['remarks'],
+        'created_by': order_doc['created_by'],
+        'created_at': order_doc['created_at']
+    }
+
+@api_router.post("/orders/warehouse/{warehouse_id}")
+async def create_order_for_warehouse(
+    warehouse_id: str,
+    order: OrderCreate,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Create an order for a specific warehouse (admin only)"""
+    user = await get_current_user(credentials)
+    
+    if user['role'] != 'admin':
+        raise HTTPException(status_code=403, detail="Only admin can create orders for other warehouses")
+    
+    # Verify warehouse exists and is not Plant Hollongi
+    warehouse = await db.warehouses.find_one({'id': warehouse_id})
+    if not warehouse:
+        raise HTTPException(status_code=404, detail="Warehouse not found")
+    if warehouse.get('is_plant'):
+        raise HTTPException(status_code=403, detail="Orders are not available for Plant Hollongi")
+    
+    # Generate order number
+    order_no, order_seq = await get_next_order_number(warehouse_id)
+    
+    order_doc = {
+        'id': str(uuid.uuid4()),
+        'warehouse_id': warehouse_id,
+        'order_date': order.order_date,
+        'order_no': order_no,
+        'order_sequence': order_seq,
+        'customer_id': order.customer_id,
+        'customer_name': order.customer_name,
+        'mobile_number': order.mobile_number,
+        'address_landmark': order.address_landmark,
+        'connection_type': order.connection_type,
+        'payment_mode': order.payment_mode,
+        'remarks': order.remarks,
+        'created_by': user['id'],
+        'created_at': datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.orders.insert_one(order_doc)
+    
+    return {
+        'id': order_doc['id'],
+        'warehouse_id': order_doc['warehouse_id'],
+        'warehouse_name': warehouse['name'],
+        'order_date': order_doc['order_date'],
+        'order_no': order_doc['order_no'],
+        'order_sequence': order_doc['order_sequence'],
+        'customer_id': order_doc['customer_id'],
+        'customer_name': order_doc['customer_name'],
+        'mobile_number': order_doc['mobile_number'],
+        'address_landmark': order_doc['address_landmark'],
+        'connection_type': order_doc['connection_type'],
+        'payment_mode': order_doc['payment_mode'],
+        'remarks': order_doc['remarks'],
+        'created_by': order_doc['created_by'],
+        'created_at': order_doc['created_at']
+    }
+
+@api_router.get("/orders/{order_id}")
+async def get_order(
+    order_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get a single order by ID"""
+    user = await get_current_user(credentials)
+    
+    order = await db.orders.find_one({'id': order_id})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Check access
+    if user['role'] != 'admin' and order.get('warehouse_id') != user.get('warehouse_id'):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    warehouse = await db.warehouses.find_one({'id': order.get('warehouse_id')})
+    
+    return {
+        'id': order['id'],
+        'warehouse_id': order.get('warehouse_id', ''),
+        'warehouse_name': warehouse['name'] if warehouse else 'Unknown',
+        'order_date': order['order_date'],
+        'order_no': order['order_no'],
+        'order_sequence': order.get('order_sequence', 0),
+        'customer_id': order.get('customer_id'),
+        'customer_name': order['customer_name'],
+        'mobile_number': order.get('mobile_number', ''),
+        'address_landmark': order.get('address_landmark', ''),
+        'connection_type': order['connection_type'],
+        'payment_mode': order['payment_mode'],
+        'remarks': order.get('remarks', ''),
+        'created_by': order.get('created_by', ''),
+        'created_at': order.get('created_at', '')
+    }
+
+@api_router.put("/orders/{order_id}")
+async def update_order(
+    order_id: str,
+    order: OrderUpdate,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Update an order (admin only or same day by creator)"""
+    user = await get_current_user(credentials)
+    
+    existing = await db.orders.find_one({'id': order_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Check access - admin can edit any, others can edit same-day orders they created
+    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    if user['role'] != 'admin':
+        if existing.get('created_by') != user['id']:
+            raise HTTPException(status_code=403, detail="You can only edit your own orders")
+        if existing.get('order_date') != today:
+            raise HTTPException(status_code=403, detail="You can only edit today's orders")
+    
+    update_data = {}
+    if order.order_date is not None:
+        update_data['order_date'] = order.order_date
+    if order.customer_name is not None:
+        update_data['customer_name'] = order.customer_name
+    if order.mobile_number is not None:
+        update_data['mobile_number'] = order.mobile_number
+    if order.address_landmark is not None:
+        update_data['address_landmark'] = order.address_landmark
+    if order.connection_type is not None:
+        update_data['connection_type'] = order.connection_type
+    if order.payment_mode is not None:
+        update_data['payment_mode'] = order.payment_mode
+    if order.remarks is not None:
+        update_data['remarks'] = order.remarks
+    
+    update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
+    
+    await db.orders.update_one({'id': order_id}, {'$set': update_data})
+    
+    updated = await db.orders.find_one({'id': order_id})
+    warehouse = await db.warehouses.find_one({'id': updated.get('warehouse_id')})
+    
+    return {
+        'id': updated['id'],
+        'warehouse_id': updated.get('warehouse_id', ''),
+        'warehouse_name': warehouse['name'] if warehouse else 'Unknown',
+        'order_date': updated['order_date'],
+        'order_no': updated['order_no'],
+        'order_sequence': updated.get('order_sequence', 0),
+        'customer_id': updated.get('customer_id'),
+        'customer_name': updated['customer_name'],
+        'mobile_number': updated.get('mobile_number', ''),
+        'address_landmark': updated.get('address_landmark', ''),
+        'connection_type': updated['connection_type'],
+        'payment_mode': updated['payment_mode'],
+        'remarks': updated.get('remarks', ''),
+        'created_by': updated.get('created_by', ''),
+        'created_at': updated.get('created_at', ''),
+        'updated_at': updated.get('updated_at')
+    }
+
+@api_router.delete("/orders/{order_id}")
+async def delete_order(
+    order_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Delete an order (admin only)"""
+    user = await get_current_user(credentials)
+    
+    if user['role'] != 'admin':
+        raise HTTPException(status_code=403, detail="Only admin can delete orders")
+    
+    result = await db.orders.delete_one({'id': order_id})
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    return {"message": "Order deleted successfully"}
+
+@api_router.get("/orders/summary/stats")
+async def get_order_summary(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get order summary statistics"""
+    user = await get_current_user(credentials)
+    
+    query = {}
+    if user['role'] != 'admin':
+        query['warehouse_id'] = user.get('warehouse_id')
+    
+    if start_date:
+        query['order_date'] = query.get('order_date', {})
+        query['order_date']['$gte'] = start_date
+    if end_date:
+        if 'order_date' not in query:
+            query['order_date'] = {}
+        query['order_date']['$lte'] = end_date
+    
+    # Get counts
+    total_orders = await db.orders.count_documents(query)
+    
+    domestic_query = {**query, 'connection_type': 'domestic'}
+    commercial_query = {**query, 'connection_type': 'commercial'}
+    cash_query = {**query, 'payment_mode': 'cash'}
+    online_query = {**query, 'payment_mode': 'online'}
+    credit_query = {**query, 'payment_mode': 'credit_pending'}
+    
+    total_domestic = await db.orders.count_documents(domestic_query)
+    total_commercial = await db.orders.count_documents(commercial_query)
+    total_cash = await db.orders.count_documents(cash_query)
+    total_online = await db.orders.count_documents(online_query)
+    total_credit = await db.orders.count_documents(credit_query)
+    
+    return {
+        'total_orders': total_orders,
+        'total_domestic': total_domestic,
+        'total_commercial': total_commercial,
+        'total_cash': total_cash,
+        'total_online': total_online,
+        'total_credit_pending': total_credit
+    }
+
+@api_router.get("/orders/pdf/{order_id}")
+async def download_order_pdf(
+    order_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Download a single order as PDF"""
+    user = await get_current_user(credentials)
+    
+    order = await db.orders.find_one({'id': order_id})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Check access
+    if user['role'] != 'admin' and order.get('warehouse_id') != user.get('warehouse_id'):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    warehouse = await db.warehouses.find_one({'id': order.get('warehouse_id')})
+    warehouse_name = warehouse['name'] if warehouse else 'Unknown'
+    
+    # Create PDF
+    output = BytesIO()
+    doc = SimpleDocTemplate(output, pagesize=A4, topMargin=30, bottomMargin=30)
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    # Title style
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=18,
+        textColor=colors.HexColor('#2d5016'),
+        spaceAfter=10,
+        alignment=1
+    )
+    
+    subtitle_style = ParagraphStyle(
+        'Subtitle',
+        parent=styles['Normal'],
+        fontSize=12,
+        textColor=colors.grey,
+        alignment=1,
+        spaceAfter=20
+    )
+    
+    # Header
+    elements.append(Paragraph("K3 GAS SERVICE", title_style))
+    elements.append(Paragraph("Khayal Hamesha", subtitle_style))
+    elements.append(Spacer(1, 10))
+    
+    # Order details box
+    order_title = ParagraphStyle('OrderTitle', parent=styles['Heading2'], fontSize=14, textColor=colors.HexColor('#2d5016'))
+    elements.append(Paragraph(f"ORDER: {order['order_no']}", order_title))
+    elements.append(Spacer(1, 10))
+    
+    # Order info table
+    order_data = [
+        ['Order Date:', order['order_date']],
+        ['Order No:', order['order_no']],
+        ['Warehouse:', warehouse_name],
+        ['Customer Name:', order['customer_name']],
+        ['Mobile Number:', order.get('mobile_number', '-')],
+        ['Address/Landmark:', order.get('address_landmark', '-')],
+        ['Connection Type:', order['connection_type'].capitalize()],
+        ['Payment Mode:', order['payment_mode'].replace('_', ' ').title()],
+        ['Remarks:', order.get('remarks', '-')],
+    ]
+    
+    table = Table(order_data, colWidths=[150, 300])
+    table.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 11),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+        ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+        ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#666666')),
+        ('LINEBELOW', (0, 0), (-1, -2), 0.5, colors.HexColor('#eeeeee')),
+    ]))
+    elements.append(table)
+    
+    elements.append(Spacer(1, 30))
+    
+    # Footer
+    footer_style = ParagraphStyle('Footer', parent=styles['Normal'], fontSize=9, textColor=colors.grey, alignment=1)
+    elements.append(Paragraph(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M')}", footer_style))
+    
+    doc.build(elements)
+    output.seek(0)
+    
+    return Response(
+        content=output.getvalue(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=order_{order['order_no']}_{order['order_date']}.pdf"}
+    )
+
+@api_router.get("/export/orders-pdf")
+async def export_orders_pdf(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    payment_mode: Optional[str] = None,
+    connection_type: Optional[str] = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Export orders report to PDF"""
+    user = await get_current_user(credentials)
+    
+    query = {}
+    if user['role'] != 'admin':
+        query['warehouse_id'] = user.get('warehouse_id')
+    
+    if start_date:
+        query['order_date'] = query.get('order_date', {})
+        query['order_date']['$gte'] = start_date
+    if end_date:
+        if 'order_date' not in query:
+            query['order_date'] = {}
+        query['order_date']['$lte'] = end_date
+    
+    if payment_mode and payment_mode != 'all':
+        query['payment_mode'] = payment_mode
+    if connection_type and connection_type != 'all':
+        query['connection_type'] = connection_type
+    
+    orders = await db.orders.find(query).sort('order_date', -1).to_list(1000)
+    
+    # Get warehouse name
+    warehouse_name = "All Warehouses"
+    if user['role'] != 'admin':
+        warehouse = await db.warehouses.find_one({'id': user.get('warehouse_id')})
+        warehouse_name = warehouse['name'] if warehouse else 'Unknown'
+    
+    # Create PDF
+    output = BytesIO()
+    doc = SimpleDocTemplate(output, pagesize=landscape(A4), topMargin=30, bottomMargin=30)
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=16,
+        textColor=colors.HexColor('#2d5016'),
+        spaceAfter=20,
+        alignment=1
+    )
+    
+    date_range = ""
+    if start_date and end_date:
+        date_range = f" ({start_date} to {end_date})"
+    elif start_date:
+        date_range = f" (from {start_date})"
+    elif end_date:
+        date_range = f" (until {end_date})"
+    
+    elements.append(Paragraph(f"K3 GAS SERVICE - Orders Report{date_range}", title_style))
+    elements.append(Paragraph(f"Warehouse: {warehouse_name}", styles['Normal']))
+    elements.append(Spacer(1, 20))
+    
+    # Table data
+    table_data = [['Date', 'Order No', 'Customer', 'Mobile', 'Address', 'Type', 'Payment', 'Remarks']]
+    
+    for o in orders:
+        table_data.append([
+            o.get('order_date', ''),
+            o.get('order_no', ''),
+            o.get('customer_name', '')[:20],
+            o.get('mobile_number', ''),
+            o.get('address_landmark', '')[:25],
+            o.get('connection_type', '').capitalize(),
+            o.get('payment_mode', '').replace('_', ' ').title(),
+            o.get('remarks', '')[:15]
+        ])
+    
+    table = Table(table_data, repeatRows=1)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2d5016')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f0f0f0')])
+    ]))
+    
+    elements.append(table)
+    elements.append(Spacer(1, 20))
+    elements.append(Paragraph(f"Total Orders: {len(orders)}", styles['Normal']))
+    
+    doc.build(elements)
+    output.seek(0)
+    
+    return Response(
+        content=output.getvalue(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=orders_report_{datetime.now().strftime('%Y%m%d')}.pdf"}
+    )
+
+@api_router.get("/export/orders-excel")
+async def export_orders_excel(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    payment_mode: Optional[str] = None,
+    connection_type: Optional[str] = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Export orders report to Excel"""
+    user = await get_current_user(credentials)
+    
+    query = {}
+    if user['role'] != 'admin':
+        query['warehouse_id'] = user.get('warehouse_id')
+    
+    if start_date:
+        query['order_date'] = query.get('order_date', {})
+        query['order_date']['$gte'] = start_date
+    if end_date:
+        if 'order_date' not in query:
+            query['order_date'] = {}
+        query['order_date']['$lte'] = end_date
+    
+    if payment_mode and payment_mode != 'all':
+        query['payment_mode'] = payment_mode
+    if connection_type and connection_type != 'all':
+        query['connection_type'] = connection_type
+    
+    orders = await db.orders.find(query).sort('order_date', -1).to_list(1000)
+    
+    # Get warehouse names
+    warehouse_ids = list(set(o.get('warehouse_id') for o in orders if o.get('warehouse_id')))
+    warehouses = await db.warehouses.find({'id': {'$in': warehouse_ids}}).to_list(100)
+    warehouse_map = {w['id']: w['name'] for w in warehouses}
+    
+    # Create Excel
+    output = BytesIO()
+    workbook = xlsxwriter.Workbook(output)
+    worksheet = workbook.add_worksheet('Orders')
+    
+    # Formats
+    header_format = workbook.add_format({
+        'bold': True,
+        'bg_color': '#2d5016',
+        'font_color': 'white',
+        'border': 1,
+        'align': 'center'
+    })
+    
+    data_format = workbook.add_format({'border': 1, 'align': 'left'})
+    cash_format = workbook.add_format({'border': 1, 'align': 'center', 'bg_color': '#d4edda'})
+    online_format = workbook.add_format({'border': 1, 'align': 'center', 'bg_color': '#cce5ff'})
+    credit_format = workbook.add_format({'border': 1, 'align': 'center', 'bg_color': '#fff3cd'})
+    
+    # Headers
+    headers = ['Order Date', 'Order No', 'Customer Name', 'Mobile', 'Address/Landmark', 'Connection Type', 'Payment Mode', 'Remarks', 'Warehouse']
+    
+    for col, header in enumerate(headers):
+        worksheet.write(0, col, header, header_format)
+        worksheet.set_column(col, col, 15 if col < 3 else 20)
+    
+    # Data
+    for row, o in enumerate(orders, start=1):
+        worksheet.write(row, 0, o.get('order_date', ''), data_format)
+        worksheet.write(row, 1, o.get('order_no', ''), data_format)
+        worksheet.write(row, 2, o.get('customer_name', ''), data_format)
+        worksheet.write(row, 3, o.get('mobile_number', ''), data_format)
+        worksheet.write(row, 4, o.get('address_landmark', ''), data_format)
+        worksheet.write(row, 5, o.get('connection_type', '').capitalize(), data_format)
+        
+        pm = o.get('payment_mode', '')
+        pm_format = cash_format if pm == 'cash' else (online_format if pm == 'online' else credit_format)
+        worksheet.write(row, 6, pm.replace('_', ' ').title(), pm_format)
+        
+        worksheet.write(row, 7, o.get('remarks', ''), data_format)
+        worksheet.write(row, 8, warehouse_map.get(o.get('warehouse_id', ''), 'Unknown'), data_format)
+    
+    workbook.close()
+    output.seek(0)
+    
+    return Response(
+        content=output.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=orders_report_{datetime.now().strftime('%Y%m%d')}.xlsx"}
+    )
+
 @api_router.get("/health")
 async def health():
     return {"status": "healthy"}
