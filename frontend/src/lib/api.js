@@ -304,4 +304,76 @@ export const exportCustomersExcel = async (params) => {
   }
 };
 
+// ============ ORDER MANAGEMENT ============
+
+// Orders
+export const getOrders = (params) => api.get('/orders', { params });
+export const getOrder = (orderId) => api.get(`/orders/${orderId}`);
+export const createOrder = (data) => api.post('/orders', data);
+export const createOrderForWarehouse = (warehouseId, data) => api.post(`/orders/warehouse/${warehouseId}`, data);
+export const updateOrder = (orderId, data) => api.put(`/orders/${orderId}`, data);
+export const deleteOrder = (orderId) => api.delete(`/orders/${orderId}`);
+export const getOrderSummary = (params) => api.get('/orders/summary/stats', { params });
+
+// Order PDF Download (single order)
+export const downloadOrderPDF = async (orderId) => {
+  try {
+    const response = await api.get(`/orders/pdf/${orderId}`, {
+      responseType: 'blob'
+    });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `order_${orderId}_${new Date().toISOString().split('T')[0]}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Order PDF download failed:', error);
+    throw error;
+  }
+};
+
+// Order Reports Export
+export const exportOrdersPDF = async (params) => {
+  try {
+    const response = await api.get('/export/orders-pdf', { 
+      params,
+      responseType: 'blob'
+    });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `orders_report_${new Date().toISOString().split('T')[0]}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Orders PDF export failed:', error);
+    throw error;
+  }
+};
+
+export const exportOrdersExcel = async (params) => {
+  try {
+    const response = await api.get('/export/orders-excel', { 
+      params,
+      responseType: 'blob'
+    });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `orders_report_${new Date().toISOString().split('T')[0]}.xlsx`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Orders Excel export failed:', error);
+    throw error;
+  }
+};
+
 export default api;
