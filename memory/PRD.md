@@ -245,11 +245,12 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 ## PENDING/FUTURE TASKS
 
 ### P1 (Important)
-- [ ] Sync warehouse 'refilling at plant' to Plant Hollongi's received empties
 - [ ] Admin UI to add new warehouses with credentials
 - [ ] Admin UI to add new inventory stock items
+- [ ] Sync warehouse 'refilling at plant' to Plant Hollongi's received empties
 
 ### P2 (Nice to Have)
+- [ ] Integrate real SMS/WhatsApp provider (Twilio, MSG91, Meta) with Bulk Messaging
 - [ ] Weekly, Monthly, Yearly aggregated reports for dashboard
 - [ ] Dashboard charts/graphs using Recharts
 - [ ] Email notifications for discrepancies
