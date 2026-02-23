@@ -2838,20 +2838,18 @@ async def export_customers_pdf(
     elements.append(Spacer(1, 20))
     
     # Table data
-    table_data = [['Date', 'Type', 'Customer Name', 'Address', 'Consumer No', 'Cash Memo', 'Cylinders', 'Gas Card', 'KYC', 'Remarks']]
+    table_data = [['Date', 'Type', 'Customer Name', 'Phone', 'Address', 'Consumer No', 'Gas Card', 'KYC']]
     
     for c in customers:
         table_data.append([
             c.get('date', ''),
             c.get('connection_type', '').capitalize(),
             c.get('customer_name', '')[:20],
+            c.get('phone', ''),
             c.get('address', '')[:25],
             c.get('consumer_no', ''),
-            c.get('cash_memo_no', ''),
-            c.get('cylinder_nos', '')[:15],
             'Yes' if c.get('gas_card_issued') else 'No',
-            'Yes' if c.get('kyc_done') else 'No',
-            c.get('remarks', '')[:20]
+            'Yes' if c.get('kyc_done') else 'No'
         ])
     
     # Create table
