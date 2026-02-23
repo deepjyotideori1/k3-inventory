@@ -229,4 +229,79 @@ export const exportAccessoryExcel = async (params) => {
   }
 };
 
+// ============ CUSTOMER MANAGEMENT ============
+
+// Customers
+export const getCustomers = (params) => api.get('/customers', { params });
+export const createCustomer = (data) => api.post('/customers', data);
+export const createCustomerForWarehouse = (warehouseId, data) => api.post(`/customers/warehouse/${warehouseId}`, data);
+export const updateCustomer = (customerId, data) => api.put(`/customers/${customerId}`, data);
+export const deleteCustomer = (customerId) => api.delete(`/customers/${customerId}`);
+export const bulkUploadCustomers = (data) => api.post('/customers/bulk', data);
+export const bulkUploadCustomersForWarehouse = (warehouseId, data) => api.post(`/customers/bulk/warehouse/${warehouseId}`, data);
+export const getCustomerSummary = () => api.get('/customers/summary');
+
+// Customer Sample Excel Template
+export const downloadCustomerTemplate = async () => {
+  try {
+    const response = await api.get('/customers/sample-excel', {
+      responseType: 'blob'
+    });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'customer_upload_template.xlsx');
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Template download failed:', error);
+    throw error;
+  }
+};
+
+// Customer Export
+export const exportCustomersPDF = async (params) => {
+  try {
+    const response = await api.get('/export/customers-pdf', { 
+      params,
+      responseType: 'blob'
+    });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    const category = params?.category || 'all';
+    link.setAttribute('download', `customers_${category}_${new Date().toISOString().split('T')[0]}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Customer PDF export failed:', error);
+    throw error;
+  }
+};
+
+export const exportCustomersExcel = async (params) => {
+  try {
+    const response = await api.get('/export/customers-excel', { 
+      params,
+      responseType: 'blob'
+    });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    const category = params?.category || 'all';
+    link.setAttribute('download', `customers_${category}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Customer Excel export failed:', error);
+    throw error;
+  }
+};
+
 export default api;
