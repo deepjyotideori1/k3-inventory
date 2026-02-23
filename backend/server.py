@@ -3398,12 +3398,16 @@ async def get_order_summary(
     cash_query = {**query, 'payment_mode': 'cash'}
     online_query = {**query, 'payment_mode': 'online'}
     credit_query = {**query, 'payment_mode': 'credit_pending'}
+    pending_query = {**query, 'status': 'pending'}
+    delivered_query = {**query, 'status': 'delivered'}
     
     total_domestic = await db.orders.count_documents(domestic_query)
     total_commercial = await db.orders.count_documents(commercial_query)
     total_cash = await db.orders.count_documents(cash_query)
     total_online = await db.orders.count_documents(online_query)
     total_credit = await db.orders.count_documents(credit_query)
+    total_pending = await db.orders.count_documents(pending_query)
+    total_delivered = await db.orders.count_documents(delivered_query)
     
     return {
         'total_orders': total_orders,
@@ -3411,7 +3415,9 @@ async def get_order_summary(
         'total_commercial': total_commercial,
         'total_cash': total_cash,
         'total_online': total_online,
-        'total_credit_pending': total_credit
+        'total_credit_pending': total_credit,
+        'total_pending': total_pending,
+        'total_delivered': total_delivered
     }
 
 @api_router.get("/orders/pdf/{order_id}")
