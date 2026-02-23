@@ -290,6 +290,21 @@ const OrderManagement = () => {
     }
   };
 
+  const handleStatusChange = async (orderId, newStatus) => {
+    setUpdatingStatus(orderId);
+    try {
+      const response = await updateOrderStatus(orderId, newStatus);
+      toast.success(response.data.message);
+      fetchOrders();
+      fetchSummary();
+    } catch (error) {
+      console.error('Failed to update status:', error);
+      toast.error(error.response?.data?.detail || 'Failed to update status');
+    } finally {
+      setUpdatingStatus(null);
+    }
+  };
+
   const handleEdit = (order) => {
     setEditingOrder(order);
     setEditForm({
