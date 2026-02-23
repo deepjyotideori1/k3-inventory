@@ -398,6 +398,17 @@ const OrderManagement = () => {
     }
   };
 
+  const getStatusBadge = (status) => {
+    switch(status) {
+      case 'pending':
+        return <Badge className="bg-orange-100 text-orange-800 border-orange-300"><Package className="w-3 h-3 mr-1" />Pending</Badge>;
+      case 'delivered':
+        return <Badge className="bg-green-100 text-green-800 border-green-300"><CheckCircle2 className="w-3 h-3 mr-1" />Delivered</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
   // Check if user is Plant Hollongi (orders not allowed)
   const isPlantHollongi = user?.warehouse_name === 'Plant Hollongi';
   
