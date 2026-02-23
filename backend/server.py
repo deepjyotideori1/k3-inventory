@@ -3230,9 +3230,11 @@ async def get_order(
         'address_landmark': order.get('address_landmark', ''),
         'connection_type': order['connection_type'],
         'payment_mode': order['payment_mode'],
+        'status': order.get('status', 'pending'),
         'remarks': order.get('remarks', ''),
         'created_by': order.get('created_by', ''),
-        'created_at': order.get('created_at', '')
+        'created_at': order.get('created_at', ''),
+        'delivered_at': order.get('delivered_at')
     }
 
 @api_router.put("/orders/{order_id}")
@@ -3271,6 +3273,10 @@ async def update_order(
         update_data['payment_mode'] = order.payment_mode
     if order.remarks is not None:
         update_data['remarks'] = order.remarks
+    if order.status is not None:
+        update_data['status'] = order.status
+        if order.status == 'delivered':
+            update_data['delivered_at'] = datetime.now(timezone.utc).isoformat()
     
     update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
     
