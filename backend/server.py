@@ -4000,7 +4000,7 @@ async def send_bulk_message(
     # Filter to those with phone numbers
     recipients = []
     for c in customers:
-        phone = c.get('consumer_no') or c.get('mobile_number') or ''
+        phone = c.get('mobile_number') or c.get('phone') or ''
         if phone and len(phone) >= 10:
             recipients.append({
                 'id': c['id'],
