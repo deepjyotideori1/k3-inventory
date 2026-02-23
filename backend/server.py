@@ -3832,32 +3832,36 @@ async def get_recipient_count(
     elif recipient_filter == 'category' and category:
         query['connection_type'] = category
     
-    # Count customers with mobile numbers
-    query['$or'] = [
-        {'consumer_no': {'$exists': True, '$ne': ''}},
-        {'mobile_number': {'$exists': True, '$ne': ''}}
-    ]
+    # Get customers and filter to those with valid phone numbers (10+ digits)
+    customers = await db.customers.find(query).to_list(10000)
     
-    total_count = await db.customers.count_documents(query)
+    # Filter to those with phone numbers (matching send endpoint logic)
+    valid_recipients = []
+    for c in customers:
+        phone = c.get('mobile_number') or c.get('phone') or ''
+        if phone and len(phone) >= 10:
+            valid_recipients.append(c)
+    
+    total_count = len(valid_recipients)
     
     # Get warehouse breakdown
-    pipeline = [
-        {'$match': query},
-        {'$group': {'_id': '$warehouse_id', 'count': {'$sum': 1}}}
-    ]
-    warehouse_counts = await db.customers.aggregate(pipeline).to_list(100)
+    warehouse_counts = {}
+    for c in valid_recipients:
+        wid = c.get('warehouse_id')
+        if wid:
+            warehouse_counts[wid] = warehouse_counts.get(wid, 0) + 1
     
     # Get warehouse names
-    warehouse_ids = [w['_id'] for w in warehouse_counts if w['_id']]
+    warehouse_ids = list(warehouse_counts.keys())
     warehouses = await db.warehouses.find({'id': {'$in': warehouse_ids}}).to_list(100)
     warehouse_map = {w['id']: w['name'] for w in warehouses}
     
     breakdown = []
-    for wc in warehouse_counts:
+    for wid, count in warehouse_counts.items():
         breakdown.append({
-            'warehouse_id': wc['_id'],
-            'warehouse_name': warehouse_map.get(wc['_id'], 'Unknown'),
-            'count': wc['count']
+            'warehouse_id': wid,
+            'warehouse_name': warehouse_map.get(wid, 'Unknown'),
+            'count': count
         })
     
     return {
