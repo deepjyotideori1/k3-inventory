@@ -804,6 +804,19 @@ const OrderManagement = () => {
                       </SelectContent>
                     </Select>
                   </div>
+                  <div>
+                    <Label>Status</Label>
+                    <Select value={filterStatus} onValueChange={setFilterStatus}>
+                      <SelectTrigger className="w-36 mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="delivered">Delivered</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="flex-1 min-w-[200px]">
                     <Label>Search</Label>
                     <div className="relative mt-1">
