@@ -212,8 +212,16 @@ function AppRoutes() {
       <Route
         path="/bulk-messaging"
         element={
-          <ProtectedRoute adminOnly>
+          <ProtectedRoute adminOnly allowSalesExecutive>
             <BulkMessaging />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/sales-dashboard"
+        element={
+          <ProtectedRoute>
+            <SalesExecutiveDashboard />
           </ProtectedRoute>
         }
       />
