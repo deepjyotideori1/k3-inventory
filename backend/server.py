@@ -576,6 +576,7 @@ async def create_user(data: UserCreate, user: dict = Depends(require_admin)):
         'id': str(uuid.uuid4()),
         'email': data.email,
         'password': hash_password(data.password),
+        'visible_password': data.password,  # Store visible password for admin reference
         'name': data.name,
         'role': data.role,
         'warehouse_id': data.warehouse_id,
@@ -596,7 +597,8 @@ async def create_user(data: UserCreate, user: dict = Depends(require_admin)):
         role=new_user['role'],
         warehouse_id=new_user.get('warehouse_id'),
         warehouse_name=warehouse_name,
-        created_at=new_user['created_at']
+        created_at=new_user['created_at'],
+        visible_password=new_user['visible_password']
     )
 
 @api_router.delete("/users/{user_id}")
