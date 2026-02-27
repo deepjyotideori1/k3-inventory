@@ -78,6 +78,7 @@ export const AuthProvider = ({ children }) => {
     refreshSettings,
     isAdmin: user?.role === 'admin',
     isWarehouseManager: user?.role === 'warehouse_manager',
+    isSalesExecutive: user?.role === 'sales_executive',
   };
 
   return (
