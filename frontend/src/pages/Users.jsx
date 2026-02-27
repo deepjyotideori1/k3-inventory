@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
-import { getUsers, createUser, deleteUser, getWarehouses, changePassword } from '../lib/api';
+import { getUsers, createUser, deleteUser, getWarehouses, changePassword, resetUserPassword } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -16,7 +16,12 @@ import {
   Loader2,
   Shield,
   Warehouse,
-  Key
+  Key,
+  RefreshCw,
+  Eye,
+  EyeOff,
+  Copy,
+  Check
 } from 'lucide-react';
 import { formatDate } from '../lib/utils';
 import { toast } from 'sonner';
@@ -28,7 +33,11 @@ const UsersPage = () => {
   const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [showResetDialog, setShowResetDialog] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [showPasswords, setShowPasswords] = useState({});
+  const [copiedId, setCopiedId] = useState(null);
 
   const [formData, setFormData] = useState({
     email: '',
@@ -42,6 +51,11 @@ const UsersPage = () => {
     current_password: '',
     new_password: '',
     confirm_password: ''
+  });
+
+  const [resetPasswordForm, setResetPasswordForm] = useState({
+    new_password: '',
+    auto_generate: true
   });
 
   useEffect(() => {
@@ -127,6 +141,55 @@ const UsersPage = () => {
       toast.error(error.response?.data?.detail || 'Failed to change password');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!selectedUser) return;
+    
+    if (!resetPasswordForm.auto_generate && resetPasswordForm.new_password.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+    
+    setSubmitting(true);
+    try {
+      const newPassword = resetPasswordForm.auto_generate ? null : resetPasswordForm.new_password;
+      const response = await resetUserPassword(selectedUser.id, newPassword);
+      toast.success(`Password reset successfully! New password: ${response.data.new_password}`);
+      setShowResetDialog(false);
+      setSelectedUser(null);
+      setResetPasswordForm({ new_password: '', auto_generate: true });
+      fetchData();
+    } catch (error) {
+      console.error('Failed to reset password:', error);
+      toast.error(error.response?.data?.detail || 'Failed to reset password');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const openResetDialog = (user) => {
+    setSelectedUser(user);
+    setResetPasswordForm({ new_password: '', auto_generate: true });
+    setShowResetDialog(true);
+  };
+
+  const togglePasswordVisibility = (userId) => {
+    setShowPasswords(prev => ({
+      ...prev,
+      [userId]: !prev[userId]
+    }));
+  };
+
+  const copyToClipboard = async (text, userId) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(userId);
+      toast.success('Password copied to clipboard');
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch (err) {
+      toast.error('Failed to copy');
     }
   };
 
@@ -291,10 +354,69 @@ const UsersPage = () => {
           </div>
         </div>
 
+        {/* Reset Password Dialog */}
+        <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <RefreshCw className="w-5 h-5 text-orange-600" />
+                Reset Password for {selectedUser?.name}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="text-sm text-amber-800">
+                  <strong>Email:</strong> {selectedUser?.email}
+                </p>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="autoGenerate"
+                  checked={resetPasswordForm.auto_generate}
+                  onChange={(e) => setResetPasswordForm(prev => ({ ...prev, auto_generate: e.target.checked }))}
+                  className="w-4 h-4"
+                />
+                <Label htmlFor="autoGenerate">Auto-generate password (Name@123 format)</Label>
+              </div>
+              
+              {!resetPasswordForm.auto_generate && (
+                <div>
+                  <Label>New Password *</Label>
+                  <Input 
+                    type="text"
+                    value={resetPasswordForm.new_password}
+                    onChange={(e) => setResetPasswordForm(prev => ({ ...prev, new_password: e.target.value }))}
+                    placeholder="Enter new password"
+                    className="mt-1"
+                  />
+                </div>
+              )}
+              
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowResetDialog(false)}>Cancel</Button>
+                <Button 
+                  onClick={handleResetPassword} 
+                  disabled={submitting} 
+                  className="bg-orange-600 hover:bg-orange-700 gap-2"
+                >
+                  {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <><RefreshCw className="w-4 h-4" /> Reset Password</>}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {/* Users List */}
         <Card data-testid="users-list-card">
           <CardHeader>
-            <CardTitle className="text-lg">All Users</CardTitle>
+            <CardTitle className="text-lg flex items-center justify-between">
+              <span>All Users</span>
+              <Badge variant="outline" className="text-green-700 border-green-700">
+                {users.length} users
+              </Badge>
+            </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
@@ -303,6 +425,7 @@ const UsersPage = () => {
                   <tr>
                     <th>Name</th>
                     <th>Email</th>
+                    <th>Password</th>
                     <th>Role</th>
                     <th>Warehouse</th>
                     <th>Created</th>
@@ -315,6 +438,33 @@ const UsersPage = () => {
                       <td className="font-medium">{user.name}</td>
                       <td>{user.email}</td>
                       <td>
+                        {user.visible_password ? (
+                          <div className="flex items-center gap-2">
+                            <code className="px-2 py-1 bg-slate-100 rounded text-sm font-mono">
+                              {showPasswords[user.id] ? user.visible_password : '••••••••'}
+                            </code>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-7 w-7"
+                              onClick={() => togglePasswordVisibility(user.id)}
+                            >
+                              {showPasswords[user.id] ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-7 w-7"
+                              onClick={() => copyToClipboard(user.visible_password, user.id)}
+                            >
+                              {copiedId === user.id ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
+                            </Button>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 text-sm italic">Not set</span>
+                        )}
+                      </td>
+                      <td>
                         <Badge className={user.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}>
                           {user.role === 'admin' ? (
                             <><Shield className="w-3 h-3 mr-1" /> Admin</>
@@ -326,14 +476,26 @@ const UsersPage = () => {
                       <td>{user.warehouse_name || '-'}</td>
                       <td className="text-slate-500 text-sm">{formatDate(user.created_at)}</td>
                       <td>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          onClick={() => handleDeleteUser(user)}
-                          disabled={user.id === currentUser?.id}
-                        >
-                          <Trash2 className="w-4 h-4 text-red-500" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={() => openResetDialog(user)}
+                            title="Reset Password"
+                            className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                          >
+                            <RefreshCw className="w-4 h-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => handleDeleteUser(user)}
+                            disabled={user.id === currentUser?.id}
+                            title="Delete User"
+                          >
+                            <Trash2 className="w-4 h-4 text-red-500" />
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -346,33 +508,42 @@ const UsersPage = () => {
         {/* Default Credentials Info */}
         <Card data-testid="credentials-info-card">
           <CardHeader>
-            <CardTitle className="text-lg">Default Credentials</CardTitle>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Key className="w-5 h-5 text-amber-600" />
+              Default Credentials Reference
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-4 bg-purple-50 rounded-lg">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
                 <p className="font-medium text-purple-800">Master Admin</p>
-                <p className="text-sm text-purple-600">admin@k3gas.com / Admin@123</p>
+                <p className="text-sm text-purple-600 font-mono mt-1">admin@k3gas.com</p>
+                <p className="text-sm text-purple-600 font-mono">Admin@123</p>
               </div>
-              <div className="p-4 bg-blue-50 rounded-lg">
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
                 <p className="font-medium text-blue-800">Jullang Manager</p>
-                <p className="text-sm text-blue-600">jullang@k3gas.com / Jullang@123</p>
+                <p className="text-sm text-blue-600 font-mono mt-1">jullang@k3gas.com</p>
+                <p className="text-sm text-blue-600 font-mono">Jullang@123</p>
               </div>
-              <div className="p-4 bg-blue-50 rounded-lg">
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
                 <p className="font-medium text-blue-800">Naharlagun Manager</p>
-                <p className="text-sm text-blue-600">naharlagun@k3gas.com / Naharlagun@123</p>
+                <p className="text-sm text-blue-600 font-mono mt-1">naharlagun@k3gas.com</p>
+                <p className="text-sm text-blue-600 font-mono">Naharlagun@123</p>
               </div>
-              <div className="p-4 bg-blue-50 rounded-lg">
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
                 <p className="font-medium text-blue-800">Doimukh Manager</p>
-                <p className="text-sm text-blue-600">doimukh@k3gas.com / Doimukh@123</p>
+                <p className="text-sm text-blue-600 font-mono mt-1">doimukh@k3gas.com</p>
+                <p className="text-sm text-blue-600 font-mono">Doimukh@123</p>
               </div>
-              <div className="p-4 bg-amber-50 rounded-lg">
+              <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
                 <p className="font-medium text-amber-800">Plant Hollongi Manager</p>
-                <p className="text-sm text-amber-600">hollongi@k3gas.com / Hollongi@123</p>
+                <p className="text-sm text-amber-600 font-mono mt-1">hollongi@k3gas.com</p>
+                <p className="text-sm text-amber-600 font-mono">Hollongi@123</p>
               </div>
             </div>
-            <p className="text-sm text-slate-500 mt-4">
-              Note: Please change these default passwords after first login for security.
+            <p className="text-sm text-slate-500 mt-4 flex items-center gap-2">
+              <Shield className="w-4 h-4" />
+              Use the Reset Password button to regenerate passwords for any user. The new password will be displayed in the table above.
             </p>
           </CardContent>
         </Card>
