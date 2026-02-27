@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import ManagerDashboard from "./pages/ManagerDashboard";
+import SalesExecutiveDashboard from "./pages/SalesExecutiveDashboard";
 import DailyEntry from "./pages/DailyEntry";
 import PlantEntry from "./pages/PlantEntry";
 import Reports from "./pages/Reports";
@@ -22,7 +23,7 @@ import OrderManagement from "./pages/OrderManagement";
 import BulkMessaging from "./pages/BulkMessaging";
 
 // Protected Route Component
-const ProtectedRoute = ({ children, adminOnly = false }) => {
+const ProtectedRoute = ({ children, adminOnly = false, allowSalesExecutive = false }) => {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -38,6 +39,13 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
   }
 
   if (adminOnly && user.role !== 'admin') {
+    // Allow sales executive for specific routes
+    if (allowSalesExecutive && user.role === 'sales_executive') {
+      return children;
+    }
+    if (user.role === 'sales_executive') {
+      return <Navigate to="/sales-dashboard" replace />;
+    }
     return <Navigate to="/manager-dashboard" replace />;
   }
 
@@ -60,7 +68,13 @@ const RoleBasedRedirect = () => {
     return <Navigate to="/login" replace />;
   }
 
-  return <Navigate to={user.role === 'admin' ? '/dashboard' : '/manager-dashboard'} replace />;
+  if (user.role === 'admin') {
+    return <Navigate to="/dashboard" replace />;
+  } else if (user.role === 'sales_executive') {
+    return <Navigate to="/sales-dashboard" replace />;
+  } else {
+    return <Navigate to="/manager-dashboard" replace />;
+  }
 };
 
 function AppRoutes() {
