@@ -21,7 +21,8 @@ import {
   Eye,
   EyeOff,
   Copy,
-  Check
+  Check,
+  Briefcase
 } from 'lucide-react';
 import { formatDate } from '../lib/utils';
 import { toast } from 'sonner';
