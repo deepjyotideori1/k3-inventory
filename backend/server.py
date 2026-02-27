@@ -58,14 +58,14 @@ class UserBase(BaseModel):
     model_config = ConfigDict(extra="ignore")
     email: str
     name: str
-    role: str  # 'admin' or 'warehouse_manager'
+    role: str  # 'admin', 'warehouse_manager', or 'sales_executive'
     warehouse_id: Optional[str] = None
 
 class UserCreate(BaseModel):
     email: str
     password: str
     name: str
-    role: str
+    role: str  # 'admin', 'warehouse_manager', or 'sales_executive'
     warehouse_id: Optional[str] = None
 
 class UserLogin(BaseModel):
