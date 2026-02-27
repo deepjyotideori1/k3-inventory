@@ -2979,10 +2979,15 @@ async def export_customers_excel(
     workbook.close()
     output.seek(0)
     
+    # Generate filename with category
+    category_name = category.capitalize() if category and category != 'all' else 'All'
+    date_str = datetime.now().strftime('%d%m%y')
+    filename = f"Customer_Report_{category_name}_{date_str}.xlsx"
+    
     return Response(
         content=output.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=customers_{category or 'all'}_{datetime.now().strftime('%Y%m%d')}.xlsx"}
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
 # ============ ORDER MANAGEMENT ============
