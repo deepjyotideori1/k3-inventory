@@ -88,6 +88,10 @@ const UsersPage = () => {
       toast.error('Please select a warehouse for the manager');
       return;
     }
+    if (formData.role === 'sales_executive' && !formData.warehouse_id) {
+      toast.error('Please select a warehouse for the Sales Executive');
+      return;
+    }
     
     setSubmitting(true);
     try {
