@@ -2893,10 +2893,15 @@ async def export_customers_pdf(
     doc.build(elements)
     output.seek(0)
     
+    # Generate filename with category
+    category_name = category.capitalize() if category and category != 'all' else 'All'
+    date_str = datetime.now().strftime('%d%m%y')
+    filename = f"Customer_Report_{category_name}_{date_str}.pdf"
+    
     return Response(
         content=output.getvalue(),
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=customers_{category or 'all'}_{datetime.now().strftime('%Y%m%d')}.pdf"}
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
 @api_router.get("/export/customers-excel")
