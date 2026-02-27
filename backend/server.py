@@ -1463,10 +1463,17 @@ async def export_excel(
     workbook.close()
     buffer.seek(0)
     
+    # Generate filename based on report type
+    date_str = datetime.now().strftime('%d%m%y')
+    if report_type == "daily":
+        filename = f"Daily_Inventory_Report_{date_str}.xlsx"
+    else:
+        filename = f"Plant_Hollongi_Report_{date_str}.xlsx"
+    
     return Response(
         content=buffer.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=k3_gas_report_{datetime.now().strftime('%Y%m%d')}.xlsx"}
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
 # ============ ROOT ROUTES ============
