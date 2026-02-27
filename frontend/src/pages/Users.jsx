@@ -313,7 +313,7 @@ const UsersPage = () => {
                     <Label>Role</Label>
                     <Select 
                       value={formData.role} 
-                      onValueChange={(val) => setFormData(prev => ({ ...prev, role: val }))}
+                      onValueChange={(val) => setFormData(prev => ({ ...prev, role: val, warehouse_id: val === 'sales_executive' ? '' : prev.warehouse_id }))}
                     >
                       <SelectTrigger className="mt-1" data-testid="user-role-select">
                         <SelectValue />
@@ -321,8 +321,14 @@ const UsersPage = () => {
                       <SelectContent>
                         <SelectItem value="admin">Admin</SelectItem>
                         <SelectItem value="warehouse_manager">Warehouse Manager</SelectItem>
+                        <SelectItem value="sales_executive">Sales Executive</SelectItem>
                       </SelectContent>
                     </Select>
+                    {formData.role === 'sales_executive' && (
+                      <p className="text-xs text-slate-500 mt-1">
+                        Sales Executive has access to: Customers, Orders, and Bulk Messaging only
+                      </p>
+                    )}
                   </div>
                   {formData.role === 'warehouse_manager' && (
                     <div>
