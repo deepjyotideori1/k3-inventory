@@ -80,6 +80,10 @@ class UserResponse(BaseModel):
     warehouse_id: Optional[str] = None
     warehouse_name: Optional[str] = None
     created_at: str
+    visible_password: Optional[str] = None  # Only shown after password reset
+
+class ResetPasswordRequest(BaseModel):
+    new_password: Optional[str] = None  # If not provided, auto-generate
 
 class LoginResponse(BaseModel):
     token: str
