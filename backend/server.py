@@ -2272,7 +2272,7 @@ async def export_dealer_excel(
     return Response(
         content=buffer.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=dealer_report_{datetime.now().strftime('%Y%m%d')}.xlsx"}
+        headers={"Content-Disposition": f"attachment; filename=Dealer_Report_{datetime.now().strftime('%d%m%y')}.xlsx"}
     )
 
 # ============ CUSTOMER MANAGEMENT ============
