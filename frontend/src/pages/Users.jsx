@@ -472,9 +472,15 @@ const UsersPage = () => {
                         )}
                       </td>
                       <td>
-                        <Badge className={user.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}>
+                        <Badge className={
+                          user.role === 'admin' ? 'bg-purple-100 text-purple-700' : 
+                          user.role === 'sales_executive' ? 'bg-emerald-100 text-emerald-700' : 
+                          'bg-blue-100 text-blue-700'
+                        }>
                           {user.role === 'admin' ? (
                             <><Shield className="w-3 h-3 mr-1" /> Admin</>
+                          ) : user.role === 'sales_executive' ? (
+                            <><Briefcase className="w-3 h-3 mr-1" /> Sales Exec</>
                           ) : (
                             <><Warehouse className="w-3 h-3 mr-1" /> Manager</>
                           )}
