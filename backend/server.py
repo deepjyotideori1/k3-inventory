@@ -572,6 +572,20 @@ async def create_user(data: UserCreate, user: dict = Depends(require_admin)):
     if existing:
         raise HTTPException(status_code=400, detail="Email already exists")
     
+    # Validate warehouse assignment for sales_executive
+    if data.role == 'sales_executive':
+        if not data.warehouse_id:
+            raise HTTPException(status_code=400, detail="Sales Executive must be assigned to a warehouse")
+        warehouse = await db.warehouses.find_one({'id': data.warehouse_id}, {'_id': 0})
+        if not warehouse:
+            raise HTTPException(status_code=400, detail="Warehouse not found")
+        if warehouse.get('is_plant'):
+            raise HTTPException(status_code=400, detail="Sales Executive cannot be assigned to Plant Hollongi")
+    
+    # Validate warehouse assignment for warehouse_manager
+    if data.role == 'warehouse_manager' and not data.warehouse_id:
+        raise HTTPException(status_code=400, detail="Warehouse Manager must be assigned to a warehouse")
+    
     new_user = {
         'id': str(uuid.uuid4()),
         'email': data.email,
