@@ -554,6 +554,29 @@ const UsersPage = () => {
                 <p className="text-sm text-amber-600 font-mono">Hollongi@123</p>
               </div>
             </div>
+            
+            {/* Role Access Info */}
+            <div className="mt-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
+              <h4 className="font-medium text-slate-800 mb-3 flex items-center gap-2">
+                <Users className="w-4 h-4" />
+                Role Access Levels
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div>
+                  <Badge className="bg-purple-100 text-purple-700 mb-2"><Shield className="w-3 h-3 mr-1" /> Admin</Badge>
+                  <p className="text-slate-600">Full system access - all features</p>
+                </div>
+                <div>
+                  <Badge className="bg-blue-100 text-blue-700 mb-2"><Warehouse className="w-3 h-3 mr-1" /> Manager</Badge>
+                  <p className="text-slate-600">Warehouse-specific access - reports, entries, orders</p>
+                </div>
+                <div>
+                  <Badge className="bg-emerald-100 text-emerald-700 mb-2"><Briefcase className="w-3 h-3 mr-1" /> Sales Exec</Badge>
+                  <p className="text-slate-600">Customers, Orders, Bulk Messaging only</p>
+                </div>
+              </div>
+            </div>
+            
             <p className="text-sm text-slate-500 mt-4 flex items-center gap-2">
               <Shield className="w-4 h-4" />
               Use the Reset Password button to regenerate passwords for any user. The new password will be displayed in the table above.
