@@ -314,7 +314,7 @@ const UsersPage = () => {
                     <Label>Role</Label>
                     <Select 
                       value={formData.role} 
-                      onValueChange={(val) => setFormData(prev => ({ ...prev, role: val, warehouse_id: val === 'sales_executive' ? '' : prev.warehouse_id }))}
+                      onValueChange={(val) => setFormData(prev => ({ ...prev, role: val, warehouse_id: '' }))}
                     >
                       <SelectTrigger className="mt-1" data-testid="user-role-select">
                         <SelectValue />
@@ -327,11 +327,11 @@ const UsersPage = () => {
                     </Select>
                     {formData.role === 'sales_executive' && (
                       <p className="text-xs text-slate-500 mt-1">
-                        Sales Executive has access to: Customers, Orders, and Bulk Messaging only
+                        Sales Executive has access to: Customers, Orders, and Bulk Messaging for assigned warehouse only
                       </p>
                     )}
                   </div>
-                  {formData.role === 'warehouse_manager' && (
+                  {(formData.role === 'warehouse_manager' || formData.role === 'sales_executive') && (
                     <div>
                       <Label>Warehouse *</Label>
                       <Select 
@@ -342,11 +342,18 @@ const UsersPage = () => {
                           <SelectValue placeholder="Select warehouse" />
                         </SelectTrigger>
                         <SelectContent>
-                          {warehouses.map(w => (
-                            <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
-                          ))}
+                          {warehouses
+                            .filter(w => formData.role === 'sales_executive' ? !w.is_plant : true)
+                            .map(w => (
+                              <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
+                      {formData.role === 'sales_executive' && (
+                        <p className="text-xs text-amber-600 mt-1">
+                          Note: Plant Hollongi is not available for Sales Executive assignment
+                        </p>
+                      )}
                     </div>
                   )}
                   <div className="flex justify-end gap-2">
