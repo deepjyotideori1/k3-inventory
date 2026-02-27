@@ -605,6 +605,38 @@ async def delete_user(user_id: str, user: dict = Depends(require_admin)):
         raise HTTPException(status_code=404, detail="User not found")
     return {"message": "User deleted successfully"}
 
+@api_router.post("/users/{user_id}/reset-password")
+async def reset_user_password(user_id: str, data: ResetPasswordRequest = None, user: dict = Depends(require_admin)):
+    """Reset a user's password - Admin only"""
+    target_user = await db.users.find_one({'id': user_id}, {'_id': 0})
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Generate new password if not provided
+    if data and data.new_password:
+        new_password = data.new_password
+    else:
+        # Auto-generate password based on user's name
+        name_part = target_user['name'].split()[0] if target_user['name'] else 'User'
+        new_password = f"{name_part}@123"
+    
+    # Hash and update password
+    hashed = hash_password(new_password)
+    await db.users.update_one(
+        {'id': user_id},
+        {'$set': {
+            'password': hashed,
+            'visible_password': new_password,
+            'password_reset_at': datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    return {
+        "message": "Password reset successfully",
+        "new_password": new_password,
+        "user_email": target_user['email']
+    }
+
 # ============ WAREHOUSE ROUTES ============
 
 @api_router.get("/warehouses", response_model=List[WarehouseResponse])
