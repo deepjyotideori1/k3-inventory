@@ -56,7 +56,6 @@ const Layout = ({ children }) => {
   ];
 
   const salesExecutiveLinks = [
-    { path: '/sales-dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/customers', label: 'Customers', icon: UserPlus },
     { path: '/orders', label: 'Orders', icon: ShoppingCart },
     { path: '/bulk-messaging', label: 'Bulk Messaging', icon: MessageSquare },
