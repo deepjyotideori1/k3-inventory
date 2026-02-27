@@ -561,7 +561,8 @@ async def get_users(user: dict = Depends(require_admin)):
             role=u['role'],
             warehouse_id=u.get('warehouse_id'),
             warehouse_name=warehouse_name,
-            created_at=u['created_at']
+            created_at=u['created_at'],
+            visible_password=u.get('visible_password')
         ))
     return result
 
