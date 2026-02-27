@@ -45,6 +45,8 @@ export const updateSettings = (data) => api.put('/settings', data);
 export const getUsers = () => api.get('/users');
 export const createUser = (data) => api.post('/users', data);
 export const deleteUser = (userId) => api.delete(`/users/${userId}`);
+export const resetUserPassword = (userId, newPassword = null) => 
+  api.post(`/users/${userId}/reset-password`, newPassword ? { new_password: newPassword } : {});
 
 // Warehouses
 export const getWarehouses = () => api.get('/warehouses');
