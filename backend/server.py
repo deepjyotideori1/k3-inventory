@@ -3654,7 +3654,7 @@ async def export_orders_pdf(
     return Response(
         content=output.getvalue(),
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=orders_report_{datetime.now().strftime('%Y%m%d')}.pdf"}
+        headers={"Content-Disposition": f"attachment; filename=Orders_Report_{datetime.now().strftime('%d%m%y')}.pdf"}
     )
 
 @api_router.get("/export/orders-excel")
