@@ -3550,7 +3550,7 @@ async def download_order_pdf(
     return Response(
         content=output.getvalue(),
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=order_{order['order_no']}_{order['order_date']}.pdf"}
+        headers={"Content-Disposition": f"attachment; filename=Order_{order['order_no']}_{datetime.now().strftime('%d%m%y')}.pdf"}
     )
 
 @api_router.get("/export/orders-pdf")
