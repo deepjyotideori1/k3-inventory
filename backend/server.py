@@ -3740,7 +3740,7 @@ async def export_orders_excel(
     return Response(
         content=output.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=orders_report_{datetime.now().strftime('%Y%m%d')}.xlsx"}
+        headers={"Content-Disposition": f"attachment; filename=Orders_Report_{datetime.now().strftime('%d%m%y')}.xlsx"}
     )
 
 # ============ BULK MESSAGING ============
