@@ -2025,7 +2025,7 @@ async def export_accessory_excel(
     return Response(
         content=buffer.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=accessory_report_{datetime.now().strftime('%Y%m%d')}.xlsx"}
+        headers={"Content-Disposition": f"attachment; filename=LPG_Accessories_Report_{datetime.now().strftime('%d%m%y')}.xlsx"}
     )
 
 # ============ DEALER REPORT EXPORTS ============
