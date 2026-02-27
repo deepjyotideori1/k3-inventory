@@ -44,7 +44,7 @@ const ProtectedRoute = ({ children, adminOnly = false, allowSalesExecutive = fal
       return children;
     }
     if (user.role === 'sales_executive') {
-      return <Navigate to="/sales-dashboard" replace />;
+      return <Navigate to="/customers" replace />;
     }
     return <Navigate to="/manager-dashboard" replace />;
   }
