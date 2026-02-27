@@ -167,7 +167,7 @@ const Layout = ({ children }) => {
                 <div className="flex-1 min-w-0">
                   <p className="text-white text-sm font-medium truncate">{user?.name}</p>
                   <p className="text-green-200 text-xs truncate">
-                    {isAdmin ? 'Master Admin' : user?.warehouse_name}
+                    {isAdmin ? 'Master Admin' : isSalesExecutive ? 'Sales Executive' : user?.warehouse_name}
                   </p>
                 </div>
               </div>
