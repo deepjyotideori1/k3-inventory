@@ -23,7 +23,7 @@ import { Button } from './ui/button';
 import { cn } from '../lib/utils';
 
 const Layout = ({ children }) => {
-  const { user, logout, isAdmin, maintenanceMode } = useAuth();
+  const { user, logout, isAdmin, isSalesExecutive, maintenanceMode } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
@@ -55,7 +55,22 @@ const Layout = ({ children }) => {
     { path: '/my-reports', label: 'My Reports', icon: FileText },
   ];
 
-  const links = isAdmin ? adminLinks : managerLinks;
+  const salesExecutiveLinks = [
+    { path: '/sales-dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { path: '/customers', label: 'Customers', icon: UserPlus },
+    { path: '/orders', label: 'Orders', icon: ShoppingCart },
+    { path: '/bulk-messaging', label: 'Bulk Messaging', icon: MessageSquare },
+  ];
+
+  // Select links based on role
+  let links;
+  if (isAdmin) {
+    links = adminLinks;
+  } else if (isSalesExecutive) {
+    links = salesExecutiveLinks;
+  } else {
+    links = [...managerLinks]; // Clone to avoid mutation
+  }
 
   // Check if current user is plant manager
   const isPlantManager = user?.warehouse_name === 'Plant Hollongi';
