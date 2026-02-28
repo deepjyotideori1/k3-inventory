@@ -248,14 +248,31 @@ const CustomerManagement = () => {
         const worksheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         
+        // Function to parse DD-MM-YYYY date format
+        const parseDate = (dateStr) => {
+          if (!dateStr) return getTodayDate();
+          const str = dateStr.toString().trim();
+          // Check if it's DD-MM-YYYY format
+          const ddmmyyyy = str.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+          if (ddmmyyyy) {
+            return `${ddmmyyyy[3]}-${ddmmyyyy[2]}-${ddmmyyyy[1]}`; // Convert to YYYY-MM-DD
+          }
+          // Check if it's already YYYY-MM-DD format
+          const yyyymmdd = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+          if (yyyymmdd) {
+            return str;
+          }
+          return getTodayDate();
+        };
+        
         // Skip header row - new format with phone column
         const customers = jsonData.slice(1).filter(row => row.length > 0 && row[2]).map(row => ({
-          date: row[0] || getTodayDate(),
+          date: parseDate(row[0]),
           connection_type: (row[1] || 'domestic').toLowerCase(),
           customer_name: row[2] || '',
           address: row[3] || '',
-          phone: row[4]?.toString() || '',
-          consumer_no: row[5]?.toString() || '',
+          phone: row[4]?.toString().replace(/\D/g, '').slice(0, 10) || '',
+          consumer_no: row[5]?.toString().replace(/\D/g, '').slice(0, 10) || '',
           cash_memo_no: row[6]?.toString() || '',
           cylinder_nos: row[7]?.toString() || '',
           gas_card_issued: (row[8] || '').toLowerCase() === 'yes',
