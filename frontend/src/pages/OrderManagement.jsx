@@ -180,14 +180,17 @@ const OrderManagement = () => {
   const handleCustomerSelect = (customerId) => {
     const customer = customers.find(c => c.id === customerId);
     if (customer) {
+      // Auto-fill all customer info from bulk uploaded data
+      const connectionType = customer.connection_type || 'domestic';
       setFormData({
         ...formData,
         customer_id: customerId,
         customer_name: customer.customer_name || '',
         mobile_number: customer.phone || customer.consumer_no || '',
         address_landmark: customer.address || '',
-        connection_type: customer.connection_type || 'domestic',
-        cylinder_nos: customer.cylinder_nos || ''
+        connection_type: connectionType,
+        cylinder_nos: customer.cylinder_nos || '',
+        remarks: customer.remarks || ''
       });
     }
   };
