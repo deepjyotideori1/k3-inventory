@@ -937,10 +937,12 @@ const OrderManagement = () => {
                             <td className="font-medium">{o.customer_name}</td>
                             <td>{o.mobile_number || '-'}</td>
                             <td>
-                              <Badge variant={o.connection_type === 'domestic' ? 'default' : 'secondary'}>
-                                {o.connection_type === 'domestic' ? <Home className="w-3 h-3 mr-1" /> : <Building2 className="w-3 h-3 mr-1" />}
-                                {o.connection_type}
-                              </Badge>
+                              {getConnectionTypeBadge(o.connection_type)}
+                              {o.cylinder_nos && (
+                                <div className="text-xs text-slate-500 mt-1">
+                                  <span className="font-medium">Cyl:</span> {o.cylinder_nos}
+                                </div>
+                              )}
                             </td>
                             <td>{getPaymentBadge(o.payment_mode)}</td>
                             <td>
