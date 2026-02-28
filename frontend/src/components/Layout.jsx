@@ -17,7 +17,8 @@ import {
   Boxes,
   UserPlus,
   ShoppingCart,
-  MessageSquare
+  MessageSquare,
+  TrendingUp
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
