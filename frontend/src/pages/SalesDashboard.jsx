@@ -834,7 +834,7 @@ const SalesDashboard = () => {
                     {/* No of Refills for Existing Customer (refill types) */}
                     {customerMode === 'existing' && (
                       <div>
-                        <Label>No of Refills *</Label>
+                        <Label className="text-sm">No of Refills *</Label>
                         <Input 
                           type="number"
                           value={formData.no_of_refills}
@@ -846,9 +846,9 @@ const SalesDashboard = () => {
                     )}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div>
-                      <Label>Memo No</Label>
+                      <Label className="text-sm">Memo No</Label>
                       <Input 
                         value={formData.memo_no}
                         onChange={(e) => setFormData({ ...formData, memo_no: e.target.value })}
@@ -857,7 +857,7 @@ const SalesDashboard = () => {
                       />
                     </div>
                     <div>
-                      <Label>Amount (₹) *</Label>
+                      <Label className="text-sm">Amount (₹) *</Label>
                       <Input 
                         type="number"
                         value={formData.amount}
@@ -867,7 +867,7 @@ const SalesDashboard = () => {
                       />
                     </div>
                     <div>
-                      <Label>Mode of Payment</Label>
+                      <Label className="text-sm">Mode of Payment</Label>
                       <Select value={formData.payment_mode} onValueChange={(v) => setFormData({ ...formData, payment_mode: v })}>
                         <SelectTrigger className="mt-1">
                           <SelectValue />
@@ -880,7 +880,7 @@ const SalesDashboard = () => {
                       </Select>
                     </div>
                     <div>
-                      <Label>Remarks</Label>
+                      <Label className="text-sm">Remarks</Label>
                       <Input 
                         value={formData.remarks}
                         onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
@@ -890,9 +890,9 @@ const SalesDashboard = () => {
                     </div>
                   </div>
                 </div>
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setAddDialogOpen(false)}>Cancel</Button>
-                  <Button onClick={handleAddEntry} disabled={submitting} className="bg-green-700 hover:bg-green-800">
+                <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-2">
+                  <Button variant="outline" onClick={() => setAddDialogOpen(false)} className="w-full sm:w-auto">Cancel</Button>
+                  <Button onClick={handleAddEntry} disabled={submitting} className="w-full sm:w-auto bg-green-700 hover:bg-green-800">
                     {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Add Entry'}
                   </Button>
                 </div>
