@@ -258,13 +258,14 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 
 ## DEFAULT CREDENTIALS
 
-| Role | Email | Password |
-|------|-------|----------|
-| Master Admin | admin@k3gas.com | Admin@123 |
-| Jullang Manager | jullang@k3gas.com | Jullang@123 |
-| Naharlagun Manager | naharlagun@k3gas.com | Naharlagun@123 |
-| Doimukh Manager | doimukh@k3gas.com | Doimukh@123 |
-| Plant Hollongi | hollongi@k3gas.com | Hollongi@123 |
+| Role | Email | Password | Warehouse |
+|------|-------|----------|-----------|
+| Master Admin | admin@k3gas.com | Admin@123 | All |
+| Sales Executive | sales@k3gas.com | Sales@123 | Jullang |
+| Jullang Manager | jullang@k3gas.com | Jullang@123 | Jullang |
+| Naharlagun Manager | naharlagun@k3gas.com | Naharlagun@123 | Naharlagun |
+| Doimukh Manager | doimukh@k3gas.com | Doimukh@123 | Doimukh |
+| Plant Hollongi | hollongi@k3gas.com | Hollongi@123 | Plant Hollongi |
 
 ---
 
