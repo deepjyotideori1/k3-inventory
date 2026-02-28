@@ -668,7 +668,11 @@ const OrderManagement = () => {
                             <SelectContent>
                               {customers.map((c) => (
                                 <SelectItem key={c.id} value={c.id}>
-                                  {c.customer_name} - {c.address?.substring(0, 30)}
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium">{c.customer_name}</span>
+                                    <Badge variant="outline" className="text-xs">{c.connection_type}</Badge>
+                                    {c.phone && <span className="text-slate-500 text-xs">({c.phone})</span>}
+                                  </div>
                                 </SelectItem>
                               ))}
                             </SelectContent>
