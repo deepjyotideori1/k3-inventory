@@ -171,6 +171,10 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] PDF export using ReportLab
 - [x] Excel export using XlsxWriter
 - [x] Exports filtered by user role (managers see only their data)
+- [x] **Indian Rupee Formatting** - All Sales exports display amounts in ₹XX,XX,XXX format
+- [x] **Clear Export Headers** - PDF and Excel exports have descriptive column headers
+- [x] **Export Date Range Filters** - Filter by Daily, Weekly, Monthly, Custom date ranges
+- [x] **Export Connection Type Filters** - Filter by Domestic, Commercial, Refill types
 
 ### UI/UX
 - [x] Professional green theme matching gas/energy industry
@@ -342,4 +346,4 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 
 ---
 
-*Last Updated: December 2025*
+*Last Updated: February 28, 2026*
