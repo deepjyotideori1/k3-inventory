@@ -143,3 +143,28 @@ button, a, input, select, textarea {
         display: contents !important;
     }
 }
+
+/* Prevent body scroll when dialog is open */
+body[data-scroll-locked] {
+    overflow: hidden !important;
+    padding-right: var(--scrollbar-width, 0px) !important;
+}
+
+/* Radix UI dialog scroll lock */
+[data-radix-scroll-area-viewport] {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+[data-radix-scroll-area-viewport]::-webkit-scrollbar {
+    display: none;
+}
+
+/* Ensure dialogs block background interaction */
+[data-state="open"][role="dialog"] {
+    pointer-events: auto;
+}
+
+[data-state="open"][data-radix-dialog-overlay] {
+    pointer-events: auto;
+}
