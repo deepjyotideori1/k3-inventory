@@ -635,7 +635,10 @@ const OrderManagement = () => {
                           type="button"
                           variant={useExistingCustomer ? "default" : "outline"}
                           size="sm"
-                          onClick={() => setUseExistingCustomer(true)}
+                          onClick={() => {
+                            setUseExistingCustomer(true);
+                            setFormData({ ...formData, connection_type: 'domestic_refill', cylinder_nos: '' });
+                          }}
                         >
                           Select Existing
                         </Button>
@@ -645,7 +648,7 @@ const OrderManagement = () => {
                           size="sm"
                           onClick={() => {
                             setUseExistingCustomer(false);
-                            setFormData({ ...formData, customer_id: '', customer_name: '', mobile_number: '', address_landmark: '' });
+                            setFormData({ ...formData, customer_id: '', customer_name: '', mobile_number: '', address_landmark: '', connection_type: 'domestic', cylinder_nos: '' });
                           }}
                         >
                           New Customer
