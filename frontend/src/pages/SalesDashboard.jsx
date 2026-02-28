@@ -731,6 +731,132 @@ const SalesDashboard = () => {
                 </div>
               </DialogContent>
             </Dialog>
+            
+            {/* Summary Report Dialog */}
+            <Dialog open={summaryExportOpen} onOpenChange={setSummaryExportOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="gap-2 border-purple-200 hover:bg-purple-50" data-testid="summary-export-btn">
+                  <BarChart3 className="w-4 h-4 text-purple-600" />
+                  Summary Report
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <BarChart3 className="w-5 h-5 text-purple-600" />
+                    Export Sales Summary
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <p className="text-sm text-slate-600 bg-purple-50 p-3 rounded-lg">
+                    Generate period-based summary reports with totals by day, week, or month. Includes breakdowns by payment mode and connection type.
+                  </p>
+                  
+                  <div>
+                    <Label>Group By Period</Label>
+                    <Select value={summaryGroupBy} onValueChange={setSummaryGroupBy}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="daily">
+                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-blue-600" /> Daily Totals</div>
+                        </SelectItem>
+                        <SelectItem value="weekly">
+                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-green-600" /> Weekly Totals</div>
+                        </SelectItem>
+                        <SelectItem value="monthly">
+                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-purple-600" /> Monthly Totals</div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div>
+                    <Label>Date Range</Label>
+                    <Select value={summaryDateRange} onValueChange={(v) => {
+                      setSummaryDateRange(v);
+                      if (v !== 'custom') {
+                        setSummaryStartDate('');
+                        setSummaryEndDate('');
+                      }
+                    }}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">
+                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4" /> All Time</div>
+                        </SelectItem>
+                        <SelectItem value="weekly">
+                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-green-600" /> Last 7 Days</div>
+                        </SelectItem>
+                        <SelectItem value="monthly">
+                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-purple-600" /> Last 30 Days</div>
+                        </SelectItem>
+                        <SelectItem value="yearly">
+                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-orange-600" /> Last Year</div>
+                        </SelectItem>
+                        <SelectItem value="custom">
+                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-slate-600" /> Custom Range</div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {summaryDateRange === 'custom' && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label>Start Date</Label>
+                        <Input 
+                          type="date" 
+                          value={summaryStartDate}
+                          onChange={(e) => setSummaryStartDate(e.target.value)}
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label>End Date</Label>
+                        <Input 
+                          type="date" 
+                          value={summaryEndDate}
+                          onChange={(e) => setSummaryEndDate(e.target.value)}
+                          className="mt-1"
+                        />
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div className="text-sm text-slate-500 bg-slate-50 p-2 rounded">
+                    Summary: {summaryGroupBy.charAt(0).toUpperCase() + summaryGroupBy.slice(1)} totals
+                    {summaryDateRange !== 'all' && ` · ${summaryDateRange === 'custom' ? `${summaryStartDate || 'Start'} to ${summaryEndDate || 'End'}` : summaryDateRange}`}
+                    {filterWarehouse !== 'all' && ' · Filtered Warehouse'}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <Button 
+                      onClick={handleSummaryExportPdf} 
+                      variant="outline" 
+                      className="gap-2 border-red-200 hover:bg-red-50"
+                      data-testid="summary-pdf-btn"
+                    >
+                      <FileText className="w-4 h-4 text-red-600" />
+                      Download PDF
+                    </Button>
+                    <Button 
+                      onClick={handleSummaryExportExcel} 
+                      variant="outline" 
+                      className="gap-2 border-green-200 hover:bg-green-50"
+                      data-testid="summary-excel-btn"
+                    >
+                      <Download className="w-4 h-4 text-green-600" />
+                      Download Excel
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+            
             <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
               <DialogTrigger asChild>
                 <Button className="bg-green-700 hover:bg-green-800 gap-2" data-testid="add-entry-btn">
