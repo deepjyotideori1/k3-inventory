@@ -352,16 +352,15 @@ const SalesDashboard = () => {
   const handleCustomerSelect = (customerId) => {
     const customer = customers.find(c => c.id === customerId);
     if (customer) {
-      // Auto-fill all customer info from bulk uploaded data
-      const connectionType = customer.connection_type || 'domestic';
+      // Auto-fill customer info from bulk uploaded data
+      // Keep the refill connection type since existing customers are for refills
       setFormData({
         ...formData,
         customer_id: customerId,
         consumer_name: customer.customer_name || customer.name || '',
         address: customer.address || '',
         consumer_no: customer.consumer_no || customer.phone || '',
-        connection_type: connectionType,
-        cylinder_nos: customer.cylinder_nos || '',
+        // Keep the current connection_type (refill type) - don't override from customer data
         memo_no: customer.cash_memo_no || '',
         remarks: customer.remarks || ''
       });
