@@ -334,6 +334,35 @@ const SalesDashboard = () => {
     }
   };
 
+  const getConnectionTypeBadge = (type) => {
+    switch(type) {
+      case 'domestic':
+        return <Badge className="bg-emerald-100 text-emerald-800"><Home className="w-3 h-3 mr-1" />Domestic</Badge>;
+      case 'domestic_refill':
+        return <Badge className="bg-blue-100 text-blue-800"><Home className="w-3 h-3 mr-1" />Domestic Refill</Badge>;
+      case 'commercial':
+        return <Badge className="bg-purple-100 text-purple-800"><Building2 className="w-3 h-3 mr-1" />Commercial</Badge>;
+      case 'commercial_refill':
+        return <Badge className="bg-indigo-100 text-indigo-800"><Building2 className="w-3 h-3 mr-1" />Commercial Refill</Badge>;
+      default:
+        return <Badge variant="outline">{type}</Badge>;
+    }
+  };
+
+  const handleCustomerSelect = (customerId) => {
+    const customer = customers.find(c => c.id === customerId);
+    if (customer) {
+      setFormData({
+        ...formData,
+        customer_id: customerId,
+        consumer_name: customer.name,
+        address: customer.address || '',
+        consumer_no: customer.consumer_no || customer.phone || '',
+        connection_type: customer.category === 'commercial' ? 'commercial' : 'domestic'
+      });
+    }
+  };
+
   // Calculate filtered totals
   const filteredTotals = useMemo(() => {
     return entries.reduce((acc, e) => ({
