@@ -180,16 +180,15 @@ const OrderManagement = () => {
   const handleCustomerSelect = (customerId) => {
     const customer = customers.find(c => c.id === customerId);
     if (customer) {
-      // Auto-fill all customer info from bulk uploaded data
-      const connectionType = customer.connection_type || 'domestic';
+      // Auto-fill customer info from bulk uploaded data
+      // Keep the refill connection type since existing customers are for refills
       setFormData({
         ...formData,
         customer_id: customerId,
         customer_name: customer.customer_name || '',
         mobile_number: customer.phone || customer.consumer_no || '',
         address_landmark: customer.address || '',
-        connection_type: connectionType,
-        cylinder_nos: customer.cylinder_nos || '',
+        // Keep the current connection_type (refill type) - don't override from customer data
         remarks: customer.remarks || ''
       });
     }
