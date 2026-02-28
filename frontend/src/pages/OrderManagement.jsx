@@ -626,9 +626,9 @@ const OrderManagement = () => {
                   </div>
 
                   {/* Customer Selection */}
-                  <div className="p-4 bg-slate-50 border rounded-lg space-y-4">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-lg font-medium">Customer Details</Label>
+                  <div className="p-3 sm:p-4 bg-slate-50 border rounded-lg space-y-3 sm:space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <Label className="text-base sm:text-lg font-medium">Customer Details</Label>
                       <div className="flex gap-2">
                         <Button 
                           type="button"
@@ -638,6 +638,7 @@ const OrderManagement = () => {
                             setUseExistingCustomer(true);
                             setFormData({ ...formData, connection_type: 'domestic_refill', cylinder_nos: '' });
                           }}
+                          className="flex-1 sm:flex-none text-xs sm:text-sm"
                         >
                           Select Existing
                         </Button>
@@ -649,6 +650,7 @@ const OrderManagement = () => {
                             setUseExistingCustomer(false);
                             setFormData({ ...formData, customer_id: '', customer_name: '', mobile_number: '', address_landmark: '', connection_type: 'domestic', cylinder_nos: '' });
                           }}
+                          className="flex-1 sm:flex-none text-xs sm:text-sm"
                         >
                           New Customer
                         </Button>
@@ -656,9 +658,9 @@ const OrderManagement = () => {
                     </div>
 
                     {useExistingCustomer ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                         <div>
-                          <Label>Filter by Category</Label>
+                          <Label className="text-sm">Filter by Category</Label>
                           <Select value={customerCategory} onValueChange={setCustomerCategory}>
                             <SelectTrigger className="mt-1">
                               <SelectValue />
@@ -671,7 +673,7 @@ const OrderManagement = () => {
                           </Select>
                         </div>
                         <div>
-                          <Label>Select Customer *</Label>
+                          <Label className="text-sm">Select Customer *</Label>
                           <Select value={formData.customer_id} onValueChange={handleCustomerSelect}>
                             <SelectTrigger className="mt-1" data-testid="customer-select">
                               <SelectValue placeholder="Choose a customer" />
@@ -679,8 +681,8 @@ const OrderManagement = () => {
                             <SelectContent>
                               {customers.map((c) => (
                                 <SelectItem key={c.id} value={c.id}>
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-medium">{c.customer_name}</span>
+                                  <div className="flex flex-wrap items-center gap-1 sm:gap-2">
+                                    <span className="font-medium text-sm">{c.customer_name}</span>
                                     <Badge variant="outline" className="text-xs">{c.connection_type}</Badge>
                                     {c.phone && <span className="text-slate-500 text-xs">({c.phone})</span>}
                                   </div>
@@ -691,14 +693,14 @@ const OrderManagement = () => {
                         </div>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <Button 
                           type="button"
                           variant="outline"
                           onClick={() => setShowNewCustomerDialog(true)}
-                          className="border-green-300 text-green-700"
+                          className="border-green-300 text-green-700 text-sm"
                         >
-                          <Plus className="w-4 h-4 mr-2" />
+                          <Plus className="w-4 h-4 mr-1 sm:mr-2" />
                           Add New Customer
                         </Button>
                         {formData.customer_name && (
@@ -708,9 +710,9 @@ const OrderManagement = () => {
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div>
-                      <Label className="flex items-center gap-2"><User className="w-4 h-4" /> Customer Name *</Label>
+                      <Label className="flex items-center gap-2 text-sm"><User className="w-4 h-4" /> Customer Name *</Label>
                       <Input 
                         value={formData.customer_name}
                         onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
