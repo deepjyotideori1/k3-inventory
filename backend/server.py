@@ -979,8 +979,12 @@ async def get_plant_received_from_warehouses(date: str, user: dict = Depends(get
 @api_router.get("/reports/warehouses-received-summary/{date}")
 async def get_warehouses_received_from_plant_summary(date: str, user: dict = Depends(get_current_user)):
     """Get summary of what all warehouses recorded as received from Plant Hollongi for a given date"""
+    # Allow admin and Plant Hollongi managers to access this
     if user['role'] != 'admin':
-        return {'detail': 'Admin access required'}
+        # Check if user is from Plant Hollongi
+        warehouse = await db.warehouses.find_one({'id': user.get('warehouse_id')})
+        if not warehouse or not warehouse.get('is_plant'):
+            return {'detail': 'Access restricted to admin and Plant Hollongi managers'}
     
     # Get all warehouse daily reports for the date
     reports = await db.daily_reports.find(
