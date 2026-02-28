@@ -10,6 +10,8 @@ import {
   getSalesSummary,
   exportSalesPdf,
   exportSalesExcel,
+  exportSalesSummaryPdf,
+  exportSalesSummaryExcel,
   getWarehouses,
   getCustomers,
   getFrequentCustomers
