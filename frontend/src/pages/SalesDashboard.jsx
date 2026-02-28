@@ -637,35 +637,6 @@ const SalesDashboard = () => {
                 </div>
               </DialogContent>
             </Dialog>
-                  </div>
-                  <div>
-                    <Label>No of Refills</Label>
-                    <Input 
-                      type="number"
-                      value={formData.no_of_refills}
-                      onChange={(e) => setFormData({ ...formData, no_of_refills: e.target.value })}
-                      placeholder="Enter refills count"
-                      className="mt-1"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <Label>Remarks</Label>
-                    <Input 
-                      value={formData.remarks}
-                      onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
-                      placeholder="Enter any remarks"
-                      className="mt-1"
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setAddDialogOpen(false)}>Cancel</Button>
-                  <Button onClick={handleAddEntry} disabled={submitting} className="bg-green-700 hover:bg-green-800">
-                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Add Entry'}
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
           </div>
         </div>
 
