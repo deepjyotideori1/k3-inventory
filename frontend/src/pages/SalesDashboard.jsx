@@ -1266,7 +1266,7 @@ const SalesDashboard = () => {
                             )}
                           </td>
                           <td>{entry.memo_no || '-'}</td>
-                          <td className="font-semibold text-green-700">₹{entry.amount?.toLocaleString()}</td>
+                          <td className="font-semibold text-green-700">{formatINR(entry.amount)}</td>
                           <td>{getPaymentBadge(entry.payment_mode)}</td>
                           <td className="text-center">{entry.no_of_refills || 0}</td>
                           <td className="max-w-[120px] truncate">{entry.remarks || '-'}</td>
