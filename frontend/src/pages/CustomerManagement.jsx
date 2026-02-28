@@ -94,7 +94,7 @@ const CustomerManagement = () => {
 
   useEffect(() => {
     fetchData();
-  }, [filterCategory, searchQuery, startDate, endDate]);
+  }, [filterCategory, filterWarehouse, searchQuery, startDate, endDate]);
 
   useEffect(() => {
     if (isAdmin) {
