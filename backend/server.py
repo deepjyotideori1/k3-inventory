@@ -3616,8 +3616,8 @@ async def export_sales_excel(
     ws = wb.active
     ws.title = "Sales Data"
     
-    # Headers
-    headers = ['SL NO', 'Date', 'Consumer Name', 'Address', 'Consumer No', 'Memo', 'Amount', 'Mode of Payment', 'NO of Refills', 'Remarks']
+    # Headers with clear form heads
+    headers = ['SL No.', 'Date', 'Consumer Name', 'Address', 'Consumer No.', 'Memo No.', 'Amount (₹)', 'Payment Mode', 'No. of Refills', 'Remarks']
     ws.append(headers)
     
     # Style headers
@@ -3639,7 +3639,7 @@ async def export_sales_excel(
             e.get('address', ''),
             e.get('consumer_no', ''),
             e.get('memo_no', ''),
-            e.get('amount', 0),
+            format_inr(e.get('amount', 0)),
             e.get('payment_mode', 'cash').capitalize(),
             e.get('no_of_refills', 0),
             e.get('remarks', '')
@@ -3647,9 +3647,9 @@ async def export_sales_excel(
         total_amount += e.get('amount', 0)
         total_refills += e.get('no_of_refills', 0)
     
-    # Add total row
+    # Add total row with Indian formatting
     total_row = len(entries) + 2
-    ws.append(['', '', '', '', '', 'TOTAL:', total_amount, '', total_refills, ''])
+    ws.append(['', '', '', '', '', 'TOTAL:', format_inr(total_amount), '', total_refills, ''])
     
     # Style total row
     total_fill = PatternFill(start_color="f0fdf4", end_color="f0fdf4", fill_type="solid")
