@@ -14,6 +14,7 @@ import jwt
 import bcrypt
 from io import BytesIO
 import json
+import locale
 
 # PDF and Excel imports
 from reportlab.lib import colors
@@ -24,6 +25,36 @@ from reportlab.lib.units import inch
 import xlsxwriter
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
+
+# Helper function for Indian Rupee formatting
+def format_inr(amount):
+    """Format number in Indian Rupee format (₹XX,XX,XXX)"""
+    if amount is None or amount == '':
+        return '₹0'
+    try:
+        num = float(amount)
+        # Indian numbering: last 3 digits, then groups of 2
+        if num < 0:
+            return '-₹' + format_inr(-num)[1:]
+        
+        s = str(int(num))
+        if len(s) <= 3:
+            result = s
+        else:
+            result = s[-3:]
+            s = s[:-3]
+            while s:
+                result = s[-2:] + ',' + result
+                s = s[:-2]
+        
+        # Add decimal part if exists
+        decimal_part = num - int(num)
+        if decimal_part > 0:
+            result += f'.{int(decimal_part * 100):02d}'
+        
+        return '₹' + result
+    except (ValueError, TypeError):
+        return '₹0'
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
