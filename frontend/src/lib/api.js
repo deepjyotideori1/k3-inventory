@@ -126,6 +126,66 @@ export const createDealer = (data) => api.post('/dealers', data);
 export const updateDealer = (dealerId, data) => api.put(`/dealers/${dealerId}`, data);
 export const deleteDealer = (dealerId) => api.delete(`/dealers/${dealerId}`);
 
+// Sales Entries
+export const getSalesEntries = (params) => api.get('/sales-entries', { params });
+export const createSalesEntry = (data) => api.post('/sales-entries', data);
+export const createSalesEntryForWarehouse = (warehouseId, data) => api.post(`/sales-entries/warehouse/${warehouseId}`, data);
+export const updateSalesEntry = (entryId, data) => api.put(`/sales-entries/${entryId}`, data);
+export const deleteSalesEntry = (entryId) => api.delete(`/sales-entries/${entryId}`);
+export const getSalesSummary = (params) => api.get('/sales-entries/summary', { params });
+
+export const exportSalesPdf = async (params) => {
+  try {
+    const response = await api.get('/export/sales-pdf', { 
+      params,
+      responseType: 'blob'
+    });
+    const contentDisposition = response.headers['content-disposition'];
+    let filename = `Sales_Report_${new Date().toISOString().split('T')[0]}.pdf`;
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename=(.+)/);
+      if (match) filename = match[1];
+    }
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Sales PDF export failed:', error);
+    throw error;
+  }
+};
+
+export const exportSalesExcel = async (params) => {
+  try {
+    const response = await api.get('/export/sales-excel', { 
+      params,
+      responseType: 'blob'
+    });
+    const contentDisposition = response.headers['content-disposition'];
+    let filename = `Sales_Report_${new Date().toISOString().split('T')[0]}.xlsx`;
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename=(.+)/);
+      if (match) filename = match[1];
+    }
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Sales Excel export failed:', error);
+    throw error;
+  }
+};
+
 // Dealer Entries
 export const createDealerEntry = (data) => api.post('/dealer-entries', data);
 export const getDealerEntries = (params) => api.get('/dealer-entries', { params });
