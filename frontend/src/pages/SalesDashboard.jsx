@@ -411,93 +411,232 @@ const SalesDashboard = () => {
                   Add Entry
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl">
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Add Sales Entry</DialogTitle>
                 </DialogHeader>
-                <div className="grid grid-cols-2 gap-4 py-4">
-                  <div>
-                    <Label>Date *</Label>
-                    <Input 
-                      type="date"
-                      value={formData.date}
-                      onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                      className="mt-1"
-                    />
+                <div className="space-y-4 py-4">
+                  {/* Customer Selection Mode */}
+                  <div className="flex gap-4 p-3 bg-slate-50 rounded-lg">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="customerMode"
+                        checked={customerMode === 'new'}
+                        onChange={() => {
+                          setCustomerMode('new');
+                          setFormData({ ...formData, customer_id: '', consumer_name: '', address: '', consumer_no: '' });
+                        }}
+                        className="w-4 h-4"
+                      />
+                      <span className="flex items-center gap-1 font-medium">
+                        <UserPlus className="w-4 h-4 text-green-600" />
+                        New Connection
+                      </span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="customerMode"
+                        checked={customerMode === 'existing'}
+                        onChange={() => setCustomerMode('existing')}
+                        className="w-4 h-4"
+                      />
+                      <span className="flex items-center gap-1 font-medium">
+                        <Users className="w-4 h-4 text-blue-600" />
+                        Existing Customer
+                      </span>
+                    </label>
                   </div>
-                  {isAdmin && (
+
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label>Warehouse *</Label>
-                      <Select value={formData.warehouse_id} onValueChange={(v) => setFormData({ ...formData, warehouse_id: v })}>
+                      <Label>Date *</Label>
+                      <Input 
+                        type="date"
+                        value={formData.date}
+                        onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                        className="mt-1"
+                      />
+                    </div>
+                    {isAdmin && (
+                      <div>
+                        <Label>Warehouse *</Label>
+                        <Select value={formData.warehouse_id} onValueChange={(v) => setFormData({ ...formData, warehouse_id: v })}>
+                          <SelectTrigger className="mt-1">
+                            <SelectValue placeholder="Select warehouse" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {warehouses.map(w => (
+                              <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Existing Customer Selection */}
+                  {customerMode === 'existing' && (
+                    <div>
+                      <Label>Select Customer *</Label>
+                      <Select value={formData.customer_id} onValueChange={handleCustomerSelect}>
                         <SelectTrigger className="mt-1">
-                          <SelectValue placeholder="Select warehouse" />
+                          <SelectValue placeholder="Search and select customer" />
                         </SelectTrigger>
                         <SelectContent>
-                          {warehouses.map(w => (
-                            <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                          {customers.map(c => (
+                            <SelectItem key={c.id} value={c.id}>
+                              <div className="flex items-center gap-2">
+                                <span>{c.name}</span>
+                                <Badge variant="outline" className="text-xs">{c.category}</Badge>
+                                {c.phone && <span className="text-slate-500 text-xs">({c.phone})</span>}
+                              </div>
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
                   )}
-                  <div>
-                    <Label>Consumer Name *</Label>
-                    <Input 
-                      value={formData.consumer_name}
-                      onChange={(e) => setFormData({ ...formData, consumer_name: e.target.value })}
-                      placeholder="Enter consumer name"
-                      className="mt-1"
-                    />
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Consumer Name *</Label>
+                      <Input 
+                        value={formData.consumer_name}
+                        onChange={(e) => setFormData({ ...formData, consumer_name: e.target.value })}
+                        placeholder="Enter consumer name"
+                        className="mt-1"
+                        disabled={customerMode === 'existing' && formData.customer_id}
+                      />
+                    </div>
+                    <div>
+                      <Label>Consumer No</Label>
+                      <Input 
+                        value={formData.consumer_no}
+                        onChange={(e) => setFormData({ ...formData, consumer_no: e.target.value })}
+                        placeholder="Enter consumer number"
+                        className="mt-1"
+                        disabled={customerMode === 'existing' && formData.customer_id}
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <Label>Address</Label>
+                      <Input 
+                        value={formData.address}
+                        onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                        placeholder="Enter address"
+                        className="mt-1"
+                        disabled={customerMode === 'existing' && formData.customer_id}
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <Label>Consumer No</Label>
-                    <Input 
-                      value={formData.consumer_no}
-                      onChange={(e) => setFormData({ ...formData, consumer_no: e.target.value })}
-                      placeholder="Enter consumer number"
-                      className="mt-1"
-                    />
+
+                  {/* Connection Type */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Connection Type *</Label>
+                      <Select 
+                        value={formData.connection_type} 
+                        onValueChange={(v) => setFormData({ ...formData, connection_type: v, cylinder_nos: '' })}
+                      >
+                        <SelectTrigger className="mt-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="domestic">
+                            <div className="flex items-center gap-2"><Home className="w-4 h-4" /> Domestic</div>
+                          </SelectItem>
+                          <SelectItem value="domestic_refill">
+                            <div className="flex items-center gap-2"><Home className="w-4 h-4 text-blue-600" /> Domestic Refill</div>
+                          </SelectItem>
+                          <SelectItem value="commercial">
+                            <div className="flex items-center gap-2"><Building2 className="w-4 h-4" /> Commercial</div>
+                          </SelectItem>
+                          <SelectItem value="commercial_refill">
+                            <div className="flex items-center gap-2"><Building2 className="w-4 h-4 text-blue-600" /> Commercial Refill</div>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>No of Refills</Label>
+                      <Input 
+                        type="number"
+                        value={formData.no_of_refills}
+                        onChange={(e) => setFormData({ ...formData, no_of_refills: e.target.value })}
+                        placeholder="Enter refills count"
+                        className="mt-1"
+                      />
+                    </div>
                   </div>
-                  <div className="col-span-2">
-                    <Label>Address</Label>
-                    <Input 
-                      value={formData.address}
-                      onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                      placeholder="Enter address"
-                      className="mt-1"
-                    />
+
+                  {/* Cylinder Nos for refill types */}
+                  {(formData.connection_type === 'domestic_refill' || formData.connection_type === 'commercial_refill') && (
+                    <div>
+                      <Label>Cylinder Nos. *</Label>
+                      <Input 
+                        value={formData.cylinder_nos}
+                        onChange={(e) => setFormData({ ...formData, cylinder_nos: e.target.value })}
+                        placeholder="Enter cylinder numbers (e.g., CYL001, CYL002)"
+                        className="mt-1"
+                      />
+                      <p className="text-xs text-slate-500 mt-1">Enter cylinder numbers for refill tracking</p>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Memo No</Label>
+                      <Input 
+                        value={formData.memo_no}
+                        onChange={(e) => setFormData({ ...formData, memo_no: e.target.value })}
+                        placeholder="Enter memo number"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label>Amount (₹) *</Label>
+                      <Input 
+                        type="number"
+                        value={formData.amount}
+                        onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                        placeholder="Enter amount"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label>Mode of Payment</Label>
+                      <Select value={formData.payment_mode} onValueChange={(v) => setFormData({ ...formData, payment_mode: v })}>
+                        <SelectTrigger className="mt-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cash">Cash</SelectItem>
+                          <SelectItem value="online">Online</SelectItem>
+                          <SelectItem value="pending">Pending</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Remarks</Label>
+                      <Input 
+                        value={formData.remarks}
+                        onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
+                        placeholder="Enter any remarks"
+                        className="mt-1"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <Label>Memo No</Label>
-                    <Input 
-                      value={formData.memo_no}
-                      onChange={(e) => setFormData({ ...formData, memo_no: e.target.value })}
-                      placeholder="Enter memo number"
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label>Amount (₹) *</Label>
-                    <Input 
-                      type="number"
-                      value={formData.amount}
-                      onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                      placeholder="Enter amount"
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label>Mode of Payment</Label>
-                    <Select value={formData.payment_mode} onValueChange={(v) => setFormData({ ...formData, payment_mode: v })}>
-                      <SelectTrigger className="mt-1">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="cash">Cash</SelectItem>
-                        <SelectItem value="online">Online</SelectItem>
-                        <SelectItem value="pending">Pending</SelectItem>
-                      </SelectContent>
-                    </Select>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setAddDialogOpen(false)}>Cancel</Button>
+                  <Button onClick={handleAddEntry} disabled={submitting} className="bg-green-700 hover:bg-green-800">
+                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Add Entry'}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
                   </div>
                   <div>
                     <Label>No of Refills</Label>
