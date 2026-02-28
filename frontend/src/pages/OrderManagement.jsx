@@ -558,9 +558,9 @@ const OrderManagement = () => {
                     </div>
                   )}
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                     <div>
-                      <Label>Order Date *</Label>
+                      <Label className="text-sm">Order Date *</Label>
                       <Input 
                         type="date" 
                         value={formData.order_date}
@@ -570,7 +570,7 @@ const OrderManagement = () => {
                       />
                     </div>
                     <div>
-                      <Label>Order No</Label>
+                      <Label className="text-sm">Order No</Label>
                       <Input 
                         value="Auto-generated"
                         disabled
@@ -578,7 +578,7 @@ const OrderManagement = () => {
                       />
                     </div>
                     <div>
-                      <Label>Connection Type *</Label>
+                      <Label className="text-sm">Connection Type *</Label>
                       <Select 
                         value={formData.connection_type} 
                         onValueChange={(v) => setFormData({ ...formData, connection_type: v, cylinder_nos: '' })}
@@ -613,7 +613,7 @@ const OrderManagement = () => {
                     {/* Cylinder Nos field for New Customer (domestic/commercial) only */}
                     {!useExistingCustomer && (
                       <div>
-                        <Label>Cylinder Nos.</Label>
+                        <Label className="text-sm">Cylinder Nos.</Label>
                         <Input 
                           value={formData.cylinder_nos}
                           onChange={(e) => setFormData({ ...formData, cylinder_nos: e.target.value })}
