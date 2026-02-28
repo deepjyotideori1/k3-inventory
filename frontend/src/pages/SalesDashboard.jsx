@@ -80,10 +80,13 @@ const SalesDashboard = () => {
   // Filters
   const [filterWarehouse, setFilterWarehouse] = useState('all');
   const [filterPaymentMode, setFilterPaymentMode] = useState('all');
+  const [filterConnectionType, setFilterConnectionType] = useState('all');
   const [filterDateRange, setFilterDateRange] = useState('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [exportConnectionType, setExportConnectionType] = useState('all');
 
   // Form state
   const getTodayDate = () => new Date().toISOString().split('T')[0];
