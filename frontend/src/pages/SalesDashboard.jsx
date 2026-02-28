@@ -87,6 +87,9 @@ const SalesDashboard = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [exportConnectionType, setExportConnectionType] = useState('all');
+  const [exportDateRange, setExportDateRange] = useState('all');
+  const [exportStartDate, setExportStartDate] = useState('');
+  const [exportEndDate, setExportEndDate] = useState('');
 
   // Form state
   const getTodayDate = () => new Date().toISOString().split('T')[0];
