@@ -8,6 +8,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import ManagerDashboard from "./pages/ManagerDashboard";
 import SalesExecutiveDashboard from "./pages/SalesExecutiveDashboard";
+import SalesDashboard from "./pages/SalesDashboard";
 import DailyEntry from "./pages/DailyEntry";
 import PlantEntry from "./pages/PlantEntry";
 import Reports from "./pages/Reports";
