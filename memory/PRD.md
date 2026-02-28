@@ -119,7 +119,7 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 
 ### Order Management (Feb 23, 2026)
 - [x] **Order Generation Dashboard** - All warehouses except Plant Hollongi
-- [x] **Auto Order Sequence** - A1, A2, A3... per warehouse (endless sequence)
+- [x] **Auto Order Sequence** - Warehouse-specific prefixes (J1, J2... for Jullang, N1, N2... for Naharlagun, D1, D2... for Doimukh)
 - [x] Order data fields:
   - Order Date, Order No (Auto-generated), Customer Name, Mobile Number
   - Address/Landmark, Connection Type (Domestic/Commercial/Domestic Refill/Commercial Refill)
