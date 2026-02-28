@@ -239,6 +239,8 @@ const SalesDashboard = () => {
       consumer_no: entry.consumer_no || '',
       memo_no: entry.memo_no || '',
       amount: entry.amount,
+      connection_type: entry.connection_type || 'domestic',
+      cylinder_nos: entry.cylinder_nos || '',
       payment_mode: entry.payment_mode,
       no_of_refills: entry.no_of_refills,
       remarks: entry.remarks || ''
