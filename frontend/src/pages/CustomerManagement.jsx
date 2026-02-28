@@ -663,14 +663,21 @@ const CustomerManagement = () => {
                       />
                     </div>
                     <div>
-                      <Label>Phone (for SMS/WhatsApp)</Label>
+                      <Label>Phone (10 digits for SMS/WhatsApp)</Label>
                       <Input 
                         value={formData.phone}
-                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                        placeholder="e.g., 9876543210"
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                          setFormData({ ...formData, phone: value });
+                        }}
+                        placeholder="Enter 10 digit number"
                         className="mt-1"
+                        maxLength={10}
                         data-testid="customer-phone"
                       />
+                      {formData.phone && formData.phone.length !== 10 && (
+                        <p className="text-xs text-red-500 mt-1">Must be 10 digits ({formData.phone.length}/10)</p>
+                      )}
                     </div>
                   </div>
 
@@ -688,14 +695,21 @@ const CustomerManagement = () => {
                     <div className="space-y-4">
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <Label>Consumer No</Label>
+                          <Label>Consumer No (10 digits)</Label>
                           <Input 
                             value={formData.consumer_no}
-                            onChange={(e) => setFormData({ ...formData, consumer_no: e.target.value })}
-                            placeholder="e.g., CON001"
+                            onChange={(e) => {
+                              const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                              setFormData({ ...formData, consumer_no: value });
+                            }}
+                            placeholder="Enter 10 digit number"
                             className="mt-1"
+                            maxLength={10}
                             data-testid="consumer-no"
                           />
+                          {formData.consumer_no && formData.consumer_no.length !== 10 && (
+                            <p className="text-xs text-red-500 mt-1">Must be 10 digits ({formData.consumer_no.length}/10)</p>
+                          )}
                         </div>
                         <div>
                           <Label>Cash Memo No</Label>
