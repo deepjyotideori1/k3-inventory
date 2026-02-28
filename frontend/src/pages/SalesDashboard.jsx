@@ -723,7 +723,7 @@ const SalesDashboard = () => {
                   {/* Existing Customer Selection */}
                   {customerMode === 'existing' && (
                     <div>
-                      <Label>Select Customer *</Label>
+                      <Label className="text-sm">Select Customer *</Label>
                       <Select value={formData.customer_id} onValueChange={handleCustomerSelect}>
                         <SelectTrigger className="mt-1">
                           <SelectValue placeholder="Search and select customer" />
@@ -731,8 +731,8 @@ const SalesDashboard = () => {
                         <SelectContent>
                           {customers.map(c => (
                             <SelectItem key={c.id} value={c.id}>
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium">{c.customer_name || c.name}</span>
+                              <div className="flex flex-wrap items-center gap-1 sm:gap-2">
+                                <span className="font-medium text-sm">{c.customer_name || c.name}</span>
                                 <Badge variant="outline" className="text-xs">{c.connection_type || c.category}</Badge>
                                 {(c.phone || c.consumer_no) && <span className="text-slate-500 text-xs">({c.phone || c.consumer_no})</span>}
                               </div>
@@ -743,9 +743,9 @@ const SalesDashboard = () => {
                     </div>
                   )}
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div>
-                      <Label>Consumer Name *</Label>
+                      <Label className="text-sm">Consumer Name *</Label>
                       <Input 
                         value={formData.consumer_name}
                         onChange={(e) => setFormData({ ...formData, consumer_name: e.target.value })}
@@ -755,7 +755,7 @@ const SalesDashboard = () => {
                       />
                     </div>
                     <div>
-                      <Label>Consumer No (10 digits)</Label>
+                      <Label className="text-sm">Consumer No (10 digits)</Label>
                       <Input 
                         value={formData.consumer_no}
                         onChange={(e) => {
@@ -771,8 +771,8 @@ const SalesDashboard = () => {
                         <p className="text-xs text-red-500 mt-1">Must be 10 digits ({formData.consumer_no.length}/10)</p>
                       )}
                     </div>
-                    <div className="col-span-2">
-                      <Label>Address</Label>
+                    <div className="sm:col-span-2">
+                      <Label className="text-sm">Address</Label>
                       <Input 
                         value={formData.address}
                         onChange={(e) => setFormData({ ...formData, address: e.target.value })}
@@ -784,9 +784,9 @@ const SalesDashboard = () => {
                   </div>
 
                   {/* Connection Type */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div>
-                      <Label>Connection Type *</Label>
+                      <Label className="text-sm">Connection Type *</Label>
                       <Select 
                         value={formData.connection_type} 
                         onValueChange={(v) => setFormData({ ...formData, connection_type: v, cylinder_nos: '', no_of_refills: '' })}
