@@ -4,8 +4,11 @@
 .login-bg-image {
     background-image: url('https://customer-assets.emergentagent.com/job_433b18e5-d02d-4785-9fa3-98c8b7e84969/artifacts/p5l96v8t_bullet%20tank%20image%20%281%29.jpeg');
     background-size: cover;
-    background-position: center;
+    background-position: center center;
+    background-repeat: no-repeat;
     position: relative;
+    min-height: 100vh;
+    width: 100%;
 }
 
 .login-bg-image::before {
