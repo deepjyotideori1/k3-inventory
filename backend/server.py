@@ -3543,6 +3543,7 @@ async def export_sales_excel(
     start_date: str = None,
     end_date: str = None,
     payment_mode: str = None,
+    connection_type: str = None,
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Export sales entries to Excel"""
@@ -3566,6 +3567,9 @@ async def export_sales_excel(
     
     if payment_mode and payment_mode != 'all':
         query['payment_mode'] = payment_mode
+    
+    if connection_type and connection_type != 'all':
+        query['connection_type'] = connection_type
     
     entries = await db.sales_entries.find(query, {'_id': 0}).sort('date', -1).to_list(5000)
     
