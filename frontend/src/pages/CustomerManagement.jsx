@@ -470,6 +470,22 @@ const CustomerManagement = () => {
                       </SelectContent>
                     </Select>
                   </div>
+                  {isAdmin && (
+                    <div>
+                      <Label>Warehouse</Label>
+                      <Select value={filterWarehouse} onValueChange={setFilterWarehouse}>
+                        <SelectTrigger className="w-44 mt-1" data-testid="warehouse-filter">
+                          <SelectValue placeholder="All Warehouses" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Warehouses</SelectItem>
+                          {warehouses.filter(w => w.name !== 'Plant Hollongi').map(w => (
+                            <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   <div>
                     <Label>Start Date</Label>
                     <Input 
