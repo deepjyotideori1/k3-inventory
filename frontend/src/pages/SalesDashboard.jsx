@@ -298,6 +298,53 @@ const SalesDashboard = () => {
     }
   };
 
+  const handleQuickRefill = (customer) => {
+    setQuickRefillCustomer(customer);
+    setQuickRefillForm({
+      no_of_refills: '1',
+      amount: customer.avg_amount ? String(Math.round(customer.avg_amount)) : '',
+      payment_mode: 'cash',
+      remarks: ''
+    });
+    setQuickRefillDialogOpen(true);
+  };
+
+  const handleSubmitQuickRefill = async () => {
+    if (!quickRefillCustomer) return;
+    
+    setSubmitting(true);
+    try {
+      const entryData = {
+        date: new Date().toISOString().split('T')[0],
+        consumer_name: quickRefillCustomer.consumer_name,
+        address: quickRefillCustomer.address,
+        consumer_no: quickRefillCustomer.consumer_no,
+        memo_no: quickRefillCustomer.memo_no || '',
+        amount: parseFloat(quickRefillForm.amount) || 0,
+        connection_type: quickRefillCustomer.connection_type || 'domestic_refill',
+        payment_mode: quickRefillForm.payment_mode,
+        no_of_refills: parseInt(quickRefillForm.no_of_refills) || 1,
+        remarks: quickRefillForm.remarks
+      };
+
+      if (isAdmin && quickRefillCustomer.warehouse_id) {
+        await createSalesEntryForWarehouse(quickRefillCustomer.warehouse_id, entryData);
+      } else {
+        await createSalesEntry(entryData);
+      }
+
+      toast.success(`Quick refill added for ${quickRefillCustomer.consumer_name}`);
+      setQuickRefillDialogOpen(false);
+      setQuickRefillCustomer(null);
+      fetchData();
+    } catch (error) {
+      console.error('Failed to add quick refill:', error);
+      toast.error(error.response?.data?.detail || 'Failed to add refill entry');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleExportPdf = async () => {
     try {
       const params = {};
