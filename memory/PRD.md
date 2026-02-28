@@ -121,9 +121,10 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
   - Order Date, Order No (Auto-generated), Customer Name, Mobile Number
   - Address/Landmark, Connection Type (Domestic/Commercial/Domestic Refill/Commercial Refill)
   - Payment Mode (Cash/Online/Credit-Pending), Remarks
-  - Cylinder Nos (for refill connection types)
-- [x] **Select Existing Customer** - Select from customer database with category filter
-- [x] **Auto-Fill Customer Data** - When selecting existing customer, all fields (name, mobile, address, connection_type, cylinder_nos, remarks) auto-populate
+  - Cylinder Nos (for new customer connection types only)
+- [x] **New Customer Mode** - Shows Domestic/Commercial connection types with Cylinder Nos field
+- [x] **Select Existing Mode** - Shows Domestic Refill/Commercial Refill connection types (no cylinder nos field)
+- [x] **Auto-Fill Customer Data** - When selecting existing customer, fields auto-populate correctly
 - [x] **Add New Customer** - Option to add customer while creating order
 - [x] **Individual Order PDF** - Download single order as PDF
 - [x] **Order Reports View** with filters:
