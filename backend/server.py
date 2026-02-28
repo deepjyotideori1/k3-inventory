@@ -976,6 +976,57 @@ async def get_plant_received_from_warehouses(date: str, user: dict = Depends(get
         'total_21kg': total_21kg
     }
 
+@api_router.get("/reports/warehouses-received-summary/{date}")
+async def get_warehouses_received_from_plant_summary(date: str, user: dict = Depends(get_current_user)):
+    """Get summary of what all warehouses recorded as received from Plant Hollongi for a given date"""
+    if user['role'] != 'admin':
+        return {'detail': 'Admin access required'}
+    
+    # Get all warehouse daily reports for the date
+    reports = await db.daily_reports.find(
+        {'date': date},
+        {'_id': 0}
+    ).to_list(100)
+    
+    received_15kg = []
+    received_21kg = []
+    total_15kg = 0
+    total_21kg = 0
+    
+    for r in reports:
+        warehouse = await db.warehouses.find_one({'id': r.get('warehouse_id')})
+        warehouse_name = warehouse['name'] if warehouse else 'Unknown'
+        
+        # Skip Plant Hollongi itself
+        if warehouse_name == 'Plant Hollongi':
+            continue
+        
+        if r.get('received_from_plant_15kg', 0) > 0:
+            received_15kg.append({
+                'warehouse_id': r.get('warehouse_id'),
+                'warehouse_name': warehouse_name,
+                'quantity': r.get('received_from_plant_15kg'),
+                'status': r.get('status')
+            })
+            total_15kg += r.get('received_from_plant_15kg', 0)
+        
+        if r.get('received_from_plant_21kg', 0) > 0:
+            received_21kg.append({
+                'warehouse_id': r.get('warehouse_id'),
+                'warehouse_name': warehouse_name,
+                'quantity': r.get('received_from_plant_21kg'),
+                'status': r.get('status')
+            })
+            total_21kg += r.get('received_from_plant_21kg', 0)
+    
+    return {
+        'date': date,
+        'received_15kg': received_15kg,
+        'received_21kg': received_21kg,
+        'total_15kg': total_15kg,
+        'total_21kg': total_21kg
+    }
+
 @api_router.get("/reports/daily", response_model=List[DailyReportResponse])
 async def get_daily_reports(
     warehouse_id: Optional[str] = None,
