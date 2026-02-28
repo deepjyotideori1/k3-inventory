@@ -2417,6 +2417,7 @@ async def get_customers(
     search: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    warehouse_id: Optional[str] = None,
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Get customers for the user's warehouse (or all for admin)"""
@@ -2427,6 +2428,9 @@ async def get_customers(
     # Filter by warehouse for non-admin users
     if user['role'] != 'admin':
         query['warehouse_id'] = user.get('warehouse_id')
+    elif warehouse_id and warehouse_id != 'all':
+        # Admin can filter by specific warehouse
+        query['warehouse_id'] = warehouse_id
     
     # Filter by category (domestic/commercial)
     if category and category != 'all':
