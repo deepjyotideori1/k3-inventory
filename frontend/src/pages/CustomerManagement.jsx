@@ -956,21 +956,36 @@ const CustomerManagement = () => {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>Phone (for SMS/WhatsApp)</Label>
+                  <Label>Phone (10 digits)</Label>
                   <Input 
                     value={editForm.phone || ''}
-                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                    placeholder="e.g., 9876543210"
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      setEditForm({ ...editForm, phone: value });
+                    }}
+                    placeholder="Enter 10 digit number"
+                    maxLength={10}
                     className="mt-1"
                   />
+                  {editForm.phone && editForm.phone.length !== 10 && (
+                    <p className="text-xs text-red-500 mt-1">Must be 10 digits ({editForm.phone.length}/10)</p>
+                  )}
                 </div>
                 <div>
-                  <Label>Consumer No</Label>
+                  <Label>Consumer No (10 digits)</Label>
                   <Input 
                     value={editForm.consumer_no || ''}
-                    onChange={(e) => setEditForm({ ...editForm, consumer_no: e.target.value })}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      setEditForm({ ...editForm, consumer_no: value });
+                    }}
+                    placeholder="Enter 10 digit number"
+                    maxLength={10}
                     className="mt-1"
                   />
+                  {editForm.consumer_no && editForm.consumer_no.length !== 10 && (
+                    <p className="text-xs text-red-500 mt-1">Must be 10 digits ({editForm.consumer_no.length}/10)</p>
+                  )}
                 </div>
               </div>
               <div>
