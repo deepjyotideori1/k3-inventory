@@ -3517,7 +3517,7 @@ async def export_sales_pdf(
     elements.append(Spacer(1, 0.25*inch))
     
     # Table data
-    data = [['SL', 'Date', 'Consumer Name', 'Address', 'Consumer No', 'Memo', 'Amount', 'Payment', 'Refills', 'Remarks']]
+    data = [['SL', 'Date', 'Consumer Name', 'Address', 'Consumer No', 'Memo No', 'Amount (₹)', 'Payment Mode', 'Refills', 'Remarks']]
     
     total_amount = 0
     total_refills = 0
@@ -3530,7 +3530,7 @@ async def export_sales_pdf(
             e.get('address', '')[:15] if len(e.get('address', '')) > 15 else e.get('address', ''),
             e.get('consumer_no', ''),
             e.get('memo_no', ''),
-            f"₹{e.get('amount', 0):.2f}",
+            format_inr(e.get('amount', 0)),
             e.get('payment_mode', 'cash').capitalize(),
             str(e.get('no_of_refills', 0)),
             e.get('remarks', '')[:15] if len(e.get('remarks', '')) > 15 else e.get('remarks', '')
