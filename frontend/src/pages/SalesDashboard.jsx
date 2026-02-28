@@ -50,6 +50,7 @@ const SalesDashboard = () => {
   const { user, isAdmin } = useAuth();
   const [entries, setEntries] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
+  const [customers, setCustomers] = useState([]);
   const [summary, setSummary] = useState({
     cash: { amount: 0, refills: 0, count: 0 },
     online: { amount: 0, refills: 0, count: 0 },
@@ -61,6 +62,7 @@ const SalesDashboard = () => {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState(null);
+  const [customerMode, setCustomerMode] = useState('new'); // 'new' or 'existing'
 
   // Filters
   const [filterWarehouse, setFilterWarehouse] = useState('all');
@@ -75,11 +77,14 @@ const SalesDashboard = () => {
   
   const [formData, setFormData] = useState({
     date: getTodayDate(),
+    customer_id: '',
     consumer_name: '',
     address: '',
     consumer_no: '',
     memo_no: '',
     amount: '',
+    connection_type: 'domestic',
+    cylinder_nos: '',
     payment_mode: 'cash',
     no_of_refills: '',
     remarks: '',
