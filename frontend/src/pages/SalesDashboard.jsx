@@ -430,7 +430,7 @@ const SalesDashboard = () => {
                         checked={customerMode === 'new'}
                         onChange={() => {
                           setCustomerMode('new');
-                          setFormData({ ...formData, customer_id: '', consumer_name: '', address: '', consumer_no: '' });
+                          setFormData({ ...formData, customer_id: '', consumer_name: '', address: '', consumer_no: '', connection_type: 'domestic', cylinder_nos: '', no_of_refills: '' });
                         }}
                         className="w-4 h-4"
                       />
@@ -444,7 +444,10 @@ const SalesDashboard = () => {
                         type="radio"
                         name="customerMode"
                         checked={customerMode === 'existing'}
-                        onChange={() => setCustomerMode('existing')}
+                        onChange={() => {
+                          setCustomerMode('existing');
+                          setFormData({ ...formData, connection_type: 'domestic_refill', cylinder_nos: '', no_of_refills: '' });
+                        }}
                         className="w-4 h-4"
                       />
                       <span className="flex items-center gap-1 font-medium">
