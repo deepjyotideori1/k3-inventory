@@ -42,7 +42,10 @@ import {
   Home,
   Building2,
   UserPlus,
-  Users
+  Users,
+  Zap,
+  Repeat,
+  Star
 } from 'lucide-react';
 import { formatDate } from '../lib/utils';
 import { toast } from 'sonner';
