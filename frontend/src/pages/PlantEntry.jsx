@@ -412,16 +412,33 @@ const PlantEntry = () => {
                   <div className="p-4 bg-slate-50 rounded-lg text-center">
                     <AlertCircle className="w-6 h-6 text-slate-400 mx-auto mb-2" />
                     <p className="text-slate-500 text-sm">No 15kg empties received from warehouses today</p>
-                    <p className="text-slate-400 text-xs mt-1">Warehouses need to submit their daily reports with "Refilling at Plant" entries</p>
+                    <p className="text-slate-400 text-xs mt-1">Click "Add Manual Entry" to add received empties</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
                     {formData.received_empty_15kg.map((item, idx) => (
                       <div key={idx} className="flex items-center gap-2 p-2 bg-white rounded-lg border border-amber-200">
-                        <div className="flex-1">
-                          <span className="font-medium text-slate-700">{item.warehouse_name || 'Unknown'}</span>
-                        </div>
-                        <Badge className="bg-amber-100 text-amber-700">{item.quantity} units</Badge>
+                        <Select 
+                          value={item.warehouse_id} 
+                          onValueChange={(val) => updateReceived('15kg', idx, 'warehouse_id', val)}
+                        >
+                          <SelectTrigger className="w-40">
+                            <SelectValue placeholder="Select warehouse" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {warehouses.map(w => (
+                              <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input 
+                          type="number" 
+                          placeholder="Qty"
+                          value={item.quantity}
+                          onChange={(e) => updateReceived('15kg', idx, 'quantity', e.target.value)}
+                          className="w-24"
+                        />
+                        <span className="text-sm text-slate-500">units</span>
                         <Button type="button" variant="ghost" size="icon" onClick={() => removeReceived('15kg', idx)}>
                           <Trash2 className="w-4 h-4 text-red-500" />
                         </Button>
