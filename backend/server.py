@@ -3047,11 +3047,14 @@ async def export_customers_excel(
 
 class SalesEntryCreate(BaseModel):
     date: str
+    customer_id: Optional[str] = None  # Existing customer
     consumer_name: str
     address: str = ""
     consumer_no: str = ""
     memo_no: str = ""
     amount: float = 0
+    connection_type: str = "domestic"  # domestic, domestic_refill, commercial, commercial_refill
+    cylinder_nos: str = ""  # Required for refill types
     payment_mode: str = "cash"  # cash, online, pending
     no_of_refills: int = 0
     remarks: str = ""
@@ -3063,6 +3066,8 @@ class SalesEntryUpdate(BaseModel):
     consumer_no: Optional[str] = None
     memo_no: Optional[str] = None
     amount: Optional[float] = None
+    connection_type: Optional[str] = None
+    cylinder_nos: Optional[str] = None
     payment_mode: Optional[str] = None
     no_of_refills: Optional[int] = None
     remarks: Optional[str] = None
