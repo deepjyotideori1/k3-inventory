@@ -2894,6 +2894,7 @@ async def export_customers_pdf(
     category: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    warehouse_id: Optional[str] = None,
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Export customers to PDF"""
@@ -2902,6 +2903,8 @@ async def export_customers_pdf(
     query = {}
     if user['role'] != 'admin':
         query['warehouse_id'] = user.get('warehouse_id')
+    elif warehouse_id and warehouse_id != 'all':
+        query['warehouse_id'] = warehouse_id
     
     if category and category != 'all':
         query['connection_type'] = category
@@ -2920,6 +2923,9 @@ async def export_customers_pdf(
     warehouse_name = "All Warehouses"
     if user['role'] != 'admin':
         warehouse = await db.warehouses.find_one({'id': user.get('warehouse_id')})
+        warehouse_name = warehouse['name'] if warehouse else 'Unknown'
+    elif warehouse_id and warehouse_id != 'all':
+        warehouse = await db.warehouses.find_one({'id': warehouse_id})
         warehouse_name = warehouse['name'] if warehouse else 'Unknown'
     
     # Create PDF
