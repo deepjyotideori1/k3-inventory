@@ -116,13 +116,14 @@ const CustomerManagement = () => {
     try {
       const params = {};
       if (filterCategory !== 'all') params.category = filterCategory;
+      if (filterWarehouse !== 'all') params.warehouse_id = filterWarehouse;
       if (searchQuery) params.search = searchQuery;
       if (startDate) params.start_date = startDate;
       if (endDate) params.end_date = endDate;
       
       const [customersRes, summaryRes] = await Promise.all([
         getCustomers(params),
-        getCustomerSummary()
+        getCustomerSummary(filterWarehouse !== 'all' ? { warehouse_id: filterWarehouse } : {})
       ]);
       
       setCustomers(customersRes.data);
