@@ -533,6 +533,64 @@ const SalesDashboard = () => {
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                   <div>
+                    <Label>Date Range</Label>
+                    <Select value={exportDateRange} onValueChange={(v) => {
+                      setExportDateRange(v);
+                      if (v !== 'custom') {
+                        setExportStartDate('');
+                        setExportEndDate('');
+                      }
+                    }}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">
+                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4" /> All Time</div>
+                        </SelectItem>
+                        <SelectItem value="daily">
+                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-blue-600" /> Daily (Today)</div>
+                        </SelectItem>
+                        <SelectItem value="weekly">
+                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-green-600" /> Weekly (Last 7 days)</div>
+                        </SelectItem>
+                        <SelectItem value="monthly">
+                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-purple-600" /> Monthly (Last 30 days)</div>
+                        </SelectItem>
+                        <SelectItem value="yearly">
+                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-orange-600" /> Yearly (Last 365 days)</div>
+                        </SelectItem>
+                        <SelectItem value="custom">
+                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-slate-600" /> Custom Range</div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {exportDateRange === 'custom' && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label>Start Date</Label>
+                        <Input 
+                          type="date" 
+                          value={exportStartDate}
+                          onChange={(e) => setExportStartDate(e.target.value)}
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label>End Date</Label>
+                        <Input 
+                          type="date" 
+                          value={exportEndDate}
+                          onChange={(e) => setExportEndDate(e.target.value)}
+                          className="mt-1"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
                     <Label>Filter by Connection Type</Label>
                     <Select value={exportConnectionType} onValueChange={setExportConnectionType}>
                       <SelectTrigger className="mt-1">
@@ -558,8 +616,10 @@ const SalesDashboard = () => {
                     </Select>
                   </div>
                   
-                  <p className="text-sm text-slate-500">
-                    Current filters will be applied: {filterWarehouse !== 'all' ? 'Warehouse, ' : ''}{filterPaymentMode !== 'all' ? 'Payment Mode, ' : ''}{startDate ? 'Date Range' : 'All Time'}
+                  <p className="text-sm text-slate-500 bg-slate-50 p-2 rounded">
+                    Export filters: {exportDateRange === 'all' ? 'All Time' : exportDateRange === 'custom' ? `${exportStartDate || 'Start'} to ${exportEndDate || 'End'}` : exportDateRange.charAt(0).toUpperCase() + exportDateRange.slice(1)}
+                    {exportConnectionType !== 'all' && ` · ${exportConnectionType.replace('_', ' ')}`}
+                    {filterWarehouse !== 'all' && ' · Filtered Warehouse'}
                   </p>
 
                   <div className="grid grid-cols-2 gap-3 pt-2">
