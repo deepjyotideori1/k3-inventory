@@ -162,18 +162,12 @@ const DailyEntry = () => {
       const response = await getWarehouseReceivedFromPlant(user.warehouse_id, date);
       const data = response.data;
       
-      // Only update if not editing existing report's plant delivery data
-      if (!existingReport || existingReport.received_from_plant_15kg === 0) {
-        setFormData(prev => ({
-          ...prev,
-          received_from_plant_15kg: data.received_15kg_filled || 0,
-          received_from_plant_21kg: data.received_21kg_filled || 0
-        }));
-      }
-      
+      // Store Plant Hollongi's recorded deliveries as reference info only (no auto-population)
       setPlantDeliverySync({
         synced: data.synced_from_plant,
-        date: date
+        date: date,
+        plant_recorded_15kg: data.received_15kg_filled || 0,
+        plant_recorded_21kg: data.received_21kg_filled || 0
       });
     } catch (error) {
       console.error('Failed to fetch plant deliveries:', error);
