@@ -4697,11 +4697,11 @@ async def send_bulk_message(
     # Get customers with phone numbers
     customers = await db.customers.find(query).to_list(10000)
     
-    # Filter to those with phone numbers
+    # Filter to those with phone numbers (exactly 10 digits)
     recipients = []
     for c in customers:
         phone = c.get('mobile_number') or c.get('phone') or ''
-        if phone and len(phone) >= 10:
+        if phone and len(phone) == 10:
             recipients.append({
                 'id': c['id'],
                 'name': c['customer_name'],
