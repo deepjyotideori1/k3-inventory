@@ -47,7 +47,8 @@ import {
   Users,
   Zap,
   Repeat,
-  Star
+  Star,
+  BarChart3
 } from 'lucide-react';
 import { formatDate, formatINR } from '../lib/utils';
 import { toast } from 'sonner';
