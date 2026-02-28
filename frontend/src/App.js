@@ -72,7 +72,7 @@ const RoleBasedRedirect = () => {
   if (user.role === 'admin') {
     return <Navigate to="/dashboard" replace />;
   } else if (user.role === 'sales_executive') {
-    return <Navigate to="/customers" replace />;
+    return <Navigate to="/sales-data" replace />;
   } else {
     return <Navigate to="/manager-dashboard" replace />;
   }
