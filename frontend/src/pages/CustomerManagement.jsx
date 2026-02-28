@@ -327,7 +327,9 @@ const CustomerManagement = () => {
   const handleExportPDF = async () => {
     setExporting(true);
     try {
-      await exportCustomersPDF({ category: filterCategory, start_date: startDate, end_date: endDate });
+      const params = { category: filterCategory, start_date: startDate, end_date: endDate };
+      if (filterWarehouse !== 'all') params.warehouse_id = filterWarehouse;
+      await exportCustomersPDF(params);
       toast.success('PDF exported successfully');
     } catch (error) {
       toast.error('Failed to export PDF');
@@ -339,7 +341,9 @@ const CustomerManagement = () => {
   const handleExportExcel = async () => {
     setExporting(true);
     try {
-      await exportCustomersExcel({ category: filterCategory, start_date: startDate, end_date: endDate });
+      const params = { category: filterCategory, start_date: startDate, end_date: endDate };
+      if (filterWarehouse !== 'all') params.warehouse_id = filterWarehouse;
+      await exportCustomersExcel(params);
       toast.success('Excel exported successfully');
     } catch (error) {
       toast.error('Failed to export Excel');
