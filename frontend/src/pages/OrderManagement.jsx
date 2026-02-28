@@ -183,10 +183,11 @@ const OrderManagement = () => {
       setFormData({
         ...formData,
         customer_id: customerId,
-        customer_name: customer.customer_name,
-        mobile_number: customer.consumer_no || '',
+        customer_name: customer.customer_name || '',
+        mobile_number: customer.phone || customer.consumer_no || '',
         address_landmark: customer.address || '',
-        connection_type: customer.connection_type
+        connection_type: customer.connection_type || 'domestic',
+        cylinder_nos: customer.cylinder_nos || ''
       });
     }
   };
