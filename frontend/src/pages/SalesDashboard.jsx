@@ -55,6 +55,7 @@ const SalesDashboard = () => {
   const [entries, setEntries] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [customers, setCustomers] = useState([]);
+  const [frequentCustomers, setFrequentCustomers] = useState([]);
   const [summary, setSummary] = useState({
     cash: { amount: 0, refills: 0, count: 0 },
     online: { amount: 0, refills: 0, count: 0 },
@@ -67,6 +68,14 @@ const SalesDashboard = () => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState(null);
   const [customerMode, setCustomerMode] = useState('new'); // 'new' or 'existing'
+  const [quickRefillDialogOpen, setQuickRefillDialogOpen] = useState(false);
+  const [quickRefillCustomer, setQuickRefillCustomer] = useState(null);
+  const [quickRefillForm, setQuickRefillForm] = useState({
+    no_of_refills: '1',
+    amount: '',
+    payment_mode: 'cash',
+    remarks: ''
+  });
 
   // Filters
   const [filterWarehouse, setFilterWarehouse] = useState('all');
