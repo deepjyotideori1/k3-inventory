@@ -94,9 +94,9 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] **Daily Sales Entry** - Log daily sales data for all warehouses
 - [x] **Sales Entry Fields** - Date, Consumer Name, Address, Consumer No, Memo No, Amount, Connection Type, Cylinder Nos, Payment Mode, Refills, Remarks
 - [x] **Connection Types** - Domestic, Domestic Refill, Commercial, Commercial Refill
-- [x] **Cylinder Number Tracking** - Conditional field for refill connection types
-- [x] **New/Existing Customer Toggle** - Radio buttons to select customer entry mode
-- [x] **Auto-Fill Customer Data** - When selecting existing customer, all fields (name, address, consumer_no, connection_type, cylinder_nos, memo_no, remarks) auto-populate
+- [x] **New Connection Mode** - Shows Domestic/Commercial connection types with Cylinder Nos field (no refills field)
+- [x] **Existing Customer Mode** - Shows Domestic Refill/Commercial Refill connection types with No of Refills field (no cylinder nos field)
+- [x] **Customer Auto-Fill** - When selecting existing customer, consumer name, address, consumer no, memo no, and remarks are auto-filled
 - [x] **Fields Disabled After Selection** - Customer fields become read-only after selection to prevent accidental edits
 - [x] **Payment Mode Support** - Cash, Online, Pending
 - [x] **Summary Cards** - Cash Collection, Online Collection, Pending Collection, Total Collection with entry/refill counts
