@@ -720,14 +720,21 @@ const OrderManagement = () => {
                       />
                     </div>
                     <div>
-                      <Label className="flex items-center gap-2"><Phone className="w-4 h-4" /> Mobile Number</Label>
+                      <Label className="flex items-center gap-2"><Phone className="w-4 h-4" /> Mobile Number (10 digits)</Label>
                       <Input 
                         value={formData.mobile_number}
-                        onChange={(e) => setFormData({ ...formData, mobile_number: e.target.value })}
-                        placeholder="Enter mobile number"
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                          setFormData({ ...formData, mobile_number: value });
+                        }}
+                        placeholder="Enter 10 digit mobile number"
                         className="mt-1"
+                        maxLength={10}
                         data-testid="mobile-number"
                       />
+                      {formData.mobile_number && formData.mobile_number.length !== 10 && (
+                        <p className="text-xs text-red-500 mt-1">Must be 10 digits ({formData.mobile_number.length}/10)</p>
+                      )}
                     </div>
                   </div>
 
