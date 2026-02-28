@@ -92,6 +92,11 @@ const SalesDashboard = () => {
   const [exportDateRange, setExportDateRange] = useState('all');
   const [exportStartDate, setExportStartDate] = useState('');
   const [exportEndDate, setExportEndDate] = useState('');
+  const [summaryExportOpen, setSummaryExportOpen] = useState(false);
+  const [summaryGroupBy, setSummaryGroupBy] = useState('daily');
+  const [summaryDateRange, setSummaryDateRange] = useState('all');
+  const [summaryStartDate, setSummaryStartDate] = useState('');
+  const [summaryEndDate, setSummaryEndDate] = useState('');
 
   // Form state
   const getTodayDate = () => new Date().toISOString().split('T')[0];
