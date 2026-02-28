@@ -34,7 +34,9 @@ const PlantEntry = () => {
   const [submitting, setSubmitting] = useState(false);
   const [warehouses, setWarehouses] = useState([]);
   const [warehouseReceived, setWarehouseReceived] = useState(null);
+  const [warehousesReceivedSummary, setWarehousesReceivedSummary] = useState(null);
   const [loadingReceived, setLoadingReceived] = useState(false);
+  const [loadingReceivedSummary, setLoadingReceivedSummary] = useState(false);
   
   const [formData, setFormData] = useState({
     date: getTodayDate(),
