@@ -877,6 +877,155 @@ const SalesDashboard = () => {
           </CardContent>
         </Card>
 
+        {/* Quick Refill Section */}
+        {frequentCustomers.length > 0 && (
+          <Card className="bg-gradient-to-r from-orange-50 to-amber-50 border-orange-200">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg flex items-center gap-2 text-orange-800">
+                <Zap className="w-5 h-5" />
+                Quick Refill
+                <Badge variant="outline" className="text-orange-600 border-orange-300 ml-2">
+                  Top {frequentCustomers.length} Customers
+                </Badge>
+              </CardTitle>
+              <p className="text-sm text-orange-600">One-click refill for your most frequent customers</p>
+            </CardHeader>
+            <CardContent className="pt-2">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {frequentCustomers.map((customer, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleQuickRefill(customer)}
+                    className="group relative p-3 bg-white border border-orange-200 rounded-lg hover:border-orange-400 hover:shadow-md transition-all text-left"
+                    data-testid={`quick-refill-${idx}`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-slate-800 truncate">{customer.consumer_name}</p>
+                        <p className="text-xs text-slate-500 truncate">{customer.address}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge variant="outline" className="text-xs px-1.5 py-0">
+                            <Repeat className="w-3 h-3 mr-1" />
+                            {customer.total_refills} refills
+                          </Badge>
+                          {isAdmin && (
+                            <span className="text-xs text-slate-400">{customer.warehouse_name}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="ml-2 flex-shrink-0">
+                        <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center group-hover:bg-orange-200 transition-colors">
+                          <Plus className="w-4 h-4 text-orange-600" />
+                        </div>
+                      </div>
+                    </div>
+                    {customer.avg_amount > 0 && (
+                      <p className="text-xs text-green-600 mt-1">Avg: ₹{Math.round(customer.avg_amount)}</p>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Quick Refill Dialog */}
+        <Dialog open={quickRefillDialogOpen} onOpenChange={setQuickRefillDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Zap className="w-5 h-5 text-orange-600" />
+                Quick Refill Entry
+              </DialogTitle>
+            </DialogHeader>
+            {quickRefillCustomer && (
+              <div className="space-y-4 py-4">
+                <div className="p-3 bg-slate-50 rounded-lg">
+                  <p className="font-semibold text-slate-800">{quickRefillCustomer.consumer_name}</p>
+                  <p className="text-sm text-slate-500">{quickRefillCustomer.address}</p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    {quickRefillCustomer.consumer_no} · {quickRefillCustomer.total_refills} previous refills
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>No of Refills *</Label>
+                    <Input 
+                      type="number"
+                      value={quickRefillForm.no_of_refills}
+                      onChange={(e) => setQuickRefillForm({ ...quickRefillForm, no_of_refills: e.target.value })}
+                      placeholder="1"
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label>Amount (₹) *</Label>
+                    <Input 
+                      type="number"
+                      value={quickRefillForm.amount}
+                      onChange={(e) => setQuickRefillForm({ ...quickRefillForm, amount: e.target.value })}
+                      placeholder="Enter amount"
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label>Payment Mode</Label>
+                  <Select 
+                    value={quickRefillForm.payment_mode} 
+                    onValueChange={(v) => setQuickRefillForm({ ...quickRefillForm, payment_mode: v })}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">
+                        <div className="flex items-center gap-2"><Banknote className="w-4 h-4 text-green-600" /> Cash</div>
+                      </SelectItem>
+                      <SelectItem value="online">
+                        <div className="flex items-center gap-2"><CreditCard className="w-4 h-4 text-blue-600" /> Online</div>
+                      </SelectItem>
+                      <SelectItem value="pending">
+                        <div className="flex items-center gap-2"><Clock className="w-4 h-4 text-amber-600" /> Pending</div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>Remarks</Label>
+                  <Input 
+                    value={quickRefillForm.remarks}
+                    onChange={(e) => setQuickRefillForm({ ...quickRefillForm, remarks: e.target.value })}
+                    placeholder="Optional remarks"
+                    className="mt-1"
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setQuickRefillDialogOpen(false)}
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={handleSubmitQuickRefill}
+                    disabled={submitting || !quickRefillForm.amount}
+                    className="flex-1 bg-orange-600 hover:bg-orange-700 gap-2"
+                  >
+                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                    Add Refill
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
         {/* Sales Table */}
         <Card>
           <CardHeader className="pb-3">
