@@ -76,6 +76,7 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 
 ### Customer Management (Feb 23, 2026)
 - [x] **Warehouse-specific customers** - Each warehouse stores customers separately
+- [x] **Warehouse Filter (Admin)** - Admin can filter customers by warehouse
 - [x] Customer data fields:
   - Date, Connection Type (Domestic/Commercial), Customer Name, Address
   - Consumer No, Cash Memo No, Cylinder Nos
