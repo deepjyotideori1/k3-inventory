@@ -473,14 +473,74 @@ const SalesDashboard = () => {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button onClick={handleExportPdf} variant="outline" className="gap-2" data-testid="export-pdf-btn">
-              <FileText className="w-4 h-4" />
-              PDF
-            </Button>
-            <Button onClick={handleExportExcel} variant="outline" className="gap-2" data-testid="export-excel-btn">
-              <Download className="w-4 h-4" />
-              Excel
-            </Button>
+            <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="gap-2" data-testid="export-btn">
+                  <Download className="w-4 h-4" />
+                  Export
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Download className="w-5 h-5 text-green-700" />
+                    Export Sales Data
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div>
+                    <Label>Filter by Connection Type</Label>
+                    <Select value={exportConnectionType} onValueChange={setExportConnectionType}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">
+                          <div className="flex items-center gap-2">All Types</div>
+                        </SelectItem>
+                        <SelectItem value="domestic">
+                          <div className="flex items-center gap-2"><Home className="w-4 h-4 text-emerald-600" /> Domestic New Connection</div>
+                        </SelectItem>
+                        <SelectItem value="commercial">
+                          <div className="flex items-center gap-2"><Building2 className="w-4 h-4 text-purple-600" /> Commercial New Connection</div>
+                        </SelectItem>
+                        <SelectItem value="domestic_refill">
+                          <div className="flex items-center gap-2"><Home className="w-4 h-4 text-blue-600" /> Domestic Refill</div>
+                        </SelectItem>
+                        <SelectItem value="commercial_refill">
+                          <div className="flex items-center gap-2"><Building2 className="w-4 h-4 text-orange-600" /> Commercial Refill</div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <p className="text-sm text-slate-500">
+                    Current filters will be applied: {filterWarehouse !== 'all' ? 'Warehouse, ' : ''}{filterPaymentMode !== 'all' ? 'Payment Mode, ' : ''}{startDate ? 'Date Range' : 'All Time'}
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <Button 
+                      onClick={() => handleExportPdf(exportConnectionType)} 
+                      variant="outline" 
+                      className="gap-2 border-red-200 hover:bg-red-50"
+                      data-testid="export-pdf-btn"
+                    >
+                      <FileText className="w-4 h-4 text-red-600" />
+                      Download PDF
+                    </Button>
+                    <Button 
+                      onClick={() => handleExportExcel(exportConnectionType)} 
+                      variant="outline" 
+                      className="gap-2 border-green-200 hover:bg-green-50"
+                      data-testid="export-excel-btn"
+                    >
+                      <Download className="w-4 h-4 text-green-600" />
+                      Download Excel
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
             <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
               <DialogTrigger asChild>
                 <Button className="bg-green-700 hover:bg-green-800 gap-2" data-testid="add-entry-btn">
