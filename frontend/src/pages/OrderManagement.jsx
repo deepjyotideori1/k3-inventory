@@ -411,6 +411,21 @@ const OrderManagement = () => {
     }
   };
 
+  const getConnectionTypeBadge = (type) => {
+    switch(type) {
+      case 'domestic':
+        return <Badge className="bg-emerald-100 text-emerald-800"><Home className="w-3 h-3 mr-1" />Domestic</Badge>;
+      case 'domestic_refill':
+        return <Badge className="bg-blue-100 text-blue-800"><Home className="w-3 h-3 mr-1" />Domestic Refill</Badge>;
+      case 'commercial':
+        return <Badge className="bg-purple-100 text-purple-800"><Building2 className="w-3 h-3 mr-1" />Commercial</Badge>;
+      case 'commercial_refill':
+        return <Badge className="bg-indigo-100 text-indigo-800"><Building2 className="w-3 h-3 mr-1" />Commercial Refill</Badge>;
+      default:
+        return <Badge variant="outline">{type}</Badge>;
+    }
+  };
+
   // Check if user is Plant Hollongi (orders not allowed)
   const isPlantHollongi = user?.warehouse_name === 'Plant Hollongi';
   
