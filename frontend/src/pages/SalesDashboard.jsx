@@ -543,52 +543,62 @@ const SalesDashboard = () => {
                       <Label>Connection Type *</Label>
                       <Select 
                         value={formData.connection_type} 
-                        onValueChange={(v) => setFormData({ ...formData, connection_type: v, cylinder_nos: '' })}
+                        onValueChange={(v) => setFormData({ ...formData, connection_type: v, cylinder_nos: '', no_of_refills: '' })}
                       >
                         <SelectTrigger className="mt-1">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="domestic">
-                            <div className="flex items-center gap-2"><Home className="w-4 h-4" /> Domestic</div>
-                          </SelectItem>
-                          <SelectItem value="domestic_refill">
-                            <div className="flex items-center gap-2"><Home className="w-4 h-4 text-blue-600" /> Domestic Refill</div>
-                          </SelectItem>
-                          <SelectItem value="commercial">
-                            <div className="flex items-center gap-2"><Building2 className="w-4 h-4" /> Commercial</div>
-                          </SelectItem>
-                          <SelectItem value="commercial_refill">
-                            <div className="flex items-center gap-2"><Building2 className="w-4 h-4 text-blue-600" /> Commercial Refill</div>
-                          </SelectItem>
+                          {customerMode === 'new' ? (
+                            <>
+                              <SelectItem value="domestic">
+                                <div className="flex items-center gap-2"><Home className="w-4 h-4" /> Domestic</div>
+                              </SelectItem>
+                              <SelectItem value="commercial">
+                                <div className="flex items-center gap-2"><Building2 className="w-4 h-4" /> Commercial</div>
+                              </SelectItem>
+                            </>
+                          ) : (
+                            <>
+                              <SelectItem value="domestic_refill">
+                                <div className="flex items-center gap-2"><Home className="w-4 h-4 text-blue-600" /> Domestic Refill</div>
+                              </SelectItem>
+                              <SelectItem value="commercial_refill">
+                                <div className="flex items-center gap-2"><Building2 className="w-4 h-4 text-blue-600" /> Commercial Refill</div>
+                              </SelectItem>
+                            </>
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
-                    <div>
-                      <Label>No of Refills</Label>
-                      <Input 
-                        type="number"
-                        value={formData.no_of_refills}
-                        onChange={(e) => setFormData({ ...formData, no_of_refills: e.target.value })}
-                        placeholder="Enter refills count"
-                        className="mt-1"
-                      />
-                    </div>
+                    
+                    {/* Cylinder Nos for New Connection (domestic/commercial) */}
+                    {customerMode === 'new' && (
+                      <div>
+                        <Label>Cylinder Nos.</Label>
+                        <Input 
+                          value={formData.cylinder_nos}
+                          onChange={(e) => setFormData({ ...formData, cylinder_nos: e.target.value })}
+                          placeholder="Enter cylinder numbers"
+                          className="mt-1"
+                        />
+                      </div>
+                    )}
+                    
+                    {/* No of Refills for Existing Customer (refill types) */}
+                    {customerMode === 'existing' && (
+                      <div>
+                        <Label>No of Refills *</Label>
+                        <Input 
+                          type="number"
+                          value={formData.no_of_refills}
+                          onChange={(e) => setFormData({ ...formData, no_of_refills: e.target.value })}
+                          placeholder="Enter refills count"
+                          className="mt-1"
+                        />
+                      </div>
+                    )}
                   </div>
-
-                  {/* Cylinder Nos for refill types */}
-                  {(formData.connection_type === 'domestic_refill' || formData.connection_type === 'commercial_refill') && (
-                    <div>
-                      <Label>Cylinder Nos. *</Label>
-                      <Input 
-                        value={formData.cylinder_nos}
-                        onChange={(e) => setFormData({ ...formData, cylinder_nos: e.target.value })}
-                        placeholder="Enter cylinder numbers (e.g., CYL001, CYL002)"
-                        className="mt-1"
-                      />
-                      <p className="text-xs text-slate-500 mt-1">Enter cylinder numbers for refill tracking</p>
-                    </div>
-                  )}
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
