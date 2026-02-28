@@ -445,6 +445,84 @@ const SalesDashboard = () => {
     }
   };
 
+  // Summary Export Functions
+  const getSummaryDateRange = () => {
+    const today = new Date();
+    let start = '';
+    let end = today.toISOString().split('T')[0];
+    
+    switch(summaryDateRange) {
+      case 'daily':
+        start = end;
+        break;
+      case 'weekly':
+        const weekAgo = new Date(today);
+        weekAgo.setDate(today.getDate() - 7);
+        start = weekAgo.toISOString().split('T')[0];
+        break;
+      case 'monthly':
+        const monthAgo = new Date(today);
+        monthAgo.setDate(today.getDate() - 30);
+        start = monthAgo.toISOString().split('T')[0];
+        break;
+      case 'yearly':
+        const yearAgo = new Date(today);
+        yearAgo.setFullYear(today.getFullYear() - 1);
+        start = yearAgo.toISOString().split('T')[0];
+        break;
+      case 'custom':
+        start = summaryStartDate;
+        end = summaryEndDate || end;
+        break;
+      default:
+        start = '';
+        end = '';
+    }
+    return { start, end };
+  };
+
+  const handleSummaryExportPdf = async () => {
+    try {
+      const params = {};
+      
+      if (user?.role === 'admin' && filterWarehouse !== 'all') {
+        params.warehouse_id = filterWarehouse;
+      }
+      
+      const { start, end } = getSummaryDateRange();
+      if (start) params.start_date = start;
+      if (end) params.end_date = end;
+      params.group_by = summaryGroupBy;
+
+      await exportSalesSummaryPdf(params);
+      toast.success('Summary PDF exported successfully');
+      setSummaryExportOpen(false);
+    } catch (error) {
+      toast.error('Failed to export Summary PDF');
+    }
+  };
+
+  const handleSummaryExportExcel = async () => {
+    try {
+      const params = {};
+      
+      if (user?.role === 'admin' && filterWarehouse !== 'all') {
+        params.warehouse_id = filterWarehouse;
+      }
+      
+      const { start, end } = getSummaryDateRange();
+      if (start) params.start_date = start;
+      if (end) params.end_date = end;
+      params.group_by = summaryGroupBy;
+
+      await exportSalesSummaryExcel(params);
+      toast.success('Summary Excel exported successfully');
+      setSummaryExportOpen(false);
+    } catch (error) {
+      toast.error('Failed to export Summary Excel');
+    }
+  };
+
   const getPaymentBadge = (mode) => {
     switch(mode) {
       case 'cash':
