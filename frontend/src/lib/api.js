@@ -133,6 +133,7 @@ export const createSalesEntryForWarehouse = (warehouseId, data) => api.post(`/sa
 export const updateSalesEntry = (entryId, data) => api.put(`/sales-entries/${entryId}`, data);
 export const deleteSalesEntry = (entryId) => api.delete(`/sales-entries/${entryId}`);
 export const getSalesSummary = (params) => api.get('/sales-entries/summary', { params });
+export const getFrequentCustomers = (limit = 10) => api.get('/sales-entries/frequent-customers', { params: { limit } });
 
 export const exportSalesPdf = async (params) => {
   try {
