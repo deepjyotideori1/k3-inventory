@@ -2772,6 +2772,7 @@ async def bulk_upload_customers_for_warehouse(
 
 @api_router.get("/customers/summary")
 async def get_customer_summary(
+    warehouse_id: Optional[str] = None,
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Get customer summary statistics"""
@@ -2780,6 +2781,9 @@ async def get_customer_summary(
     query = {}
     if user['role'] != 'admin':
         query['warehouse_id'] = user.get('warehouse_id')
+    elif warehouse_id and warehouse_id != 'all':
+        # Admin can filter by specific warehouse
+        query['warehouse_id'] = warehouse_id
     
     # Get total counts
     total_domestic = await db.customers.count_documents({**query, 'connection_type': 'domestic'})
