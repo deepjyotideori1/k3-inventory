@@ -90,6 +90,30 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] **Excel Export** - Category-wise customer list
 - [x] **Summary Cards** - Total, Domestic, Commercial, Gas Card Issued, KYC Done
 
+### Sales Dashboard (Dec 2025)
+- [x] **Daily Sales Entry** - Log daily sales data for all warehouses
+- [x] **Sales Entry Fields** - Date, Consumer Name, Address, Consumer No, Memo No, Amount, Connection Type, Cylinder Nos, Payment Mode, Refills, Remarks
+- [x] **Connection Types** - Domestic, Domestic Refill, Commercial, Commercial Refill
+- [x] **Cylinder Number Tracking** - Conditional field for refill connection types
+- [x] **New/Existing Customer Toggle** - Radio buttons to select customer entry mode
+- [x] **Auto-Fill Customer Data** - When selecting existing customer, all fields (name, address, consumer_no, connection_type, cylinder_nos, memo_no, remarks) auto-populate
+- [x] **Fields Disabled After Selection** - Customer fields become read-only after selection to prevent accidental edits
+- [x] **Payment Mode Support** - Cash, Online, Pending
+- [x] **Summary Cards** - Cash Collection, Online Collection, Pending Collection, Total Collection with entry/refill counts
+- [x] **Filtering** - By warehouse (admin), payment mode, date range (Today/Week/Month/Year/Custom)
+- [x] **Search** - Search by consumer, memo
+- [x] **PDF/Excel Export** - Export sales data with applied filters
+- [x] **Edit Entry** - Update existing sales entries
+- [x] **Delete Entry** - Remove sales entries with confirmation
+- [x] **Role-Based Access** - Admin sees all warehouses; managers/sales executives see their assigned warehouse only
+
+### Sales Executive Role (Dec 2025)
+- [x] **New User Role** - sales_executive with restricted access
+- [x] **Warehouse Assignment** - Each sales executive assigned to a specific warehouse
+- [x] **Limited Sidebar** - Only Customers, Orders, and Sales Data visible
+- [x] **Data Isolation** - Can only view/manage data for their assigned warehouse
+- [x] **Plant Hollongi Excluded** - Sales executives cannot be assigned to Plant Hollongi
+
 ### Order Management (Feb 23, 2026)
 - [x] **Order Generation Dashboard** - All warehouses except Plant Hollongi
 - [x] **Auto Order Sequence** - A1, A2, A3... per warehouse (endless sequence)
