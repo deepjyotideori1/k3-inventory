@@ -3353,6 +3353,72 @@ async def get_sales_summary(
     
     return summary
 
+@api_router.get("/sales-entries/frequent-customers")
+async def get_frequent_customers(
+    limit: int = 10,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get frequently refilled customers for quick refill feature"""
+    user = await get_current_user(credentials)
+    
+    # Build match stage based on user role
+    match_stage = {}
+    if user['role'] != 'admin':
+        match_stage['warehouse_id'] = user.get('warehouse_id')
+    
+    # Only include refill entries
+    match_stage['connection_type'] = {'$in': ['domestic_refill', 'commercial_refill']}
+    
+    # Aggregate to find customers with most refills
+    pipeline = [
+        {'$match': match_stage},
+        {'$group': {
+            '_id': {
+                'consumer_name': '$consumer_name',
+                'consumer_no': '$consumer_no',
+                'address': '$address',
+                'warehouse_id': '$warehouse_id'
+            },
+            'total_refills': {'$sum': {'$ifNull': ['$no_of_refills', 1]}},
+            'total_entries': {'$sum': 1},
+            'last_refill_date': {'$max': '$date'},
+            'avg_amount': {'$avg': '$amount'},
+            'connection_type': {'$last': '$connection_type'},
+            'memo_no': {'$last': '$memo_no'}
+        }},
+        {'$sort': {'total_refills': -1, 'last_refill_date': -1}},
+        {'$limit': limit}
+    ]
+    
+    results = await db.sales_entries.aggregate(pipeline).to_list(limit)
+    
+    # Get warehouse names
+    warehouse_ids = list(set([r['_id'].get('warehouse_id') for r in results if r['_id'].get('warehouse_id')]))
+    warehouses = {}
+    if warehouse_ids:
+        warehouse_docs = await db.warehouses.find({'id': {'$in': warehouse_ids}}, {'_id': 0}).to_list(100)
+        warehouses = {w['id']: w['name'] for w in warehouse_docs}
+    
+    # Format response
+    frequent_customers = []
+    for r in results:
+        customer_data = r['_id']
+        frequent_customers.append({
+            'consumer_name': customer_data.get('consumer_name', ''),
+            'consumer_no': customer_data.get('consumer_no', ''),
+            'address': customer_data.get('address', ''),
+            'warehouse_id': customer_data.get('warehouse_id', ''),
+            'warehouse_name': warehouses.get(customer_data.get('warehouse_id', ''), 'Unknown'),
+            'total_refills': r.get('total_refills', 0),
+            'total_entries': r.get('total_entries', 0),
+            'last_refill_date': r.get('last_refill_date', ''),
+            'avg_amount': round(r.get('avg_amount', 0), 2),
+            'connection_type': r.get('connection_type', 'domestic_refill'),
+            'memo_no': r.get('memo_no', '')
+        })
+    
+    return frequent_customers
+
 @api_router.get("/export/sales-pdf")
 async def export_sales_pdf(
     warehouse_id: str = None,
