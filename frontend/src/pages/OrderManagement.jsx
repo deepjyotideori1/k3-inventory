@@ -832,13 +832,15 @@ const OrderManagement = () => {
                   <div>
                     <Label>Type</Label>
                     <Select value={filterConnection} onValueChange={setFilterConnection}>
-                      <SelectTrigger className="w-36 mt-1">
+                      <SelectTrigger className="w-40 mt-1">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All</SelectItem>
                         <SelectItem value="domestic">Domestic</SelectItem>
+                        <SelectItem value="domestic_refill">Domestic Refill</SelectItem>
                         <SelectItem value="commercial">Commercial</SelectItem>
+                        <SelectItem value="commercial_refill">Commercial Refill</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
