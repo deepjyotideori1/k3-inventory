@@ -722,7 +722,7 @@ const OrderManagement = () => {
                       />
                     </div>
                     <div>
-                      <Label className="flex items-center gap-2"><Phone className="w-4 h-4" /> Mobile Number (10 digits)</Label>
+                      <Label className="flex items-center gap-2 text-sm"><Phone className="w-4 h-4" /> Mobile Number (10 digits)</Label>
                       <Input 
                         value={formData.mobile_number}
                         onChange={(e) => {
@@ -741,7 +741,7 @@ const OrderManagement = () => {
                   </div>
 
                   <div>
-                    <Label className="flex items-center gap-2"><MapPin className="w-4 h-4" /> Address / Landmark</Label>
+                    <Label className="flex items-center gap-2 text-sm"><MapPin className="w-4 h-4" /> Address / Landmark</Label>
                     <Textarea 
                       value={formData.address_landmark}
                       onChange={(e) => setFormData({ ...formData, address_landmark: e.target.value })}
@@ -751,9 +751,9 @@ const OrderManagement = () => {
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div>
-                      <Label className="flex items-center gap-2"><CreditCard className="w-4 h-4" /> Payment Mode *</Label>
+                      <Label className="flex items-center gap-2 text-sm"><CreditCard className="w-4 h-4" /> Payment Mode *</Label>
                       <Select 
                         value={formData.payment_mode} 
                         onValueChange={(v) => setFormData({ ...formData, payment_mode: v })}
@@ -775,7 +775,7 @@ const OrderManagement = () => {
                       </Select>
                     </div>
                     <div>
-                      <Label>Remarks</Label>
+                      <Label className="text-sm">Remarks</Label>
                       <Input 
                         value={formData.remarks}
                         onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
@@ -786,11 +786,11 @@ const OrderManagement = () => {
                     </div>
                   </div>
 
-                  <div className="flex justify-end gap-2">
+                  <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2">
                     <Button 
                       type="submit" 
                       disabled={submitting}
-                      className="bg-green-700 hover:bg-green-800"
+                      className="bg-green-700 hover:bg-green-800 w-full sm:w-auto"
                       data-testid="submit-order-btn"
                     >
                       {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <ShoppingCart className="w-4 h-4 mr-2" />}
