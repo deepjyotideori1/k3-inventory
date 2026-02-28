@@ -338,7 +338,7 @@ const PlantEntry = () => {
             </CardContent>
           </Card>
 
-          {/* Empty Received from Warehouses - AUTO SYNCED */}
+          {/* Empty Received from Warehouses - MANUAL ENTRY */}
           <Card className="mb-6 border-2 border-amber-200 bg-amber-50" data-testid="received-section">
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -348,7 +348,7 @@ const PlantEntry = () => {
                     Empty Received from Warehouses
                   </CardTitle>
                   <CardDescription className="text-amber-700">
-                    Auto-synced from warehouse "Refilling at Plant Hollongi" entries
+                    Enter empty cylinders received from warehouses
                   </CardDescription>
                 </div>
                 <Button 
@@ -357,31 +357,34 @@ const PlantEntry = () => {
                   size="sm"
                   onClick={() => fetchWarehouseReceived(formData.date)}
                   disabled={loadingReceived}
-                  className="border-amber-300 text-amber-700"
+                  className="border-blue-300 text-blue-700"
                 >
                   {loadingReceived ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                  <span className="ml-1">Refresh</span>
+                  <span className="ml-1">Check Reference</span>
                 </Button>
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Warehouse Received Summary */}
+              {/* Warehouse Received Reference Summary */}
               {warehouseReceived && (warehouseReceived.total_15kg > 0 || warehouseReceived.total_21kg > 0) && (
-                <div className="p-4 bg-white rounded-lg border border-amber-200">
+                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
                   <div className="flex items-center gap-2 mb-3">
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                    <span className="font-medium text-slate-700">Synced from Warehouse Reports</span>
+                    <AlertCircle className="w-5 h-5 text-blue-600" />
+                    <span className="font-medium text-blue-800">Reference: Warehouses' "Refilling at Plant" Entries</span>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="p-3 bg-amber-50 rounded-lg text-center">
-                      <p className="text-xs text-amber-700">Total 15kg Empty Received</p>
-                      <p className="text-2xl font-bold text-amber-800">{warehouseReceived.total_15kg}</p>
+                    <div className="p-3 bg-white rounded-lg text-center border border-blue-200">
+                      <p className="text-xs text-blue-700">15kg Empties (Reference)</p>
+                      <p className="text-2xl font-bold text-blue-800">{warehouseReceived.total_15kg}</p>
                     </div>
-                    <div className="p-3 bg-amber-50 rounded-lg text-center">
-                      <p className="text-xs text-amber-700">Total 21kg Empty Received</p>
-                      <p className="text-2xl font-bold text-amber-800">{warehouseReceived.total_21kg}</p>
+                    <div className="p-3 bg-white rounded-lg text-center border border-blue-200">
+                      <p className="text-xs text-blue-700">21kg Empties (Reference)</p>
+                      <p className="text-2xl font-bold text-blue-800">{warehouseReceived.total_21kg}</p>
                     </div>
                   </div>
+                  <p className="text-xs text-blue-600 mt-2 italic">
+                    This is what warehouses recorded. Verify and enter actual received quantities below.
+                  </p>
                 </div>
               )}
 
