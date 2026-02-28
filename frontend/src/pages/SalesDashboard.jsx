@@ -938,7 +938,7 @@ const SalesDashboard = () => {
                   <p className="text-sm text-amber-600 font-medium flex items-center gap-1">
                     <Clock className="w-4 h-4" /> Pending Collection
                   </p>
-                  <p className="text-2xl font-bold text-amber-800">₹{summary.pending.amount.toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-amber-800">{formatINR(summary.pending.amount)}</p>
                   <p className="text-xs text-amber-600">{summary.pending.count} entries · {summary.pending.refills} refills</p>
                 </div>
               </div>
