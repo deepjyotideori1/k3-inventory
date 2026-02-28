@@ -651,14 +651,21 @@ const SalesDashboard = () => {
                       />
                     </div>
                     <div>
-                      <Label>Consumer No</Label>
+                      <Label>Consumer No (10 digits)</Label>
                       <Input 
                         value={formData.consumer_no}
-                        onChange={(e) => setFormData({ ...formData, consumer_no: e.target.value })}
-                        placeholder="Enter consumer number"
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                          setFormData({ ...formData, consumer_no: value });
+                        }}
+                        placeholder="Enter 10 digit number"
                         className="mt-1"
+                        maxLength={10}
                         disabled={customerMode === 'existing' && formData.customer_id}
                       />
+                      {formData.consumer_no && formData.consumer_no.length !== 10 && (
+                        <p className="text-xs text-red-500 mt-1">Must be 10 digits ({formData.consumer_no.length}/10)</p>
+                      )}
                     </div>
                     <div className="col-span-2">
                       <Label>Address</Label>
