@@ -205,13 +205,17 @@ const SalesDashboard = () => {
 
       toast.success('Sales entry added successfully');
       setAddDialogOpen(false);
+      setCustomerMode('new');
       setFormData({
         date: getTodayDate(),
+        customer_id: '',
         consumer_name: '',
         address: '',
         consumer_no: '',
         memo_no: '',
         amount: '',
+        connection_type: 'domestic',
+        cylinder_nos: '',
         payment_mode: 'cash',
         no_of_refills: '',
         remarks: '',
