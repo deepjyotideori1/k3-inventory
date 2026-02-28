@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
-import { getLatestPlantClosing, createPlantReport, getWarehouses, getPlantReceivedFromWarehouses } from '../lib/api';
+import { getLatestPlantClosing, createPlantReport, getWarehouses, getPlantReceivedFromWarehouses, getWarehousesReceivedSummary } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
