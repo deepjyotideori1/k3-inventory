@@ -847,6 +847,14 @@ const SalesDashboard = () => {
                           <td className="font-medium">{entry.consumer_name}</td>
                           <td className="max-w-[150px] truncate">{entry.address || '-'}</td>
                           <td>{entry.consumer_no || '-'}</td>
+                          <td>
+                            {getConnectionTypeBadge(entry.connection_type)}
+                            {entry.cylinder_nos && (
+                              <div className="text-xs text-slate-500 mt-1">
+                                <span className="font-medium">Cyl:</span> {entry.cylinder_nos}
+                              </div>
+                            )}
+                          </td>
                           <td>{entry.memo_no || '-'}</td>
                           <td className="font-semibold text-green-700">₹{entry.amount?.toLocaleString()}</td>
                           <td>{getPaymentBadge(entry.payment_mode)}</td>
@@ -877,7 +885,7 @@ const SalesDashboard = () => {
                       ))}
                       {/* Total Row */}
                       <tr className="bg-green-50 font-bold">
-                        <td colSpan={6} className="text-right">TOTAL:</td>
+                        <td colSpan={7} className="text-right">TOTAL:</td>
                         <td className="text-green-800">₹{filteredTotals.amount.toLocaleString()}</td>
                         <td></td>
                         <td className="text-center">{filteredTotals.refills}</td>
