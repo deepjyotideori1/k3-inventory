@@ -4532,14 +4532,14 @@ async def get_recipient_count(
     elif recipient_filter == 'category' and category:
         query['connection_type'] = category
     
-    # Get customers and filter to those with valid phone numbers (10+ digits)
+    # Get customers and filter to those with valid phone numbers (exactly 10 digits)
     customers = await db.customers.find(query).to_list(10000)
     
     # Filter to those with phone numbers (matching send endpoint logic)
     valid_recipients = []
     for c in customers:
         phone = c.get('mobile_number') or c.get('phone') or ''
-        if phone and len(phone) >= 10:
+        if phone and len(phone) == 10:
             valid_recipients.append(c)
     
     total_count = len(valid_recipients)
