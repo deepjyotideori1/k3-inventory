@@ -3325,6 +3325,7 @@ async def get_order(
         'mobile_number': order.get('mobile_number', ''),
         'address_landmark': order.get('address_landmark', ''),
         'connection_type': order['connection_type'],
+        'cylinder_nos': order.get('cylinder_nos', ''),
         'payment_mode': order['payment_mode'],
         'status': order.get('status', 'pending'),
         'remarks': order.get('remarks', ''),
