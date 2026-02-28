@@ -3193,6 +3193,9 @@ async def create_sales_entry(
     
     await db.sales_entries.insert_one(entry_doc)
     
+    # Remove MongoDB's _id before returning (insert_one mutates the dict)
+    entry_doc.pop('_id', None)
+    
     return {
         **entry_doc,
         'warehouse_name': warehouse_name,
