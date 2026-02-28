@@ -34,7 +34,7 @@ const DailyEntry = () => {
   const [submitting, setSubmitting] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
   const [loadingPlantDelivery, setLoadingPlantDelivery] = useState(false);
-  const [plantDeliverySync, setPlantDeliverySync] = useState({ synced: false, date: null });
+  const [plantDeliverySync, setPlantDeliverySync] = useState({ synced: false, date: null, plant_recorded_15kg: 0, plant_recorded_21kg: 0 });
   const [existingReport, setExistingReport] = useState(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [formData, setFormData] = useState({
