@@ -588,34 +588,40 @@ const OrderManagement = () => {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="domestic">
-                            <div className="flex items-center gap-2"><Home className="w-4 h-4" /> Domestic</div>
-                          </SelectItem>
-                          <SelectItem value="domestic_refill">
-                            <div className="flex items-center gap-2"><Home className="w-4 h-4 text-blue-600" /> Domestic Refill</div>
-                          </SelectItem>
-                          <SelectItem value="commercial">
-                            <div className="flex items-center gap-2"><Building2 className="w-4 h-4" /> Commercial</div>
-                          </SelectItem>
-                          <SelectItem value="commercial_refill">
-                            <div className="flex items-center gap-2"><Building2 className="w-4 h-4 text-blue-600" /> Commercial Refill</div>
-                          </SelectItem>
+                          {!useExistingCustomer ? (
+                            <>
+                              <SelectItem value="domestic">
+                                <div className="flex items-center gap-2"><Home className="w-4 h-4" /> Domestic</div>
+                              </SelectItem>
+                              <SelectItem value="commercial">
+                                <div className="flex items-center gap-2"><Building2 className="w-4 h-4" /> Commercial</div>
+                              </SelectItem>
+                            </>
+                          ) : (
+                            <>
+                              <SelectItem value="domestic_refill">
+                                <div className="flex items-center gap-2"><Home className="w-4 h-4 text-blue-600" /> Domestic Refill</div>
+                              </SelectItem>
+                              <SelectItem value="commercial_refill">
+                                <div className="flex items-center gap-2"><Building2 className="w-4 h-4 text-blue-600" /> Commercial Refill</div>
+                              </SelectItem>
+                            </>
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
                     
-                    {/* Cylinder Nos field for refill types */}
-                    {(formData.connection_type === 'domestic_refill' || formData.connection_type === 'commercial_refill') && (
+                    {/* Cylinder Nos field for New Customer (domestic/commercial) only */}
+                    {!useExistingCustomer && (
                       <div>
-                        <Label>Cylinder Nos. *</Label>
+                        <Label>Cylinder Nos.</Label>
                         <Input 
                           value={formData.cylinder_nos}
                           onChange={(e) => setFormData({ ...formData, cylinder_nos: e.target.value })}
-                          placeholder="Enter cylinder numbers (e.g., CYL001, CYL002)"
+                          placeholder="Enter cylinder numbers"
                           className="mt-1"
                           data-testid="cylinder-nos"
                         />
-                        <p className="text-xs text-slate-500 mt-1">Enter cylinder numbers for refill tracking</p>
                       </div>
                     )}
                   </div>
