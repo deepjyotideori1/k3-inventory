@@ -10,7 +10,8 @@ import {
   getSalesSummary,
   exportSalesPdf,
   exportSalesExcel,
-  getWarehouses 
+  getWarehouses,
+  getCustomers
 } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -36,7 +37,11 @@ import {
   Clock,
   RefreshCw,
   TrendingUp,
-  Table as TableIcon
+  Table as TableIcon,
+  Home,
+  Building2,
+  UserPlus,
+  Users
 } from 'lucide-react';
 import { formatDate } from '../lib/utils';
 import { toast } from 'sonner';
