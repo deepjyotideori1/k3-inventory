@@ -4143,7 +4143,20 @@ class OrderStatusUpdate(BaseModel):
     status: str  # pending, delivered
 
 async def get_next_order_number(warehouse_id: str) -> str:
-    """Generate next order number for a warehouse (A1, A2, A3...)"""
+    """Generate next order number for a warehouse with warehouse-specific prefix"""
+    # Get warehouse to determine prefix
+    warehouse = await db.warehouses.find_one({'id': warehouse_id})
+    
+    # Assign different prefixes based on warehouse name
+    prefix_map = {
+        'Jullang': 'J',
+        'Naharlagun': 'N',
+        'Doimukh': 'D',
+    }
+    
+    warehouse_name = warehouse['name'] if warehouse else 'Unknown'
+    prefix = prefix_map.get(warehouse_name, 'A')  # Default to 'A' if not found
+    
     # Find the highest order number for this warehouse
     latest_order = await db.orders.find_one(
         {'warehouse_id': warehouse_id},
@@ -4155,7 +4168,7 @@ async def get_next_order_number(warehouse_id: str) -> str:
     else:
         next_seq = 1
     
-    return f"A{next_seq}", next_seq
+    return f"{prefix}{next_seq}", next_seq
 
 @api_router.get("/orders")
 async def get_orders(
