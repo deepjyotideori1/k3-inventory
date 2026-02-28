@@ -3155,6 +3155,7 @@ async def get_orders(
             'mobile_number': o.get('mobile_number', ''),
             'address_landmark': o.get('address_landmark', ''),
             'connection_type': o['connection_type'],
+            'cylinder_nos': o.get('cylinder_nos', ''),
             'payment_mode': o['payment_mode'],
             'status': o.get('status', 'pending'),
             'remarks': o.get('remarks', ''),
