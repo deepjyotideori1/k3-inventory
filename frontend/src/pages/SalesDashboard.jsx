@@ -821,6 +821,7 @@ const SalesDashboard = () => {
                     <th>Consumer Name</th>
                     <th>Address</th>
                     <th>Consumer No</th>
+                    <th>Type</th>
                     <th>Memo</th>
                     <th>Amount</th>
                     <th>Payment</th>
@@ -833,7 +834,7 @@ const SalesDashboard = () => {
                 <tbody>
                   {entries.length === 0 ? (
                     <tr>
-                      <td colSpan={isAdmin ? 12 : 11} className="text-center py-8 text-slate-500">
+                      <td colSpan={isAdmin ? 13 : 12} className="text-center py-8 text-slate-500">
                         No sales entries found
                       </td>
                     </tr>
