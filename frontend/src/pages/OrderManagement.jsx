@@ -73,6 +73,7 @@ const OrderManagement = () => {
     mobile_number: '',
     address_landmark: '',
     connection_type: 'domestic',
+    cylinder_nos: '',
     payment_mode: 'cash',
     remarks: ''
   });
