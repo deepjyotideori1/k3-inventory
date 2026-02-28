@@ -3043,6 +3043,511 @@ async def export_customers_excel(
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
+# ============ SALES DASHBOARD ============
+
+class SalesEntryCreate(BaseModel):
+    date: str
+    consumer_name: str
+    address: str = ""
+    consumer_no: str = ""
+    memo_no: str = ""
+    amount: float = 0
+    payment_mode: str = "cash"  # cash, online, pending
+    no_of_refills: int = 0
+    remarks: str = ""
+
+class SalesEntryUpdate(BaseModel):
+    date: Optional[str] = None
+    consumer_name: Optional[str] = None
+    address: Optional[str] = None
+    consumer_no: Optional[str] = None
+    memo_no: Optional[str] = None
+    amount: Optional[float] = None
+    payment_mode: Optional[str] = None
+    no_of_refills: Optional[int] = None
+    remarks: Optional[str] = None
+
+@api_router.get("/sales-entries")
+async def get_sales_entries(
+    warehouse_id: str = None,
+    start_date: str = None,
+    end_date: str = None,
+    payment_mode: str = None,
+    search: str = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get sales entries with filters"""
+    user = await get_current_user(credentials)
+    
+    query = {}
+    
+    # Filter by warehouse
+    if user['role'] == 'admin':
+        if warehouse_id:
+            query['warehouse_id'] = warehouse_id
+    else:
+        query['warehouse_id'] = user.get('warehouse_id')
+    
+    # Filter by date range
+    if start_date:
+        query['date'] = query.get('date', {})
+        query['date']['$gte'] = start_date
+    if end_date:
+        if 'date' not in query:
+            query['date'] = {}
+        query['date']['$lte'] = end_date
+    
+    # Filter by payment mode
+    if payment_mode and payment_mode != 'all':
+        query['payment_mode'] = payment_mode
+    
+    # Search
+    if search:
+        query['$or'] = [
+            {'consumer_name': {'$regex': search, '$options': 'i'}},
+            {'consumer_no': {'$regex': search, '$options': 'i'}},
+            {'memo_no': {'$regex': search, '$options': 'i'}},
+            {'address': {'$regex': search, '$options': 'i'}}
+        ]
+    
+    entries = await db.sales_entries.find(query, {'_id': 0}).sort('date', -1).to_list(5000)
+    
+    # Get warehouse names
+    warehouse_ids = list(set(e.get('warehouse_id') for e in entries if e.get('warehouse_id')))
+    warehouses = await db.warehouses.find({'id': {'$in': warehouse_ids}}, {'_id': 0}).to_list(100)
+    warehouse_map = {w['id']: w['name'] for w in warehouses}
+    
+    # Get user names
+    user_ids = list(set(e.get('created_by') for e in entries if e.get('created_by')))
+    users = await db.users.find({'id': {'$in': user_ids}}, {'_id': 0, 'password': 0}).to_list(100)
+    user_map = {u['id']: u['name'] for u in users}
+    
+    result = []
+    for e in entries:
+        result.append({
+            'id': e['id'],
+            'warehouse_id': e.get('warehouse_id', ''),
+            'warehouse_name': warehouse_map.get(e.get('warehouse_id', ''), 'Unknown'),
+            'date': e['date'],
+            'consumer_name': e['consumer_name'],
+            'address': e.get('address', ''),
+            'consumer_no': e.get('consumer_no', ''),
+            'memo_no': e.get('memo_no', ''),
+            'amount': e.get('amount', 0),
+            'payment_mode': e.get('payment_mode', 'cash'),
+            'no_of_refills': e.get('no_of_refills', 0),
+            'remarks': e.get('remarks', ''),
+            'created_by': e.get('created_by', ''),
+            'created_by_name': user_map.get(e.get('created_by', ''), 'Unknown'),
+            'created_at': e.get('created_at', ''),
+            'updated_at': e.get('updated_at')
+        })
+    
+    return result
+
+@api_router.post("/sales-entries")
+async def create_sales_entry(
+    entry: SalesEntryCreate,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Create a new sales entry"""
+    user = await get_current_user(credentials)
+    
+    warehouse_id = user.get('warehouse_id')
+    if user['role'] == 'admin':
+        raise HTTPException(status_code=400, detail="Admin must use warehouse-specific endpoint")
+    
+    if not warehouse_id:
+        raise HTTPException(status_code=400, detail="User has no assigned warehouse")
+    
+    # Get warehouse name
+    warehouse = await db.warehouses.find_one({'id': warehouse_id}, {'_id': 0})
+    warehouse_name = warehouse['name'] if warehouse else 'Unknown'
+    
+    entry_doc = {
+        'id': str(uuid.uuid4()),
+        'warehouse_id': warehouse_id,
+        'date': entry.date,
+        'consumer_name': entry.consumer_name,
+        'address': entry.address,
+        'consumer_no': entry.consumer_no,
+        'memo_no': entry.memo_no,
+        'amount': entry.amount,
+        'payment_mode': entry.payment_mode,
+        'no_of_refills': entry.no_of_refills,
+        'remarks': entry.remarks,
+        'created_by': user['id'],
+        'created_at': datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.sales_entries.insert_one(entry_doc)
+    
+    return {
+        **entry_doc,
+        'warehouse_name': warehouse_name,
+        'created_by_name': user['name']
+    }
+
+@api_router.post("/sales-entries/warehouse/{warehouse_id}")
+async def create_sales_entry_for_warehouse(
+    warehouse_id: str,
+    entry: SalesEntryCreate,
+    user: dict = Depends(require_admin)
+):
+    """Create a sales entry for a specific warehouse (admin only)"""
+    warehouse = await db.warehouses.find_one({'id': warehouse_id}, {'_id': 0})
+    if not warehouse:
+        raise HTTPException(status_code=404, detail="Warehouse not found")
+    
+    entry_doc = {
+        'id': str(uuid.uuid4()),
+        'warehouse_id': warehouse_id,
+        'date': entry.date,
+        'consumer_name': entry.consumer_name,
+        'address': entry.address,
+        'consumer_no': entry.consumer_no,
+        'memo_no': entry.memo_no,
+        'amount': entry.amount,
+        'payment_mode': entry.payment_mode,
+        'no_of_refills': entry.no_of_refills,
+        'remarks': entry.remarks,
+        'created_by': user['id'],
+        'created_at': datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.sales_entries.insert_one(entry_doc)
+    
+    return {
+        **entry_doc,
+        'warehouse_name': warehouse['name'],
+        'created_by_name': user['name']
+    }
+
+@api_router.put("/sales-entries/{entry_id}")
+async def update_sales_entry(
+    entry_id: str,
+    entry: SalesEntryUpdate,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Update a sales entry"""
+    user = await get_current_user(credentials)
+    
+    existing = await db.sales_entries.find_one({'id': entry_id}, {'_id': 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Sales entry not found")
+    
+    # Check access - admin can edit any, others can only edit their own warehouse's entries
+    if user['role'] != 'admin' and existing.get('warehouse_id') != user.get('warehouse_id'):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    update_data = {k: v for k, v in entry.dict().items() if v is not None}
+    update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
+    
+    await db.sales_entries.update_one({'id': entry_id}, {'$set': update_data})
+    
+    updated = await db.sales_entries.find_one({'id': entry_id}, {'_id': 0})
+    warehouse = await db.warehouses.find_one({'id': updated.get('warehouse_id')}, {'_id': 0})
+    
+    return {
+        **updated,
+        'warehouse_name': warehouse['name'] if warehouse else 'Unknown'
+    }
+
+@api_router.delete("/sales-entries/{entry_id}")
+async def delete_sales_entry(
+    entry_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Delete a sales entry"""
+    user = await get_current_user(credentials)
+    
+    existing = await db.sales_entries.find_one({'id': entry_id}, {'_id': 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Sales entry not found")
+    
+    # Check access
+    if user['role'] != 'admin' and existing.get('warehouse_id') != user.get('warehouse_id'):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    await db.sales_entries.delete_one({'id': entry_id})
+    return {"message": "Sales entry deleted successfully"}
+
+@api_router.get("/sales-entries/summary")
+async def get_sales_summary(
+    warehouse_id: str = None,
+    start_date: str = None,
+    end_date: str = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get sales summary with totals"""
+    user = await get_current_user(credentials)
+    
+    match_stage = {}
+    
+    if user['role'] == 'admin':
+        if warehouse_id:
+            match_stage['warehouse_id'] = warehouse_id
+    else:
+        match_stage['warehouse_id'] = user.get('warehouse_id')
+    
+    if start_date:
+        match_stage['date'] = match_stage.get('date', {})
+        match_stage['date']['$gte'] = start_date
+    if end_date:
+        if 'date' not in match_stage:
+            match_stage['date'] = {}
+        match_stage['date']['$lte'] = end_date
+    
+    pipeline = [
+        {'$match': match_stage},
+        {'$group': {
+            '_id': '$payment_mode',
+            'total_amount': {'$sum': '$amount'},
+            'total_refills': {'$sum': '$no_of_refills'},
+            'count': {'$sum': 1}
+        }}
+    ]
+    
+    results = await db.sales_entries.aggregate(pipeline).to_list(100)
+    
+    summary = {
+        'cash': {'amount': 0, 'refills': 0, 'count': 0},
+        'online': {'amount': 0, 'refills': 0, 'count': 0},
+        'pending': {'amount': 0, 'refills': 0, 'count': 0},
+        'total': {'amount': 0, 'refills': 0, 'count': 0}
+    }
+    
+    for r in results:
+        mode = r['_id'] or 'cash'
+        if mode in summary:
+            summary[mode] = {
+                'amount': r['total_amount'],
+                'refills': r['total_refills'],
+                'count': r['count']
+            }
+        summary['total']['amount'] += r['total_amount']
+        summary['total']['refills'] += r['total_refills']
+        summary['total']['count'] += r['count']
+    
+    return summary
+
+@api_router.get("/export/sales-pdf")
+async def export_sales_pdf(
+    warehouse_id: str = None,
+    start_date: str = None,
+    end_date: str = None,
+    payment_mode: str = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Export sales entries to PDF"""
+    user = await get_current_user(credentials)
+    
+    query = {}
+    
+    if user['role'] == 'admin':
+        if warehouse_id:
+            query['warehouse_id'] = warehouse_id
+    else:
+        query['warehouse_id'] = user.get('warehouse_id')
+    
+    if start_date:
+        query['date'] = query.get('date', {})
+        query['date']['$gte'] = start_date
+    if end_date:
+        if 'date' not in query:
+            query['date'] = {}
+        query['date']['$lte'] = end_date
+    
+    if payment_mode and payment_mode != 'all':
+        query['payment_mode'] = payment_mode
+    
+    entries = await db.sales_entries.find(query, {'_id': 0}).sort('date', -1).to_list(5000)
+    
+    # Get warehouse name for title
+    warehouse_name = "All Warehouses"
+    if query.get('warehouse_id'):
+        warehouse = await db.warehouses.find_one({'id': query['warehouse_id']}, {'_id': 0})
+        warehouse_name = warehouse['name'] if warehouse else 'Unknown'
+    
+    # Create PDF
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), topMargin=0.5*inch, bottomMargin=0.5*inch)
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    # Title
+    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=16, alignment=1)
+    elements.append(Paragraph(f"Sales Report - {warehouse_name}", title_style))
+    
+    date_range = ""
+    if start_date and end_date:
+        date_range = f"From {start_date} to {end_date}"
+    elif start_date:
+        date_range = f"From {start_date}"
+    elif end_date:
+        date_range = f"Until {end_date}"
+    
+    if date_range:
+        elements.append(Paragraph(date_range, ParagraphStyle('DateRange', parent=styles['Normal'], alignment=1)))
+    
+    elements.append(Spacer(1, 0.25*inch))
+    
+    # Table data
+    data = [['SL', 'Date', 'Consumer Name', 'Address', 'Consumer No', 'Memo', 'Amount', 'Payment', 'Refills', 'Remarks']]
+    
+    total_amount = 0
+    total_refills = 0
+    
+    for i, e in enumerate(entries, 1):
+        data.append([
+            str(i),
+            e['date'],
+            e['consumer_name'][:20] if len(e.get('consumer_name', '')) > 20 else e.get('consumer_name', ''),
+            e.get('address', '')[:15] if len(e.get('address', '')) > 15 else e.get('address', ''),
+            e.get('consumer_no', ''),
+            e.get('memo_no', ''),
+            f"₹{e.get('amount', 0):.2f}",
+            e.get('payment_mode', 'cash').capitalize(),
+            str(e.get('no_of_refills', 0)),
+            e.get('remarks', '')[:15] if len(e.get('remarks', '')) > 15 else e.get('remarks', '')
+        ])
+        total_amount += e.get('amount', 0)
+        total_refills += e.get('no_of_refills', 0)
+    
+    # Add total row
+    data.append(['', '', '', '', '', 'TOTAL:', f"₹{total_amount:.2f}", '', str(total_refills), ''])
+    
+    # Create table
+    col_widths = [0.4*inch, 0.8*inch, 1.2*inch, 1*inch, 0.8*inch, 0.7*inch, 0.8*inch, 0.7*inch, 0.5*inch, 1*inch]
+    table = Table(data, colWidths=col_widths)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#16a34a')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#f0fdf4')),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#f8fafc')])
+    ]))
+    
+    elements.append(table)
+    doc.build(elements)
+    
+    date_str = datetime.now().strftime('%d%m%y')
+    filename = f"Sales_Report_{warehouse_name.replace(' ', '_')}_{date_str}.pdf"
+    
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+@api_router.get("/export/sales-excel")
+async def export_sales_excel(
+    warehouse_id: str = None,
+    start_date: str = None,
+    end_date: str = None,
+    payment_mode: str = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Export sales entries to Excel"""
+    user = await get_current_user(credentials)
+    
+    query = {}
+    
+    if user['role'] == 'admin':
+        if warehouse_id:
+            query['warehouse_id'] = warehouse_id
+    else:
+        query['warehouse_id'] = user.get('warehouse_id')
+    
+    if start_date:
+        query['date'] = query.get('date', {})
+        query['date']['$gte'] = start_date
+    if end_date:
+        if 'date' not in query:
+            query['date'] = {}
+        query['date']['$lte'] = end_date
+    
+    if payment_mode and payment_mode != 'all':
+        query['payment_mode'] = payment_mode
+    
+    entries = await db.sales_entries.find(query, {'_id': 0}).sort('date', -1).to_list(5000)
+    
+    # Get warehouse name
+    warehouse_name = "All_Warehouses"
+    if query.get('warehouse_id'):
+        warehouse = await db.warehouses.find_one({'id': query['warehouse_id']}, {'_id': 0})
+        warehouse_name = warehouse['name'].replace(' ', '_') if warehouse else 'Unknown'
+    
+    # Create Excel
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sales Data"
+    
+    # Headers
+    headers = ['SL NO', 'Date', 'Consumer Name', 'Address', 'Consumer No', 'Memo', 'Amount', 'Mode of Payment', 'NO of Refills', 'Remarks']
+    ws.append(headers)
+    
+    # Style headers
+    header_fill = PatternFill(start_color="16a34a", end_color="16a34a", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF")
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center')
+    
+    total_amount = 0
+    total_refills = 0
+    
+    for i, e in enumerate(entries, 1):
+        ws.append([
+            i,
+            e['date'],
+            e.get('consumer_name', ''),
+            e.get('address', ''),
+            e.get('consumer_no', ''),
+            e.get('memo_no', ''),
+            e.get('amount', 0),
+            e.get('payment_mode', 'cash').capitalize(),
+            e.get('no_of_refills', 0),
+            e.get('remarks', '')
+        ])
+        total_amount += e.get('amount', 0)
+        total_refills += e.get('no_of_refills', 0)
+    
+    # Add total row
+    total_row = len(entries) + 2
+    ws.append(['', '', '', '', '', 'TOTAL:', total_amount, '', total_refills, ''])
+    
+    # Style total row
+    total_fill = PatternFill(start_color="f0fdf4", end_color="f0fdf4", fill_type="solid")
+    total_font = Font(bold=True)
+    for cell in ws[total_row]:
+        cell.fill = total_fill
+        cell.font = total_font
+    
+    # Adjust column widths
+    column_widths = [8, 12, 25, 20, 15, 12, 12, 15, 12, 20]
+    for i, width in enumerate(column_widths, 1):
+        ws.column_dimensions[chr(64 + i)].width = width
+    
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    
+    date_str = datetime.now().strftime('%d%m%y')
+    filename = f"Sales_Report_{warehouse_name}_{date_str}.xlsx"
+    
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
 # ============ ORDER MANAGEMENT ============
 
 class OrderCreate(BaseModel):
