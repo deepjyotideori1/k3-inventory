@@ -352,14 +352,18 @@ const SalesDashboard = () => {
   const handleCustomerSelect = (customerId) => {
     const customer = customers.find(c => c.id === customerId);
     if (customer) {
+      // Auto-fill all customer info from bulk uploaded data
+      const connectionType = customer.connection_type || 'domestic';
       setFormData({
         ...formData,
         customer_id: customerId,
         consumer_name: customer.customer_name || customer.name || '',
         address: customer.address || '',
         consumer_no: customer.consumer_no || customer.phone || '',
-        connection_type: customer.connection_type === 'commercial' ? 'commercial' : 'domestic',
-        cylinder_nos: customer.cylinder_nos || ''
+        connection_type: connectionType,
+        cylinder_nos: customer.cylinder_nos || '',
+        memo_no: customer.cash_memo_no || '',
+        remarks: customer.remarks || ''
       });
     }
   };
