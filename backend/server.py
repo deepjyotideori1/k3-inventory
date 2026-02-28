@@ -3676,6 +3676,428 @@ async def export_sales_excel(
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
+# ============ SALES SUMMARY REPORTS ============
+
+@api_router.get("/export/sales-summary-pdf")
+async def export_sales_summary_pdf(
+    warehouse_id: str = None,
+    start_date: str = None,
+    end_date: str = None,
+    group_by: str = "daily",  # daily, weekly, monthly
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Export sales summary report to PDF with period-based totals"""
+    user = await get_current_user(credentials)
+    
+    query = {}
+    
+    if user['role'] == 'admin':
+        if warehouse_id:
+            query['warehouse_id'] = warehouse_id
+    else:
+        query['warehouse_id'] = user.get('warehouse_id')
+    
+    if start_date:
+        query['date'] = query.get('date', {})
+        query['date']['$gte'] = start_date
+    if end_date:
+        if 'date' not in query:
+            query['date'] = {}
+        query['date']['$lte'] = end_date
+    
+    entries = await db.sales_entries.find(query, {'_id': 0}).sort('date', 1).to_list(10000)
+    
+    # Get warehouse name
+    warehouse_name = "All Warehouses"
+    if query.get('warehouse_id'):
+        warehouse = await db.warehouses.find_one({'id': query['warehouse_id']}, {'_id': 0})
+        warehouse_name = warehouse['name'] if warehouse else 'Unknown'
+    
+    # Group entries by period
+    from collections import defaultdict
+    from datetime import datetime as dt
+    
+    summary_data = defaultdict(lambda: {
+        'cash_amount': 0, 'cash_entries': 0,
+        'online_amount': 0, 'online_entries': 0,
+        'pending_amount': 0, 'pending_entries': 0,
+        'total_amount': 0, 'total_entries': 0, 'total_refills': 0,
+        'domestic_new': 0, 'domestic_refill': 0,
+        'commercial_new': 0, 'commercial_refill': 0
+    })
+    
+    for entry in entries:
+        entry_date = entry.get('date', '')
+        if not entry_date:
+            continue
+            
+        try:
+            date_obj = dt.strptime(entry_date, '%Y-%m-%d')
+        except:
+            continue
+        
+        # Determine period key based on group_by
+        if group_by == 'daily':
+            period_key = entry_date
+        elif group_by == 'weekly':
+            # Get ISO week number
+            week_num = date_obj.isocalendar()[1]
+            year = date_obj.year
+            period_key = f"{year}-W{week_num:02d}"
+        elif group_by == 'monthly':
+            period_key = date_obj.strftime('%Y-%m')
+        else:
+            period_key = entry_date
+        
+        amount = entry.get('amount', 0) or 0
+        refills = entry.get('no_of_refills', 0) or 0
+        payment_mode = entry.get('payment_mode', 'cash')
+        connection_type = entry.get('connection_type', '')
+        
+        summary_data[period_key]['total_amount'] += amount
+        summary_data[period_key]['total_entries'] += 1
+        summary_data[period_key]['total_refills'] += refills
+        
+        # Payment mode breakdown
+        if payment_mode == 'cash':
+            summary_data[period_key]['cash_amount'] += amount
+            summary_data[period_key]['cash_entries'] += 1
+        elif payment_mode == 'online':
+            summary_data[period_key]['online_amount'] += amount
+            summary_data[period_key]['online_entries'] += 1
+        else:  # pending
+            summary_data[period_key]['pending_amount'] += amount
+            summary_data[period_key]['pending_entries'] += 1
+        
+        # Connection type breakdown
+        if connection_type == 'domestic':
+            summary_data[period_key]['domestic_new'] += 1
+        elif connection_type == 'domestic_refill':
+            summary_data[period_key]['domestic_refill'] += 1
+        elif connection_type == 'commercial':
+            summary_data[period_key]['commercial_new'] += 1
+        elif connection_type == 'commercial_refill':
+            summary_data[period_key]['commercial_refill'] += 1
+    
+    # Create PDF
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), topMargin=0.5*inch, bottomMargin=0.5*inch)
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    # Title
+    group_label = {'daily': 'Daily', 'weekly': 'Weekly', 'monthly': 'Monthly'}.get(group_by, 'Daily')
+    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=16, alignment=1, textColor=colors.HexColor('#16a34a'))
+    elements.append(Paragraph(f"K3 GAS SERVICE - {group_label} Sales Summary", title_style))
+    elements.append(Paragraph(f"Warehouse: {warehouse_name}", ParagraphStyle('Subtitle', parent=styles['Normal'], alignment=1)))
+    
+    date_range = ""
+    if start_date and end_date:
+        date_range = f"Period: {start_date} to {end_date}"
+    elif start_date:
+        date_range = f"From: {start_date}"
+    elif end_date:
+        date_range = f"Until: {end_date}"
+    
+    if date_range:
+        elements.append(Paragraph(date_range, ParagraphStyle('DateRange', parent=styles['Normal'], alignment=1)))
+    
+    elements.append(Spacer(1, 0.25*inch))
+    
+    # Summary Table
+    headers = ['Period', 'Total (₹)', 'Entries', 'Refills', 'Cash (₹)', 'Online (₹)', 'Pending (₹)', 'Dom. New', 'Dom. Refill', 'Comm. New', 'Comm. Refill']
+    data = [headers]
+    
+    # Grand totals
+    grand_total = {'amount': 0, 'entries': 0, 'refills': 0, 'cash': 0, 'online': 0, 'pending': 0, 'dn': 0, 'dr': 0, 'cn': 0, 'cr': 0}
+    
+    for period in sorted(summary_data.keys()):
+        s = summary_data[period]
+        data.append([
+            period,
+            format_inr(s['total_amount']),
+            str(s['total_entries']),
+            str(s['total_refills']),
+            format_inr(s['cash_amount']),
+            format_inr(s['online_amount']),
+            format_inr(s['pending_amount']),
+            str(s['domestic_new']),
+            str(s['domestic_refill']),
+            str(s['commercial_new']),
+            str(s['commercial_refill'])
+        ])
+        grand_total['amount'] += s['total_amount']
+        grand_total['entries'] += s['total_entries']
+        grand_total['refills'] += s['total_refills']
+        grand_total['cash'] += s['cash_amount']
+        grand_total['online'] += s['online_amount']
+        grand_total['pending'] += s['pending_amount']
+        grand_total['dn'] += s['domestic_new']
+        grand_total['dr'] += s['domestic_refill']
+        grand_total['cn'] += s['commercial_new']
+        grand_total['cr'] += s['commercial_refill']
+    
+    # Add grand total row
+    data.append([
+        'GRAND TOTAL',
+        format_inr(grand_total['amount']),
+        str(grand_total['entries']),
+        str(grand_total['refills']),
+        format_inr(grand_total['cash']),
+        format_inr(grand_total['online']),
+        format_inr(grand_total['pending']),
+        str(grand_total['dn']),
+        str(grand_total['dr']),
+        str(grand_total['cn']),
+        str(grand_total['cr'])
+    ])
+    
+    # Create table with styling
+    col_widths = [0.9*inch, 0.8*inch, 0.6*inch, 0.6*inch, 0.8*inch, 0.8*inch, 0.8*inch, 0.6*inch, 0.7*inch, 0.6*inch, 0.7*inch]
+    table = Table(data, colWidths=col_widths)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#16a34a')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#dcfce7')),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#f8fafc')])
+    ]))
+    
+    elements.append(table)
+    elements.append(Spacer(1, 0.3*inch))
+    
+    # Footer note
+    footer_style = ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8, textColor=colors.grey)
+    elements.append(Paragraph(f"Generated on: {datetime.now().strftime('%d-%m-%Y %H:%M')}", footer_style))
+    
+    doc.build(elements)
+    
+    date_str = datetime.now().strftime('%d%m%y')
+    filename = f"Sales_Summary_{group_label}_{warehouse_name.replace(' ', '_')}_{date_str}.pdf"
+    
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+@api_router.get("/export/sales-summary-excel")
+async def export_sales_summary_excel(
+    warehouse_id: str = None,
+    start_date: str = None,
+    end_date: str = None,
+    group_by: str = "daily",  # daily, weekly, monthly
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Export sales summary report to Excel with period-based totals"""
+    user = await get_current_user(credentials)
+    
+    query = {}
+    
+    if user['role'] == 'admin':
+        if warehouse_id:
+            query['warehouse_id'] = warehouse_id
+    else:
+        query['warehouse_id'] = user.get('warehouse_id')
+    
+    if start_date:
+        query['date'] = query.get('date', {})
+        query['date']['$gte'] = start_date
+    if end_date:
+        if 'date' not in query:
+            query['date'] = {}
+        query['date']['$lte'] = end_date
+    
+    entries = await db.sales_entries.find(query, {'_id': 0}).sort('date', 1).to_list(10000)
+    
+    # Get warehouse name
+    warehouse_name = "All_Warehouses"
+    if query.get('warehouse_id'):
+        warehouse = await db.warehouses.find_one({'id': query['warehouse_id']}, {'_id': 0})
+        warehouse_name = warehouse['name'].replace(' ', '_') if warehouse else 'Unknown'
+    
+    # Group entries by period
+    from collections import defaultdict
+    from datetime import datetime as dt
+    
+    summary_data = defaultdict(lambda: {
+        'cash_amount': 0, 'cash_entries': 0,
+        'online_amount': 0, 'online_entries': 0,
+        'pending_amount': 0, 'pending_entries': 0,
+        'total_amount': 0, 'total_entries': 0, 'total_refills': 0,
+        'domestic_new': 0, 'domestic_refill': 0,
+        'commercial_new': 0, 'commercial_refill': 0
+    })
+    
+    for entry in entries:
+        entry_date = entry.get('date', '')
+        if not entry_date:
+            continue
+            
+        try:
+            date_obj = dt.strptime(entry_date, '%Y-%m-%d')
+        except:
+            continue
+        
+        # Determine period key based on group_by
+        if group_by == 'daily':
+            period_key = entry_date
+        elif group_by == 'weekly':
+            week_num = date_obj.isocalendar()[1]
+            year = date_obj.year
+            period_key = f"{year}-W{week_num:02d}"
+        elif group_by == 'monthly':
+            period_key = date_obj.strftime('%Y-%m')
+        else:
+            period_key = entry_date
+        
+        amount = entry.get('amount', 0) or 0
+        refills = entry.get('no_of_refills', 0) or 0
+        payment_mode = entry.get('payment_mode', 'cash')
+        connection_type = entry.get('connection_type', '')
+        
+        summary_data[period_key]['total_amount'] += amount
+        summary_data[period_key]['total_entries'] += 1
+        summary_data[period_key]['total_refills'] += refills
+        
+        if payment_mode == 'cash':
+            summary_data[period_key]['cash_amount'] += amount
+            summary_data[period_key]['cash_entries'] += 1
+        elif payment_mode == 'online':
+            summary_data[period_key]['online_amount'] += amount
+            summary_data[period_key]['online_entries'] += 1
+        else:
+            summary_data[period_key]['pending_amount'] += amount
+            summary_data[period_key]['pending_entries'] += 1
+        
+        if connection_type == 'domestic':
+            summary_data[period_key]['domestic_new'] += 1
+        elif connection_type == 'domestic_refill':
+            summary_data[period_key]['domestic_refill'] += 1
+        elif connection_type == 'commercial':
+            summary_data[period_key]['commercial_new'] += 1
+        elif connection_type == 'commercial_refill':
+            summary_data[period_key]['commercial_refill'] += 1
+    
+    # Create Excel
+    wb = Workbook()
+    ws = wb.active
+    group_label = {'daily': 'Daily', 'weekly': 'Weekly', 'monthly': 'Monthly'}.get(group_by, 'Daily')
+    ws.title = f"{group_label} Summary"
+    
+    # Title row
+    ws.merge_cells('A1:K1')
+    ws['A1'] = f"K3 GAS SERVICE - {group_label} Sales Summary Report"
+    ws['A1'].font = Font(bold=True, size=14, color="16a34a")
+    ws['A1'].alignment = Alignment(horizontal='center')
+    
+    ws.merge_cells('A2:K2')
+    ws['A2'] = f"Warehouse: {warehouse_name.replace('_', ' ')}"
+    ws['A2'].alignment = Alignment(horizontal='center')
+    
+    # Headers
+    headers = ['Period', 'Total Amount (₹)', 'Total Entries', 'Total Refills', 
+               'Cash (₹)', 'Online (₹)', 'Pending (₹)', 
+               'Domestic New', 'Domestic Refill', 'Commercial New', 'Commercial Refill']
+    ws.append([])  # Empty row
+    ws.append(headers)
+    
+    # Style headers
+    header_fill = PatternFill(start_color="16a34a", end_color="16a34a", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF")
+    for cell in ws[4]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center')
+    
+    # Grand totals
+    grand_total = {'amount': 0, 'entries': 0, 'refills': 0, 'cash': 0, 'online': 0, 'pending': 0, 'dn': 0, 'dr': 0, 'cn': 0, 'cr': 0}
+    
+    for period in sorted(summary_data.keys()):
+        s = summary_data[period]
+        ws.append([
+            period,
+            format_inr(s['total_amount']),
+            s['total_entries'],
+            s['total_refills'],
+            format_inr(s['cash_amount']),
+            format_inr(s['online_amount']),
+            format_inr(s['pending_amount']),
+            s['domestic_new'],
+            s['domestic_refill'],
+            s['commercial_new'],
+            s['commercial_refill']
+        ])
+        grand_total['amount'] += s['total_amount']
+        grand_total['entries'] += s['total_entries']
+        grand_total['refills'] += s['total_refills']
+        grand_total['cash'] += s['cash_amount']
+        grand_total['online'] += s['online_amount']
+        grand_total['pending'] += s['pending_amount']
+        grand_total['dn'] += s['domestic_new']
+        grand_total['dr'] += s['domestic_refill']
+        grand_total['cn'] += s['commercial_new']
+        grand_total['cr'] += s['commercial_refill']
+    
+    # Grand total row
+    total_row_num = ws.max_row + 1
+    ws.append([
+        'GRAND TOTAL',
+        format_inr(grand_total['amount']),
+        grand_total['entries'],
+        grand_total['refills'],
+        format_inr(grand_total['cash']),
+        format_inr(grand_total['online']),
+        format_inr(grand_total['pending']),
+        grand_total['dn'],
+        grand_total['dr'],
+        grand_total['cn'],
+        grand_total['cr']
+    ])
+    
+    # Style total row
+    total_fill = PatternFill(start_color="dcfce7", end_color="dcfce7", fill_type="solid")
+    total_font = Font(bold=True)
+    for cell in ws[total_row_num]:
+        cell.fill = total_fill
+        cell.font = total_font
+    
+    # Adjust column widths
+    column_widths = [14, 16, 14, 14, 14, 14, 14, 14, 16, 16, 18]
+    for i, width in enumerate(column_widths, 1):
+        ws.column_dimensions[chr(64 + i)].width = width
+    
+    # Add borders to data area
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    for row in ws.iter_rows(min_row=4, max_row=ws.max_row, min_col=1, max_col=11):
+        for cell in row:
+            cell.border = thin_border
+            cell.alignment = Alignment(horizontal='center')
+    
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    
+    date_str = datetime.now().strftime('%d%m%y')
+    filename = f"Sales_Summary_{group_label}_{warehouse_name}_{date_str}.xlsx"
+    
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
 # ============ ORDER MANAGEMENT ============
 
 class OrderCreate(BaseModel):
