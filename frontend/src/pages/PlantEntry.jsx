@@ -123,6 +123,19 @@ const PlantEntry = () => {
     }
   };
 
+  // Fetch what warehouses recorded as received from plant (notification only)
+  const fetchWarehousesReceivedSummary = async (date) => {
+    setLoadingReceivedSummary(true);
+    try {
+      const response = await getWarehousesReceivedSummary(date);
+      setWarehousesReceivedSummary(response.data);
+    } catch (error) {
+      console.error('Failed to fetch warehouses received summary:', error);
+    } finally {
+      setLoadingReceivedSummary(false);
+    }
+  };
+
   const handleChange = (field, value) => {
     setFormData(prev => ({
       ...prev,
