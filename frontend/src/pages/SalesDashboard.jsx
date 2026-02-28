@@ -658,7 +658,7 @@ const SalesDashboard = () => {
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                   {/* Customer Selection Mode */}
-                  <div className="flex gap-4 p-3 bg-slate-50 rounded-lg">
+                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 p-3 bg-slate-50 rounded-lg">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="radio"
@@ -670,7 +670,7 @@ const SalesDashboard = () => {
                         }}
                         className="w-4 h-4"
                       />
-                      <span className="flex items-center gap-1 font-medium">
+                      <span className="flex items-center gap-1 font-medium text-sm sm:text-base">
                         <UserPlus className="w-4 h-4 text-green-600" />
                         New Connection
                       </span>
@@ -686,16 +686,16 @@ const SalesDashboard = () => {
                         }}
                         className="w-4 h-4"
                       />
-                      <span className="flex items-center gap-1 font-medium">
+                      <span className="flex items-center gap-1 font-medium text-sm sm:text-base">
                         <Users className="w-4 h-4 text-blue-600" />
                         Existing Customer
                       </span>
                     </label>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div>
-                      <Label>Date *</Label>
+                      <Label className="text-sm">Date *</Label>
                       <Input 
                         type="date"
                         value={formData.date}
@@ -705,7 +705,7 @@ const SalesDashboard = () => {
                     </div>
                     {isAdmin && (
                       <div>
-                        <Label>Warehouse *</Label>
+                        <Label className="text-sm">Warehouse *</Label>
                         <Select value={formData.warehouse_id} onValueChange={(v) => setFormData({ ...formData, warehouse_id: v })}>
                           <SelectTrigger className="mt-1">
                             <SelectValue placeholder="Select warehouse" />
