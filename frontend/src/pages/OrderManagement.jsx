@@ -315,6 +315,7 @@ const OrderManagement = () => {
       mobile_number: order.mobile_number,
       address_landmark: order.address_landmark,
       connection_type: order.connection_type,
+      cylinder_nos: order.cylinder_nos || '',
       payment_mode: order.payment_mode,
       remarks: order.remarks
     });
