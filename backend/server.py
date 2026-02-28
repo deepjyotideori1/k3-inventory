@@ -4310,8 +4310,8 @@ async def export_orders_pdf(
     elements.append(Paragraph(f"Warehouse: {warehouse_name}", styles['Normal']))
     elements.append(Spacer(1, 20))
     
-    # Table data
-    table_data = [['Date', 'Order No', 'Customer', 'Mobile', 'Address', 'Type', 'Payment', 'Remarks']]
+    # Table data with clear headers
+    table_data = [['Date', 'Order No.', 'Customer Name', 'Mobile No.', 'Address', 'Connection Type', 'Payment Mode', 'Remarks']]
     
     for o in orders:
         table_data.append([
@@ -4320,7 +4320,7 @@ async def export_orders_pdf(
             o.get('customer_name', '')[:20],
             o.get('mobile_number', ''),
             o.get('address_landmark', '')[:25],
-            o.get('connection_type', '').capitalize(),
+            o.get('connection_type', '').replace('_', ' ').title(),
             o.get('payment_mode', '').replace('_', ' ').title(),
             o.get('remarks', '')[:15]
         ])
