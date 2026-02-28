@@ -3010,6 +3010,7 @@ async def export_customers_excel(
     category: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    warehouse_id: Optional[str] = None,
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Export customers to Excel"""
@@ -3018,6 +3019,8 @@ async def export_customers_excel(
     query = {}
     if user['role'] != 'admin':
         query['warehouse_id'] = user.get('warehouse_id')
+    elif warehouse_id and warehouse_id != 'all':
+        query['warehouse_id'] = warehouse_id
     
     if category and category != 'all':
         query['connection_type'] = category
