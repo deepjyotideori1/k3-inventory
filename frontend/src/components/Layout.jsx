@@ -38,6 +38,7 @@ const Layout = ({ children }) => {
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/warehouses', label: 'Warehouses', icon: Warehouse },
     { path: '/reports', label: 'Reports', icon: FileText },
+    { path: '/sales-data', label: 'Sales Data', icon: TrendingUp },
     { path: '/customers', label: 'Customers', icon: UserPlus },
     { path: '/orders', label: 'Orders', icon: ShoppingCart },
     { path: '/bulk-messaging', label: 'Bulk Messaging', icon: MessageSquare },
@@ -51,12 +52,14 @@ const Layout = ({ children }) => {
   const managerLinks = [
     { path: '/manager-dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/daily-entry', label: 'Daily Entry', icon: ClipboardList },
+    { path: '/sales-data', label: 'Sales Data', icon: TrendingUp },
     { path: '/customers', label: 'Customers', icon: UserPlus },
     { path: '/orders', label: 'Orders', icon: ShoppingCart },
     { path: '/my-reports', label: 'My Reports', icon: FileText },
   ];
 
   const salesExecutiveLinks = [
+    { path: '/sales-data', label: 'Sales Data', icon: TrendingUp },
     { path: '/customers', label: 'Customers', icon: UserPlus },
     { path: '/orders', label: 'Orders', icon: ShoppingCart },
     { path: '/bulk-messaging', label: 'Bulk Messaging', icon: MessageSquare },
