@@ -18,6 +18,12 @@ html, body {
     overflow-x: hidden;
 }
 
+/* Main content area - prevent overflow */
+main {
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
 /* Responsive form styles */
 @layer components {
     .form-responsive {
@@ -35,6 +41,12 @@ html, body {
     .form-button {
         @apply w-full sm:w-auto;
     }
+}
+
+/* Smooth scrolling for dialogs */
+[role="dialog"] {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
 }
 
 h1, h2, h3, h4, h5, h6 {
