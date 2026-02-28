@@ -1102,7 +1102,7 @@ const SalesDashboard = () => {
                       </div>
                     </div>
                     {customer.avg_amount > 0 && (
-                      <p className="text-xs text-green-600 mt-1">Avg: ₹{Math.round(customer.avg_amount)}</p>
+                      <p className="text-xs text-green-600 mt-1">Avg: {formatINR(Math.round(customer.avg_amount))}</p>
                     )}
                   </button>
                 ))}
