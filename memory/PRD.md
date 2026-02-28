@@ -175,6 +175,7 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] **Clear Export Headers** - PDF and Excel exports have descriptive column headers
 - [x] **Export Date Range Filters** - Filter by Daily, Weekly, Monthly, Custom date ranges
 - [x] **Export Connection Type Filters** - Filter by Domestic, Commercial, Refill types
+- [x] **Sales Summary Reports** - Period-based summary exports (Daily/Weekly/Monthly totals) with payment mode and connection type breakdowns
 
 ### UI/UX
 - [x] Professional green theme matching gas/energy industry
@@ -260,6 +261,8 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - `GET /api/export/dealer-excel` - Export dealer reports Excel
 - `GET /api/export/customers-pdf` - Export customers PDF
 - `GET /api/export/customers-excel` - Export customers Excel
+- `GET /api/export/sales-summary-pdf` - Export sales summary PDF (group_by: daily/weekly/monthly)
+- `GET /api/export/sales-summary-excel` - Export sales summary Excel (group_by: daily/weekly/monthly)
 
 ---
 
