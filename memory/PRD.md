@@ -103,7 +103,8 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] **Summary Cards** - Cash Collection, Online Collection, Pending Collection, Total Collection with entry/refill counts
 - [x] **Filtering** - By warehouse (admin), payment mode, date range (Today/Week/Month/Year/Custom)
 - [x] **Search** - Search by consumer, memo
-- [x] **PDF/Excel Export** - Export sales data with applied filters
+- [x] **PDF/Excel Export** - Export sales data with applied filters including connection type filter
+- [x] **Export Connection Type Filter** - Filter exports by: All Types, Domestic New Connection, Commercial New Connection, Domestic Refill, Commercial Refill
 - [x] **Edit Entry** - Update existing sales entries
 - [x] **Delete Entry** - Remove sales entries with confirmation
 - [x] **Role-Based Access** - Admin sees all warehouses; managers/sales executives see their assigned warehouse only
