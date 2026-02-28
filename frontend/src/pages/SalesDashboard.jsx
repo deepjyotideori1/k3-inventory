@@ -905,86 +905,124 @@ const SalesDashboard = () => {
             <DialogHeader>
               <DialogTitle>Edit Sales Entry</DialogTitle>
             </DialogHeader>
-            <div className="grid grid-cols-2 gap-4 py-4">
-              <div>
-                <Label>Date</Label>
-                <Input 
-                  type="date"
-                  value={editForm.date || ''}
-                  onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
-                  className="mt-1"
-                />
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Date</Label>
+                  <Input 
+                    type="date"
+                    value={editForm.date || ''}
+                    onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>Consumer Name</Label>
+                  <Input 
+                    value={editForm.consumer_name || ''}
+                    onChange={(e) => setEditForm({ ...editForm, consumer_name: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>Consumer No</Label>
+                  <Input 
+                    value={editForm.consumer_no || ''}
+                    onChange={(e) => setEditForm({ ...editForm, consumer_no: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>Address</Label>
+                  <Input 
+                    value={editForm.address || ''}
+                    onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
               </div>
-              <div>
-                <Label>Consumer Name</Label>
-                <Input 
-                  value={editForm.consumer_name || ''}
-                  onChange={(e) => setEditForm({ ...editForm, consumer_name: e.target.value })}
-                  className="mt-1"
-                />
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Connection Type</Label>
+                  <Select 
+                    value={editForm.connection_type || 'domestic'} 
+                    onValueChange={(v) => setEditForm({ ...editForm, connection_type: v, cylinder_nos: v.includes('refill') ? editForm.cylinder_nos : '' })}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="domestic">Domestic</SelectItem>
+                      <SelectItem value="domestic_refill">Domestic Refill</SelectItem>
+                      <SelectItem value="commercial">Commercial</SelectItem>
+                      <SelectItem value="commercial_refill">Commercial Refill</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>No of Refills</Label>
+                  <Input 
+                    type="number"
+                    value={editForm.no_of_refills || ''}
+                    onChange={(e) => setEditForm({ ...editForm, no_of_refills: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
               </div>
-              <div>
-                <Label>Consumer No</Label>
-                <Input 
-                  value={editForm.consumer_no || ''}
-                  onChange={(e) => setEditForm({ ...editForm, consumer_no: e.target.value })}
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <Label>Address</Label>
-                <Input 
-                  value={editForm.address || ''}
-                  onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <Label>Memo No</Label>
-                <Input 
-                  value={editForm.memo_no || ''}
-                  onChange={(e) => setEditForm({ ...editForm, memo_no: e.target.value })}
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <Label>Amount (₹)</Label>
-                <Input 
-                  type="number"
-                  value={editForm.amount || ''}
-                  onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <Label>Mode of Payment</Label>
-                <Select value={editForm.payment_mode || 'cash'} onValueChange={(v) => setEditForm({ ...editForm, payment_mode: v })}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cash">Cash</SelectItem>
-                    <SelectItem value="online">Online</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>No of Refills</Label>
-                <Input 
-                  type="number"
-                  value={editForm.no_of_refills || ''}
-                  onChange={(e) => setEditForm({ ...editForm, no_of_refills: e.target.value })}
-                  className="mt-1"
-                />
-              </div>
-              <div className="col-span-2">
-                <Label>Remarks</Label>
-                <Input 
-                  value={editForm.remarks || ''}
-                  onChange={(e) => setEditForm({ ...editForm, remarks: e.target.value })}
-                  className="mt-1"
-                />
+
+              {/* Cylinder Nos for refill types */}
+              {(editForm.connection_type === 'domestic_refill' || editForm.connection_type === 'commercial_refill') && (
+                <div>
+                  <Label>Cylinder Nos. *</Label>
+                  <Input 
+                    value={editForm.cylinder_nos || ''}
+                    onChange={(e) => setEditForm({ ...editForm, cylinder_nos: e.target.value })}
+                    placeholder="Enter cylinder numbers"
+                    className="mt-1"
+                  />
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Memo No</Label>
+                  <Input 
+                    value={editForm.memo_no || ''}
+                    onChange={(e) => setEditForm({ ...editForm, memo_no: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>Amount (₹)</Label>
+                  <Input 
+                    type="number"
+                    value={editForm.amount || ''}
+                    onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>Mode of Payment</Label>
+                  <Select value={editForm.payment_mode || 'cash'} onValueChange={(v) => setEditForm({ ...editForm, payment_mode: v })}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="online">Online</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Remarks</Label>
+                  <Input 
+                    value={editForm.remarks || ''}
+                    onChange={(e) => setEditForm({ ...editForm, remarks: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
               </div>
             </div>
             <div className="flex justify-end gap-2">
