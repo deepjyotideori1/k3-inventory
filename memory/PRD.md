@@ -51,8 +51,13 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 ### Plant Hollongi Features
 - [x] Bullet tank tracking (in Kg)
 - [x] Cylinder stock management
-- [x] Delivery to warehouses tracking
-- [x] Empties received from warehouses
+- [x] Delivery to warehouses tracking (manual entry, no auto-sync to warehouses)
+- [x] Empties received from warehouses (auto-synced from warehouse "Refilling at Plant" entries)
+- [x] **Warehouses Recorded Receipt (Reference)** - Notification showing what warehouses recorded as received from Plant
+
+### Warehouse Daily Entry Features
+- [x] **Received from Plant (Manual Entry)** - Warehouses manually enter filled cylinders received
+- [x] **Reference Notification** - Shows what Plant Hollongi recorded as delivered (informational only)
 
 ### Dealer Reports (Plant Hollongi)
 - [x] Add/manage dealers
