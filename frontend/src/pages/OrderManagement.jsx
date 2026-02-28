@@ -1116,18 +1116,34 @@ const OrderManagement = () => {
                   <Label>Connection Type</Label>
                   <Select 
                     value={editForm.connection_type || 'domestic'} 
-                    onValueChange={(v) => setEditForm({ ...editForm, connection_type: v })}
+                    onValueChange={(v) => setEditForm({ ...editForm, connection_type: v, cylinder_nos: v.includes('refill') ? editForm.cylinder_nos : '' })}
                   >
                     <SelectTrigger className="mt-1">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="domestic">Domestic</SelectItem>
+                      <SelectItem value="domestic_refill">Domestic Refill</SelectItem>
                       <SelectItem value="commercial">Commercial</SelectItem>
+                      <SelectItem value="commercial_refill">Commercial Refill</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
+              
+              {/* Cylinder Nos for refill types in edit form */}
+              {(editForm.connection_type === 'domestic_refill' || editForm.connection_type === 'commercial_refill') && (
+                <div>
+                  <Label>Cylinder Nos. *</Label>
+                  <Input 
+                    value={editForm.cylinder_nos || ''}
+                    onChange={(e) => setEditForm({ ...editForm, cylinder_nos: e.target.value })}
+                    placeholder="Enter cylinder numbers"
+                    className="mt-1"
+                  />
+                </div>
+              )}
+              
               <div>
                 <Label>Customer Name</Label>
                 <Input 
