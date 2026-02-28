@@ -1296,7 +1296,7 @@ const SalesDashboard = () => {
                       {/* Total Row */}
                       <tr className="bg-green-50 font-bold">
                         <td colSpan={7} className="text-right">TOTAL:</td>
-                        <td className="text-green-800">₹{filteredTotals.amount.toLocaleString()}</td>
+                        <td className="text-green-800">{formatINR(filteredTotals.amount)}</td>
                         <td></td>
                         <td className="text-center">{filteredTotals.refills}</td>
                         <td colSpan={isAdmin ? 3 : 2}></td>
