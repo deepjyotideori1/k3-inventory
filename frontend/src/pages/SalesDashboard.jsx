@@ -47,7 +47,7 @@ import {
   Repeat,
   Star
 } from 'lucide-react';
-import { formatDate } from '../lib/utils';
+import { formatDate, formatINR } from '../lib/utils';
 import { toast } from 'sonner';
 
 const SalesDashboard = () => {
