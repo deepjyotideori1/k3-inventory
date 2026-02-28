@@ -348,7 +348,7 @@ const SalesDashboard = () => {
     }
   };
 
-  const handleExportPdf = async () => {
+  const handleExportPdf = async (connectionType = 'all') => {
     try {
       const params = {};
       if (isAdmin && filterWarehouse !== 'all') {
@@ -359,15 +359,19 @@ const SalesDashboard = () => {
       }
       if (startDate) params.start_date = startDate;
       if (endDate) params.end_date = endDate;
+      if (connectionType !== 'all') {
+        params.connection_type = connectionType;
+      }
 
       await exportSalesPdf(params);
       toast.success('PDF exported successfully');
+      setExportDialogOpen(false);
     } catch (error) {
       toast.error('Failed to export PDF');
     }
   };
 
-  const handleExportExcel = async () => {
+  const handleExportExcel = async (connectionType = 'all') => {
     try {
       const params = {};
       if (isAdmin && filterWarehouse !== 'all') {
@@ -378,9 +382,13 @@ const SalesDashboard = () => {
       }
       if (startDate) params.start_date = startDate;
       if (endDate) params.end_date = endDate;
+      if (connectionType !== 'all') {
+        params.connection_type = connectionType;
+      }
 
       await exportSalesExcel(params);
       toast.success('Excel exported successfully');
+      setExportDialogOpen(false);
     } catch (error) {
       toast.error('Failed to export Excel');
     }
