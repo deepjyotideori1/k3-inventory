@@ -1404,7 +1404,7 @@ const SalesDashboard = () => {
                   />
                 </div>
                 <div>
-                  <Label>Amount (₹)</Label>
+                  <Label className="text-sm">Amount (₹)</Label>
                   <Input 
                     type="number"
                     value={editForm.amount || ''}
@@ -1413,7 +1413,7 @@ const SalesDashboard = () => {
                   />
                 </div>
                 <div>
-                  <Label>Mode of Payment</Label>
+                  <Label className="text-sm">Mode of Payment</Label>
                   <Select value={editForm.payment_mode || 'cash'} onValueChange={(v) => setEditForm({ ...editForm, payment_mode: v })}>
                     <SelectTrigger className="mt-1">
                       <SelectValue />
@@ -1426,7 +1426,7 @@ const SalesDashboard = () => {
                   </Select>
                 </div>
                 <div>
-                  <Label>Remarks</Label>
+                  <Label className="text-sm">Remarks</Label>
                   <Input 
                     value={editForm.remarks || ''}
                     onChange={(e) => setEditForm({ ...editForm, remarks: e.target.value })}
@@ -1435,9 +1435,9 @@ const SalesDashboard = () => {
                 </div>
               </div>
             </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Cancel</Button>
-              <Button onClick={handleUpdateEntry} disabled={submitting} className="bg-green-700 hover:bg-green-800">
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setEditDialogOpen(false)} className="w-full sm:w-auto">Cancel</Button>
+              <Button onClick={handleUpdateEntry} disabled={submitting} className="w-full sm:w-auto bg-green-700 hover:bg-green-800">
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Update Entry'}
               </Button>
             </div>
