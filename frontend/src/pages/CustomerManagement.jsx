@@ -81,6 +81,7 @@ const CustomerManagement = () => {
   
   // Filters
   const [filterCategory, setFilterCategory] = useState('all');
+  const [filterWarehouse, setFilterWarehouse] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
