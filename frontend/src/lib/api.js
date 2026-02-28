@@ -187,6 +187,61 @@ export const exportSalesExcel = async (params) => {
   }
 };
 
+// Sales Summary Report Exports
+export const exportSalesSummaryPdf = async (params) => {
+  try {
+    const response = await api.get('/export/sales-summary-pdf', { 
+      params,
+      responseType: 'blob'
+    });
+    const contentDisposition = response.headers['content-disposition'];
+    const groupBy = params.group_by || 'daily';
+    let filename = `Sales_Summary_${groupBy}_${new Date().toISOString().split('T')[0]}.pdf`;
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename=(.+)/);
+      if (match) filename = match[1];
+    }
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Sales Summary PDF export failed:', error);
+    throw error;
+  }
+};
+
+export const exportSalesSummaryExcel = async (params) => {
+  try {
+    const response = await api.get('/export/sales-summary-excel', { 
+      params,
+      responseType: 'blob'
+    });
+    const contentDisposition = response.headers['content-disposition'];
+    const groupBy = params.group_by || 'daily';
+    let filename = `Sales_Summary_${groupBy}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename=(.+)/);
+      if (match) filename = match[1];
+    }
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Sales Summary Excel export failed:', error);
+    throw error;
+  }
+};
+
 // Dealer Entries
 export const createDealerEntry = (data) => api.post('/dealer-entries', data);
 export const getDealerEntries = (params) => api.get('/dealer-entries', { params });
