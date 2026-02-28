@@ -100,23 +100,8 @@ const PlantEntry = () => {
     try {
       const response = await getPlantReceivedFromWarehouses(date);
       setWarehouseReceived(response.data);
-      
-      // Auto-populate received empties from warehouse reports
-      if (response.data) {
-        setFormData(prev => ({
-          ...prev,
-          received_empty_15kg: response.data.received_15kg.map(r => ({
-            warehouse_id: r.warehouse_id,
-            warehouse_name: r.warehouse_name,
-            quantity: r.quantity
-          })),
-          received_empty_21kg: response.data.received_21kg.map(r => ({
-            warehouse_id: r.warehouse_id,
-            warehouse_name: r.warehouse_name,
-            quantity: r.quantity
-          }))
-        }));
-      }
+      // Only store the reference data, don't auto-populate form fields
+      // User can manually add entries
     } catch (error) {
       console.error('Failed to fetch warehouse received:', error);
     } finally {
