@@ -561,7 +561,7 @@ const OrderManagement = () => {
                       <Label>Connection Type *</Label>
                       <Select 
                         value={formData.connection_type} 
-                        onValueChange={(v) => setFormData({ ...formData, connection_type: v })}
+                        onValueChange={(v) => setFormData({ ...formData, connection_type: v, cylinder_nos: '' })}
                       >
                         <SelectTrigger className="mt-1" data-testid="connection-type">
                           <SelectValue />
@@ -570,12 +570,33 @@ const OrderManagement = () => {
                           <SelectItem value="domestic">
                             <div className="flex items-center gap-2"><Home className="w-4 h-4" /> Domestic</div>
                           </SelectItem>
+                          <SelectItem value="domestic_refill">
+                            <div className="flex items-center gap-2"><Home className="w-4 h-4 text-blue-600" /> Domestic Refill</div>
+                          </SelectItem>
                           <SelectItem value="commercial">
                             <div className="flex items-center gap-2"><Building2 className="w-4 h-4" /> Commercial</div>
+                          </SelectItem>
+                          <SelectItem value="commercial_refill">
+                            <div className="flex items-center gap-2"><Building2 className="w-4 h-4 text-blue-600" /> Commercial Refill</div>
                           </SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
+                    
+                    {/* Cylinder Nos field for refill types */}
+                    {(formData.connection_type === 'domestic_refill' || formData.connection_type === 'commercial_refill') && (
+                      <div>
+                        <Label>Cylinder Nos. *</Label>
+                        <Input 
+                          value={formData.cylinder_nos}
+                          onChange={(e) => setFormData({ ...formData, cylinder_nos: e.target.value })}
+                          placeholder="Enter cylinder numbers (e.g., CYL001, CYL002)"
+                          className="mt-1"
+                          data-testid="cylinder-nos"
+                        />
+                        <p className="text-xs text-slate-500 mt-1">Enter cylinder numbers for refill tracking</p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Customer Selection */}
