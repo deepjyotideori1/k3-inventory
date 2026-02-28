@@ -910,7 +910,7 @@ const SalesDashboard = () => {
                   <p className="text-sm text-green-600 font-medium flex items-center gap-1">
                     <Banknote className="w-4 h-4" /> Cash Collection
                   </p>
-                  <p className="text-2xl font-bold text-green-800">₹{summary.cash.amount.toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-green-800">{formatINR(summary.cash.amount)}</p>
                   <p className="text-xs text-green-600">{summary.cash.count} entries · {summary.cash.refills} refills</p>
                 </div>
               </div>
