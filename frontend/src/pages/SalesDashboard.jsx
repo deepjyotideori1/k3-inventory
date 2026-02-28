@@ -165,15 +165,17 @@ const SalesDashboard = () => {
       if (endDate) params.end_date = endDate;
       if (searchQuery) params.search = searchQuery;
 
-      const [entriesRes, summaryRes, customersRes] = await Promise.all([
+      const [entriesRes, summaryRes, customersRes, frequentRes] = await Promise.all([
         getSalesEntries(params),
         getSalesSummary(params),
-        getCustomers()
+        getCustomers(),
+        getFrequentCustomers(8)
       ]);
       
       setEntries(entriesRes.data);
       setSummary(summaryRes.data);
       setCustomers(customersRes.data);
+      setFrequentCustomers(frequentRes.data);
 
       if (isAdmin && warehouses.length === 0) {
         const warehousesRes = await getWarehouses();
