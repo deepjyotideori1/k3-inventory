@@ -952,7 +952,7 @@ const SalesDashboard = () => {
                   <p className="text-sm text-purple-600 font-medium flex items-center gap-1">
                     <TrendingUp className="w-4 h-4" /> Total Collection
                   </p>
-                  <p className="text-2xl font-bold text-purple-800">₹{summary.total.amount.toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-purple-800">{formatINR(summary.total.amount)}</p>
                   <p className="text-xs text-purple-600">{summary.total.count} entries · {summary.total.refills} refills</p>
                 </div>
               </div>
