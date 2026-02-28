@@ -1311,14 +1311,14 @@ const SalesDashboard = () => {
 
         {/* Edit Dialog */}
         <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="sm:max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Edit Sales Entry</DialogTitle>
+              <DialogTitle className="text-lg">Edit Sales Entry</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-3 sm:space-y-4 py-2 sm:py-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
-                  <Label>Date</Label>
+                  <Label className="text-sm">Date</Label>
                   <Input 
                     type="date"
                     value={editForm.date || ''}
@@ -1327,7 +1327,7 @@ const SalesDashboard = () => {
                   />
                 </div>
                 <div>
-                  <Label>Consumer Name</Label>
+                  <Label className="text-sm">Consumer Name</Label>
                   <Input 
                     value={editForm.consumer_name || ''}
                     onChange={(e) => setEditForm({ ...editForm, consumer_name: e.target.value })}
@@ -1335,7 +1335,7 @@ const SalesDashboard = () => {
                   />
                 </div>
                 <div>
-                  <Label>Consumer No</Label>
+                  <Label className="text-sm">Consumer No</Label>
                   <Input 
                     value={editForm.consumer_no || ''}
                     onChange={(e) => setEditForm({ ...editForm, consumer_no: e.target.value })}
@@ -1343,7 +1343,7 @@ const SalesDashboard = () => {
                   />
                 </div>
                 <div>
-                  <Label>Address</Label>
+                  <Label className="text-sm">Address</Label>
                   <Input 
                     value={editForm.address || ''}
                     onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
@@ -1352,9 +1352,9 @@ const SalesDashboard = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
-                  <Label>Connection Type</Label>
+                  <Label className="text-sm">Connection Type</Label>
                   <Select 
                     value={editForm.connection_type || 'domestic'} 
                     onValueChange={(v) => setEditForm({ ...editForm, connection_type: v, cylinder_nos: v.includes('refill') ? editForm.cylinder_nos : '' })}
@@ -1371,7 +1371,7 @@ const SalesDashboard = () => {
                   </Select>
                 </div>
                 <div>
-                  <Label>No of Refills</Label>
+                  <Label className="text-sm">No of Refills</Label>
                   <Input 
                     type="number"
                     value={editForm.no_of_refills || ''}
@@ -1384,7 +1384,7 @@ const SalesDashboard = () => {
               {/* Cylinder Nos for refill types */}
               {(editForm.connection_type === 'domestic_refill' || editForm.connection_type === 'commercial_refill') && (
                 <div>
-                  <Label>Cylinder Nos. *</Label>
+                  <Label className="text-sm">Cylinder Nos. *</Label>
                   <Input 
                     value={editForm.cylinder_nos || ''}
                     onChange={(e) => setEditForm({ ...editForm, cylinder_nos: e.target.value })}
@@ -1394,9 +1394,9 @@ const SalesDashboard = () => {
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
-                  <Label>Memo No</Label>
+                  <Label className="text-sm">Memo No</Label>
                   <Input 
                     value={editForm.memo_no || ''}
                     onChange={(e) => setEditForm({ ...editForm, memo_no: e.target.value })}
