@@ -1,0 +1,67 @@
+{
+  "summary": "K3 Gas Inventory App - Form Logic Fix Testing Complete. All requested features are WORKING CORRECTLY. Backend ObjectId serialization bug is FIXED. Frontend form logic for connection types and field visibility is CORRECT.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "SalesDashboard and OrderManagement",
+        "issues": ["Minor HTML hydration warnings in console (span inside tr/td/th) - not impacting functionality"]
+      }
+    ]
+  },
+  "passed_tests": [
+    "Sales Dashboard - New Connection mode: Connection Type shows only 'Domestic' and 'Commercial' (no refill options)",
+    "Sales Dashboard - New Connection mode: Cylinder Nos field is VISIBLE",
+    "Sales Dashboard - New Connection mode: No of Refills field is HIDDEN",
+    "Sales Dashboard - Existing Customer mode: Connection Type shows only 'Domestic Refill' and 'Commercial Refill'",
+    "Sales Dashboard - Existing Customer mode: No of Refills field is VISIBLE",
+    "Sales Dashboard - Existing Customer mode: Cylinder Nos field is HIDDEN",
+    "Sales Dashboard - Add entry with Existing Customer + Domestic Refill SUCCEEDED (dialog closed)",
+    "Sales Dashboard - Domestic Refill entries are displayed correctly in table",
+    "Order Management - New Customer mode: Connection Type shows only 'Domestic' and 'Commercial'",
+    "Order Management - New Customer mode: Cylinder Nos field is VISIBLE",
+    "Order Management - Select Existing mode: Connection Type shows only 'Domestic Refill' and 'Commercial Refill'",
+    "Order Management - Select Existing mode: Cylinder Nos field is HIDDEN",
+    "Backend API - POST /api/sales-entries returns valid JSON without MongoDB _id field",
+    "Backend API - create_sales_entry returns proper response with id, warehouse_name, created_by_name"
+  ],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Backend fix confirmed: entry_doc.pop('_id', None) added after insert_one() in both create_sales_entry (line 3197) and create_sales_entry_for_warehouse (line 3238)",
+    "Frontend SalesDashboard.jsx: customerMode state correctly controls connection_type dropdown options (lines 554-572) and field visibility (lines 578-602)",
+    "Frontend OrderManagement.jsx: useExistingCustomer state correctly controls connection_type dropdown options (lines 590-610) and Cylinder Nos field visibility (lines 613-625)"
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "100%"
+  },
+  "test_credentials": {
+    "admin": "admin@k3gas.com / Admin@123",
+    "jullang_manager": "jullang@k3gas.com / Jullang@123"
+  },
+  "seed_data_creation": "Created test entries: TEST_API_Refill_Customer (via API)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Form logic fix for domestic/commercial refill options is complete. Sales Dashboard and Order Management both correctly show: (1) New Connection = domestic/commercial + cylinder_nos field, (2) Existing Customer = domestic_refill/commercial_refill + no_of_refills field. Backend ObjectId serialization bug is fixed with entry_doc.pop('_id', None).",
+  "tested_features_summary": {
+    "sales_dashboard_new_connection_dropdown": "WORKING - Shows only Domestic and Commercial options",
+    "sales_dashboard_new_connection_cylinder_field": "WORKING - Cylinder Nos field is visible",
+    "sales_dashboard_new_connection_refills_hidden": "WORKING - No of Refills field is hidden",
+    "sales_dashboard_existing_customer_dropdown": "WORKING - Shows only Domestic Refill and Commercial Refill",
+    "sales_dashboard_existing_customer_refills_field": "WORKING - No of Refills field is visible",
+    "sales_dashboard_existing_customer_cylinder_hidden": "WORKING - Cylinder Nos field is hidden",
+    "sales_dashboard_add_entry_domestic_refill": "WORKING - Entry submission succeeded",
+    "order_management_new_customer_dropdown": "WORKING - Shows only Domestic and Commercial",
+    "order_management_new_customer_cylinder_field": "WORKING - Cylinder Nos field is visible",
+    "order_management_select_existing_dropdown": "WORKING - Shows only Domestic Refill and Commercial Refill",
+    "order_management_select_existing_cylinder_hidden": "WORKING - Cylinder Nos field is hidden",
+    "backend_objectid_fix": "WORKING - API returns valid JSON without MongoDB _id"
+  }
+}
