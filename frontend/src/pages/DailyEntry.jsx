@@ -497,40 +497,44 @@ const DailyEntry = () => {
                 <div>
                   <CardTitle className="text-lg flex items-center gap-2">
                     <Truck className="w-5 h-5 text-green-700" />
-                    Delivery Received from Plant (Filled Cylinders)
+                    Received from Plant (Filled Cylinders)
                   </CardTitle>
                   <CardDescription className="text-green-700">
-                    Auto-synced from Plant Hollongi's "Delivery to Warehouses" entries
+                    Enter the filled cylinders received from Plant Hollongi
                   </CardDescription>
                 </div>
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => fetchPlantDeliveries(formData.date)}
-                  disabled={loadingPlantDelivery}
-                  className="border-green-300 text-green-700"
-                >
-                  {loadingPlantDelivery ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                  <span className="ml-1">Refresh</span>
-                </Button>
               </div>
             </CardHeader>
             <CardContent>
-              {plantDeliverySync.synced && (formData.received_from_plant_15kg > 0 || formData.received_from_plant_21kg > 0) && (
-                <div className="flex items-center gap-2 mb-4 p-2 bg-white rounded-lg border border-green-200">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
-                  <span className="text-sm text-green-700">Synced from Plant Hollongi Report</span>
+              {/* Reference Info from Plant Hollongi */}
+              {plantDeliverySync.synced && (plantDeliverySync.plant_recorded_15kg > 0 || plantDeliverySync.plant_recorded_21kg > 0) && (
+                <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertTriangle className="w-4 h-4 text-blue-600" />
+                    <span className="text-sm font-medium text-blue-800">Reference: Plant Hollongi's Recorded Delivery</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="text-blue-700">
+                      <span className="font-medium">15kg Filled:</span> {plantDeliverySync.plant_recorded_15kg} units
+                    </div>
+                    <div className="text-blue-700">
+                      <span className="font-medium">21kg Filled:</span> {plantDeliverySync.plant_recorded_21kg} units
+                    </div>
+                  </div>
+                  <p className="text-xs text-blue-600 mt-2 italic">
+                    This is what Plant Hollongi recorded as delivered. Please verify and enter actual received quantity below.
+                  </p>
                 </div>
               )}
+              
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-slate-600">15kg Filled Received</Label>
                   <Input 
                     type="number" 
                     value={formData.received_from_plant_15kg}
-                    readOnly
-                    className="mt-1 bg-green-100 font-semibold text-green-900"
+                    onChange={(e) => handleChange('received_from_plant_15kg', e.target.value)}
+                    className="mt-1"
                     data-testid="received-from-plant-15kg"
                   />
                 </div>
@@ -539,17 +543,24 @@ const DailyEntry = () => {
                   <Input 
                     type="number" 
                     value={formData.received_from_plant_21kg}
-                    readOnly
-                    className="mt-1 bg-green-100 font-semibold text-green-900"
+                    onChange={(e) => handleChange('received_from_plant_21kg', e.target.value)}
+                    className="mt-1"
                     data-testid="received-from-plant-21kg"
                   />
                 </div>
               </div>
-              {!plantDeliverySync.synced && (
-                <p className="text-xs text-slate-500 mt-3 italic">
-                  No delivery data found. Plant Hollongi needs to submit their daily report with deliveries to this warehouse.
-                </p>
-              )}
+              
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="sm"
+                onClick={() => fetchPlantDeliveries(formData.date)}
+                disabled={loadingPlantDelivery}
+                className="mt-3 border-blue-300 text-blue-700"
+              >
+                {loadingPlantDelivery ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                <span className="ml-1">Check Plant's Recorded Delivery</span>
+              </Button>
             </CardContent>
           </Card>
 
