@@ -489,9 +489,9 @@ const SalesDashboard = () => {
                           {customers.map(c => (
                             <SelectItem key={c.id} value={c.id}>
                               <div className="flex items-center gap-2">
-                                <span>{c.name}</span>
-                                <Badge variant="outline" className="text-xs">{c.category}</Badge>
-                                {c.phone && <span className="text-slate-500 text-xs">({c.phone})</span>}
+                                <span className="font-medium">{c.customer_name || c.name}</span>
+                                <Badge variant="outline" className="text-xs">{c.connection_type || c.category}</Badge>
+                                {(c.phone || c.consumer_no) && <span className="text-slate-500 text-xs">({c.phone || c.consumer_no})</span>}
                               </div>
                             </SelectItem>
                           ))}
