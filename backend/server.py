@@ -2790,12 +2790,12 @@ async def download_sample_excel(
     
     # Headers
     headers = [
-        'Date (YYYY-MM-DD)',
+        'Date (DD-MM-YYYY)',
         'Connection Type (domestic/commercial)',
         'Customer Name',
         'Address',
-        'Phone',
-        'Consumer No',
+        'Phone (10 digits)',
+        'Consumer No (10 digits)',
         'Cash Memo No',
         'Cylinder Nos',
         'Gas Card Issued (yes/no)',
@@ -2804,7 +2804,7 @@ async def download_sample_excel(
     ]
     
     # Set column widths
-    column_widths = [18, 30, 25, 35, 15, 15, 15, 15, 22, 18, 30]
+    column_widths = [18, 30, 25, 35, 18, 18, 15, 15, 22, 18, 30]
     for i, width in enumerate(column_widths):
         worksheet.set_column(i, i, width)
     
@@ -2812,11 +2812,11 @@ async def download_sample_excel(
     for col, header in enumerate(headers):
         worksheet.write(0, col, header, header_format)
     
-    # Sample data rows
+    # Sample data rows with DD-MM-YYYY format
     sample_data = [
-        ['2026-02-23', 'domestic', 'Rahul Sharma', 'House No. 123, Itanagar', '9876543210', 'CON001', 'CM001', 'CYL-001, CYL-002', 'yes', 'yes', 'Regular customer'],
-        ['2026-02-23', 'commercial', 'ABC Restaurant', 'Market Complex, Naharlagun', '9876543211', 'CON002', 'CM002', 'CYL-003', 'no', 'yes', 'New connection'],
-        ['2026-02-22', 'domestic', 'Priya Devi', 'Ward No. 5, Doimukh', '9876543212', 'CON003', 'CM003', 'CYL-004, CYL-005', 'yes', 'no', ''],
+        ['28-02-2026', 'domestic', 'Rahul Sharma', 'House No. 123, Itanagar', '9876543210', '9876543210', 'CM001', 'CYL-001, CYL-002', 'yes', 'yes', 'Regular customer'],
+        ['28-02-2026', 'commercial', 'ABC Restaurant', 'Market Complex, Naharlagun', '9876543211', '9876543211', 'CM002', 'CYL-003', 'no', 'yes', 'New connection'],
+        ['27-02-2026', 'domestic', 'Priya Devi', 'Ward No. 5, Doimukh', '9876543212', '9876543212', 'CM003', 'CYL-004, CYL-005', 'yes', 'no', ''],
     ]
     
     for row_num, row_data in enumerate(sample_data, start=1):
