@@ -66,6 +66,7 @@ const PlantEntry = () => {
   useEffect(() => {
     if (formData.date) {
       fetchWarehouseReceived(formData.date);
+      fetchWarehousesReceivedSummary(formData.date);
     }
   }, [formData.date]);
 
