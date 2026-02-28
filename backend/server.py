@@ -3539,7 +3539,7 @@ async def export_sales_pdf(
         total_refills += e.get('no_of_refills', 0)
     
     # Add total row
-    data.append(['', '', '', '', '', 'TOTAL:', f"₹{total_amount:.2f}", '', str(total_refills), ''])
+    data.append(['', '', '', '', '', 'TOTAL:', format_inr(total_amount), '', str(total_refills), ''])
     
     # Create table
     col_widths = [0.4*inch, 0.8*inch, 1.2*inch, 1*inch, 0.8*inch, 0.7*inch, 0.8*inch, 0.7*inch, 0.5*inch, 1*inch]
