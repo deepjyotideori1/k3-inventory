@@ -351,6 +351,41 @@ const SalesDashboard = () => {
     }
   };
 
+  const getExportDateRange = () => {
+    const today = new Date();
+    let start = '';
+    let end = today.toISOString().split('T')[0];
+    
+    switch(exportDateRange) {
+      case 'daily':
+        start = end;
+        break;
+      case 'weekly':
+        const weekAgo = new Date(today);
+        weekAgo.setDate(today.getDate() - 7);
+        start = weekAgo.toISOString().split('T')[0];
+        break;
+      case 'monthly':
+        const monthAgo = new Date(today);
+        monthAgo.setMonth(today.getMonth() - 1);
+        start = monthAgo.toISOString().split('T')[0];
+        break;
+      case 'yearly':
+        const yearAgo = new Date(today);
+        yearAgo.setFullYear(today.getFullYear() - 1);
+        start = yearAgo.toISOString().split('T')[0];
+        break;
+      case 'custom':
+        start = exportStartDate;
+        end = exportEndDate || end;
+        break;
+      default:
+        // 'all' - no date filter
+        return { start: '', end: '' };
+    }
+    return { start, end };
+  };
+
   const handleExportPdf = async (connectionType = 'all') => {
     try {
       const params = {};
@@ -360,8 +395,11 @@ const SalesDashboard = () => {
       if (filterPaymentMode !== 'all') {
         params.payment_mode = filterPaymentMode;
       }
-      if (startDate) params.start_date = startDate;
-      if (endDate) params.end_date = endDate;
+      
+      const { start, end } = getExportDateRange();
+      if (start) params.start_date = start;
+      if (end) params.end_date = end;
+      
       if (connectionType !== 'all') {
         params.connection_type = connectionType;
       }
@@ -383,8 +421,11 @@ const SalesDashboard = () => {
       if (filterPaymentMode !== 'all') {
         params.payment_mode = filterPaymentMode;
       }
-      if (startDate) params.start_date = startDate;
-      if (endDate) params.end_date = endDate;
+      
+      const { start, end } = getExportDateRange();
+      if (start) params.start_date = start;
+      if (end) params.end_date = end;
+      
       if (connectionType !== 'all') {
         params.connection_type = connectionType;
       }
