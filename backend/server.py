@@ -3051,7 +3051,8 @@ class OrderCreate(BaseModel):
     customer_name: str
     mobile_number: str = ""
     address_landmark: str = ""
-    connection_type: str = "domestic"  # domestic or commercial
+    connection_type: str = "domestic"  # domestic, domestic_refill, commercial, commercial_refill
+    cylinder_nos: str = ""  # Required for refill types
     payment_mode: str = "cash"  # cash, online, credit_pending
     remarks: str = ""
 
@@ -3061,6 +3062,7 @@ class OrderUpdate(BaseModel):
     mobile_number: Optional[str] = None
     address_landmark: Optional[str] = None
     connection_type: Optional[str] = None
+    cylinder_nos: Optional[str] = None
     payment_mode: Optional[str] = None
     remarks: Optional[str] = None
     status: Optional[str] = None  # pending, delivered
