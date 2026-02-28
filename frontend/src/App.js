@@ -219,6 +219,14 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/sales-data"
+        element={
+          <ProtectedRoute>
+            <SalesDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/sales-dashboard"
         element={
           <ProtectedRoute>
