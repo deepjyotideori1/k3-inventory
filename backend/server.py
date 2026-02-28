@@ -2831,10 +2831,10 @@ async def download_sample_excel(
     title_format = workbook.add_format({'bold': True, 'font_size': 14})
     
     instructions.write(0, 0, 'BULK CUSTOMER UPLOAD INSTRUCTIONS', title_format)
-    instructions.write(2, 0, '1. Date Format: Use YYYY-MM-DD format (e.g., 2026-02-23)', instruction_format)
+    instructions.write(2, 0, '1. Date Format: Use DD-MM-YYYY format (e.g., 28-02-2026)', instruction_format)
     instructions.write(3, 0, '2. Connection Type: Must be either "domestic" or "commercial" (lowercase)', instruction_format)
     instructions.write(4, 0, '3. Customer Name: Required field - cannot be empty', instruction_format)
-    instructions.write(5, 0, '4. Phone: Customer mobile number for SMS/WhatsApp messaging (10+ digits)', instruction_format)
+    instructions.write(5, 0, '4. Phone: Customer mobile number for SMS/WhatsApp messaging (10 digits)', instruction_format)
     instructions.write(6, 0, '5. Gas Card Issued: Use "yes" or "no" (lowercase)', instruction_format)
     instructions.write(7, 0, '6. KYC Done: Use "yes" or "no" (lowercase)', instruction_format)
     instructions.write(8, 0, '7. Delete the sample data rows before uploading your actual data', instruction_format)
