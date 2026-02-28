@@ -924,7 +924,7 @@ const SalesDashboard = () => {
                   <p className="text-sm text-blue-600 font-medium flex items-center gap-1">
                     <CreditCard className="w-4 h-4" /> Online Collection
                   </p>
-                  <p className="text-2xl font-bold text-blue-800">₹{summary.online.amount.toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-blue-800">{formatINR(summary.online.amount)}</p>
                   <p className="text-xs text-blue-600">{summary.online.count} entries · {summary.online.refills} refills</p>
                 </div>
               </div>
