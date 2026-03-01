@@ -1467,7 +1467,8 @@ async def export_pdf(
             ])
         
         # Calculate column widths to fit A4 landscape (842 points width - 30 margins = 812)
-        col_widths = [42, 45] + [38]*16 + [28]
+        # Wider columns for the longer headers (Refill to Plant, Received from Plant)
+        col_widths = [40, 42, 32, 32, 32, 32, 32, 32, 32, 32, 52, 52, 55, 55, 32, 32, 32, 32, 26]
         table = Table(data, colWidths=col_widths, repeatRows=1)
         table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#15803d')),
@@ -1475,9 +1476,9 @@ async def export_pdf(
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 7),  # Header
-            ('FONTSIZE', (0, 1), (-1, -1), 7),  # Body - smaller to fit
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 4),
+            ('FONTSIZE', (0, 0), (-1, 0), 6),  # Header - smaller for longer text
+            ('FONTSIZE', (0, 1), (-1, -1), 7),  # Body
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
             ('TOPPADDING', (0, 0), (-1, -1), 2),
             ('BACKGROUND', (2, 1), (5, -1), colors.HexColor('#dbeafe')),  # Opening - blue
             ('BACKGROUND', (6, 1), (13, -1), colors.HexColor('#fef3c7')),  # Activity - yellow
