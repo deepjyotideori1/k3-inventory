@@ -568,10 +568,10 @@ const Reports = () => {
                       </div>
                     </div>
 
-                    {/* Day Activities */}
+                    {/* Day Activities - Refilling */}
                     <div className="bg-amber-50 p-3 rounded-lg">
-                      <h4 className="font-semibold text-amber-800 mb-2">Day Activities</h4>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                      <h4 className="font-semibold text-amber-800 mb-2">Day Activities - Refilling</h4>
+                      <div className="grid grid-cols-2 gap-3 text-sm">
                         <div className="bg-white p-2 rounded text-center">
                           <p className="text-slate-500">Refilled 15kg</p>
                           <p className="font-bold text-amber-700">{report.day_refilled_15kg || 0}</p>
@@ -580,38 +580,113 @@ const Reports = () => {
                           <p className="text-slate-500">Refilled 21kg</p>
                           <p className="font-bold text-amber-700">{report.day_refilled_21kg || 0}</p>
                         </div>
-                        <div className="bg-white p-2 rounded text-center">
-                          <p className="text-slate-500">Delivered 15kg</p>
-                          <p className="font-bold text-amber-700">
-                            {(report.delivery_15kg || []).reduce((sum, d) => sum + (d.quantity || 0), 0)}
-                          </p>
-                        </div>
-                        <div className="bg-white p-2 rounded text-center">
-                          <p className="text-slate-500">Delivered 21kg</p>
-                          <p className="font-bold text-amber-700">
-                            {(report.delivery_21kg || []).reduce((sum, d) => sum + (d.quantity || 0), 0)}
-                          </p>
-                        </div>
                       </div>
                     </div>
 
-                    {/* Received Empties */}
+                    {/* Delivery to Warehouses */}
+                    <div className="bg-indigo-50 p-3 rounded-lg">
+                      <h4 className="font-semibold text-indigo-800 mb-2">Delivery to Warehouses (Filled Cylinders)</h4>
+                      {(report.delivery_15kg?.length > 0 || report.delivery_21kg?.length > 0) ? (
+                        <div className="space-y-2">
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="bg-indigo-100">
+                                  <th className="px-3 py-2 text-left text-indigo-800">Warehouse</th>
+                                  <th className="px-3 py-2 text-center text-indigo-800">15kg Filled</th>
+                                  <th className="px-3 py-2 text-center text-indigo-800">21kg Filled</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(() => {
+                                  const warehouseMap = {};
+                                  (report.delivery_15kg || []).forEach(d => {
+                                    if (!warehouseMap[d.warehouse_name]) warehouseMap[d.warehouse_name] = { qty15: 0, qty21: 0 };
+                                    warehouseMap[d.warehouse_name].qty15 = d.quantity || 0;
+                                  });
+                                  (report.delivery_21kg || []).forEach(d => {
+                                    if (!warehouseMap[d.warehouse_name]) warehouseMap[d.warehouse_name] = { qty15: 0, qty21: 0 };
+                                    warehouseMap[d.warehouse_name].qty21 = d.quantity || 0;
+                                  });
+                                  return Object.entries(warehouseMap).map(([name, qty]) => (
+                                    <tr key={name} className="border-b border-indigo-100">
+                                      <td className="px-3 py-2 font-medium">{name}</td>
+                                      <td className="px-3 py-2 text-center font-bold text-indigo-700">{qty.qty15}</td>
+                                      <td className="px-3 py-2 text-center font-bold text-indigo-700">{qty.qty21}</td>
+                                    </tr>
+                                  ));
+                                })()}
+                              </tbody>
+                              <tfoot className="bg-indigo-100">
+                                <tr>
+                                  <td className="px-3 py-2 font-semibold">Total</td>
+                                  <td className="px-3 py-2 text-center font-bold text-indigo-800">
+                                    {(report.delivery_15kg || []).reduce((sum, d) => sum + (d.quantity || 0), 0)}
+                                  </td>
+                                  <td className="px-3 py-2 text-center font-bold text-indigo-800">
+                                    {(report.delivery_21kg || []).reduce((sum, d) => sum + (d.quantity || 0), 0)}
+                                  </td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-indigo-600 text-center py-2">No deliveries recorded</p>
+                      )}
+                    </div>
+
+                    {/* Empty Received from Warehouses */}
                     <div className="bg-orange-50 p-3 rounded-lg">
                       <h4 className="font-semibold text-orange-800 mb-2">Empty Received from Warehouses</h4>
-                      <div className="grid grid-cols-2 gap-3 text-sm">
-                        <div className="bg-white p-2 rounded text-center">
-                          <p className="text-slate-500">15kg Empty</p>
-                          <p className="font-bold text-orange-700">
-                            {(report.received_empty_15kg || []).reduce((sum, d) => sum + (d.quantity || 0), 0)}
-                          </p>
+                      {(report.received_empty_15kg?.length > 0 || report.received_empty_21kg?.length > 0) ? (
+                        <div className="space-y-2">
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="bg-orange-100">
+                                  <th className="px-3 py-2 text-left text-orange-800">Warehouse</th>
+                                  <th className="px-3 py-2 text-center text-orange-800">15kg Empty</th>
+                                  <th className="px-3 py-2 text-center text-orange-800">21kg Empty</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(() => {
+                                  const warehouseMap = {};
+                                  (report.received_empty_15kg || []).forEach(d => {
+                                    if (!warehouseMap[d.warehouse_name]) warehouseMap[d.warehouse_name] = { qty15: 0, qty21: 0 };
+                                    warehouseMap[d.warehouse_name].qty15 = d.quantity || 0;
+                                  });
+                                  (report.received_empty_21kg || []).forEach(d => {
+                                    if (!warehouseMap[d.warehouse_name]) warehouseMap[d.warehouse_name] = { qty15: 0, qty21: 0 };
+                                    warehouseMap[d.warehouse_name].qty21 = d.quantity || 0;
+                                  });
+                                  return Object.entries(warehouseMap).map(([name, qty]) => (
+                                    <tr key={name} className="border-b border-orange-100">
+                                      <td className="px-3 py-2 font-medium">{name}</td>
+                                      <td className="px-3 py-2 text-center font-bold text-orange-700">{qty.qty15}</td>
+                                      <td className="px-3 py-2 text-center font-bold text-orange-700">{qty.qty21}</td>
+                                    </tr>
+                                  ));
+                                })()}
+                              </tbody>
+                              <tfoot className="bg-orange-100">
+                                <tr>
+                                  <td className="px-3 py-2 font-semibold">Total</td>
+                                  <td className="px-3 py-2 text-center font-bold text-orange-800">
+                                    {(report.received_empty_15kg || []).reduce((sum, d) => sum + (d.quantity || 0), 0)}
+                                  </td>
+                                  <td className="px-3 py-2 text-center font-bold text-orange-800">
+                                    {(report.received_empty_21kg || []).reduce((sum, d) => sum + (d.quantity || 0), 0)}
+                                  </td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
                         </div>
-                        <div className="bg-white p-2 rounded text-center">
-                          <p className="text-slate-500">21kg Empty</p>
-                          <p className="font-bold text-orange-700">
-                            {(report.received_empty_21kg || []).reduce((sum, d) => sum + (d.quantity || 0), 0)}
-                          </p>
-                        </div>
-                      </div>
+                      ) : (
+                        <p className="text-sm text-orange-600 text-center py-2">No empties received</p>
+                      )}
                     </div>
 
                     {/* Closing Stock */}
