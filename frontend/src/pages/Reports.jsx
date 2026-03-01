@@ -583,6 +583,15 @@ const Reports = () => {
                       </div>
                     </div>
 
+                    {/* Day Reloading */}
+                    <div className="bg-cyan-50 p-3 rounded-lg">
+                      <h4 className="font-semibold text-cyan-800 mb-2">Day Reloading</h4>
+                      <div className="bg-white p-2 rounded text-center max-w-xs">
+                        <p className="text-slate-500">Reloading Quantity</p>
+                        <p className="font-bold text-cyan-700">{report.day_reloading_kg || 0} kg</p>
+                      </div>
+                    </div>
+
                     {/* Delivery to Warehouses */}
                     <div className="bg-indigo-50 p-3 rounded-lg">
                       <h4 className="font-semibold text-indigo-800 mb-2">Delivery to Warehouses (Filled Cylinders)</h4>
