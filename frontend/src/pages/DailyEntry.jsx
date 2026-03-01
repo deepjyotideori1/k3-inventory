@@ -74,12 +74,6 @@ const DailyEntry = () => {
   }, [user]);
 
   useEffect(() => {
-    if (user?.warehouse_id && formData.date) {
-      fetchPlantDeliveries(formData.date);
-    }
-  }, [user, formData.date]);
-
-  useEffect(() => {
     calculateDiscrepancies();
   }, [formData]);
 
