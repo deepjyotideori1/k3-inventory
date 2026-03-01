@@ -31,6 +31,9 @@ const Reports = () => {
   const [warehouses, setWarehouses] = useState([]);
   const [activeTab, setActiveTab] = useState('daily');
   
+  // Check if user is Plant Hollongi manager
+  const isPlantUser = user?.warehouse_name === 'Plant Hollongi';
+  
   const [filters, setFilters] = useState({
     warehouse_id: 'all',
     period: 'weekly',
