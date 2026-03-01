@@ -3659,7 +3659,7 @@ async def export_sales_pdf(
     connection_type: str = None,
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
-    """Export sales entries to PDF"""
+    """Export sales entries to PDF - A4 fit-to-page"""
     user = await get_current_user(credentials)
     
     query = {}
@@ -3686,37 +3686,36 @@ async def export_sales_pdf(
     
     entries = await db.sales_entries.find(query, {'_id': 0}).sort('date', -1).to_list(5000)
     
-    # Get warehouse name for title
     warehouse_name = "All Warehouses"
     if query.get('warehouse_id'):
         warehouse = await db.warehouses.find_one({'id': query['warehouse_id']}, {'_id': 0})
         warehouse_name = warehouse['name'] if warehouse else 'Unknown'
     
-    # Create PDF
+    # Create PDF - A4 landscape fit-to-page
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), topMargin=0.5*inch, bottomMargin=0.5*inch)
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), topMargin=15, bottomMargin=15, leftMargin=15, rightMargin=15)
     elements = []
     styles = getSampleStyleSheet()
     
-    # Title
-    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=16, alignment=1)
-    elements.append(Paragraph(f"Sales Report - {warehouse_name}", title_style))
+    # Title - Header 14pt bold
+    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=14, alignment=1, textColor=colors.HexColor('#15803d'))
+    elements.append(Paragraph(f"K3 GAS SERVICE - Sales Report - {warehouse_name}", title_style))
     
     date_range = ""
     if start_date and end_date:
-        date_range = f"From {start_date} to {end_date}"
+        date_range = f"Period: {start_date} to {end_date}"
     elif start_date:
-        date_range = f"From {start_date}"
+        date_range = f"From: {start_date}"
     elif end_date:
-        date_range = f"Until {end_date}"
+        date_range = f"Until: {end_date}"
     
     if date_range:
-        elements.append(Paragraph(date_range, ParagraphStyle('DateRange', parent=styles['Normal'], alignment=1)))
+        elements.append(Paragraph(date_range, ParagraphStyle('DateRange', fontSize=10, alignment=1)))
     
-    elements.append(Spacer(1, 0.25*inch))
+    elements.append(Spacer(1, 5))
     
     # Table data
-    data = [['SL', 'Date', 'Consumer Name', 'Address', 'Consumer No', 'Memo No', 'Amount (₹)', 'Payment Mode', 'Refills', 'Remarks']]
+    data = [['SL', 'Date', 'Consumer', 'Address', 'Cons.No', 'Memo', 'Amount', 'Mode', 'Refills']]
     
     total_amount = 0
     total_refills = 0
