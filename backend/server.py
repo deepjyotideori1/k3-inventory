@@ -3110,19 +3110,19 @@ async def export_customers_pdf(
         warehouse = await db.warehouses.find_one({'id': warehouse_id})
         warehouse_name = warehouse['name'] if warehouse else 'Unknown'
     
-    # Create PDF
+    # Create PDF - A4 landscape fit-to-page
     output = BytesIO()
-    doc = SimpleDocTemplate(output, pagesize=landscape(A4), topMargin=30, bottomMargin=30)
+    doc = SimpleDocTemplate(output, pagesize=landscape(A4), topMargin=15, bottomMargin=15, leftMargin=15, rightMargin=15)
     elements = []
     styles = getSampleStyleSheet()
     
-    # Title
+    # Header 14pt bold
     title_style = ParagraphStyle(
         'CustomTitle',
         parent=styles['Heading1'],
-        fontSize=16,
+        fontSize=14,
         textColor=colors.HexColor('#2d5016'),
-        spaceAfter=20,
+        spaceAfter=5,
         alignment=1
     )
     
@@ -3130,36 +3130,37 @@ async def export_customers_pdf(
     title = Paragraph(f"K3 GAS SERVICE - {category_text} Customer Report", title_style)
     elements.append(title)
     
-    subtitle = Paragraph(f"Warehouse: {warehouse_name}", styles['Normal'])
+    subtitle = Paragraph(f"Warehouse: {warehouse_name}", ParagraphStyle('Sub', fontSize=10, alignment=1))
     elements.append(subtitle)
-    elements.append(Spacer(1, 20))
+    elements.append(Spacer(1, 5))
     
     # Table data
-    table_data = [['Date', 'Type', 'Customer Name', 'Phone', 'Address', 'Consumer No', 'Gas Card', 'KYC']]
+    table_data = [['Date', 'Type', 'Customer', 'Phone', 'Address', 'Cons.No', 'Card', 'KYC']]
     
     for c in customers:
         table_data.append([
             c.get('date', ''),
-            c.get('connection_type', '').capitalize(),
-            c.get('customer_name', '')[:20],
+            c.get('connection_type', '')[:6].title(),
+            c.get('customer_name', '')[:18],
             c.get('phone', ''),
-            c.get('address', '')[:25],
+            c.get('address', '')[:22],
             c.get('consumer_no', ''),
-            'Yes' if c.get('gas_card_issued') else 'No',
-            'Yes' if c.get('kyc_done') else 'No'
+            'Y' if c.get('gas_card_issued') else 'N',
+            'Y' if c.get('kyc_done') else 'N'
         ])
     
-    # Create table
-    table = Table(table_data, repeatRows=1)
+    # Create table - fit A4 landscape
+    col_widths = [60, 55, 130, 85, 160, 90, 35, 35]
+    table = Table(table_data, colWidths=col_widths, repeatRows=1)
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2d5016')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 9),
-        ('FONTSIZE', (0, 1), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+        ('FONTSIZE', (0, 0), (-1, 0), 8),
+        ('FONTSIZE', (0, 1), (-1, -1), 7),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f0f0f0')])
     ]))
@@ -3167,10 +3168,10 @@ async def export_customers_pdf(
     elements.append(table)
     
     # Summary
-    elements.append(Spacer(1, 20))
+    elements.append(Spacer(1, 10))
     domestic_count = sum(1 for c in customers if c.get('connection_type') == 'domestic')
     commercial_count = sum(1 for c in customers if c.get('connection_type') == 'commercial')
-    summary = Paragraph(f"Total: {len(customers)} customers (Domestic: {domestic_count}, Commercial: {commercial_count})", styles['Normal'])
+    summary = Paragraph(f"Total: {len(customers)} (Domestic: {domestic_count}, Commercial: {commercial_count})", ParagraphStyle('Sum', fontSize=10))
     elements.append(summary)
     
     doc.build(elements)
