@@ -1762,19 +1762,23 @@ async def export_excel(
         
         reports = await db.plant_reports.find(query, {'_id': 0}).sort('date', -1).to_list(1000)
         
-        worksheet.merge_range('A1:Q1', 'K3 GAS SERVICE - Plant Hollongi Report', title_format)
+        worksheet.merge_range('A1:R1', 'K3 GAS SERVICE - Plant Hollongi Report', title_format)
         if start_date and end_date:
-            worksheet.merge_range('A2:Q2', f'Period: {start_date} to {end_date}', workbook.add_format({'align': 'center'}))
+            worksheet.merge_range('A2:R2', f'Period: {start_date} to {end_date}', workbook.add_format({'align': 'center'}))
         
-        # Comprehensive headers for Plant
+        # Comprehensive headers for Plant with Day Reloading
         headers = [
             'Date',
             'Op.Tank(kg)', 'Op.15F', 'Op.21F', 'Op.15E', 'Op.21E',
-            'Recv.15E', 'Recv.21E',
+            'Reload(kg)', 'Recv.15E', 'Recv.21E',
             'Refill.15', 'Refill.21',
             'Del.15F', 'Del.21F',
             'Cl.Tank(kg)', 'Cl.15F', 'Cl.21F', 'Cl.15E', 'Cl.21E'
         ]
+        
+        # Create a reloading format (cyan background)
+        reloading_format = workbook.add_format({'bg_color': '#cffafe', 'align': 'center', 'border': 1})
+        
         for col, header in enumerate(headers):
             worksheet.write(3, col, header, header_format)
             worksheet.set_column(col, col, 10)
@@ -1793,19 +1797,21 @@ async def export_excel(
             worksheet.write(row, 3, r.get('opening_21kg_filled', 0), opening_format)
             worksheet.write(row, 4, r.get('opening_15kg_empty', 0), opening_format)
             worksheet.write(row, 5, r.get('opening_21kg_empty', 0), opening_format)
+            # Day Reloading
+            worksheet.write(row, 6, r.get('day_reloading_kg', 0), reloading_format)
             # Activities
-            worksheet.write(row, 6, recv_15, activity_format)
-            worksheet.write(row, 7, recv_21, activity_format)
-            worksheet.write(row, 8, r.get('day_refilled_15kg', 0), activity_format)
-            worksheet.write(row, 9, r.get('day_refilled_21kg', 0), activity_format)
-            worksheet.write(row, 10, del_15, activity_format)
-            worksheet.write(row, 11, del_21, activity_format)
+            worksheet.write(row, 7, recv_15, activity_format)
+            worksheet.write(row, 8, recv_21, activity_format)
+            worksheet.write(row, 9, r.get('day_refilled_15kg', 0), activity_format)
+            worksheet.write(row, 10, r.get('day_refilled_21kg', 0), activity_format)
+            worksheet.write(row, 11, del_15, activity_format)
+            worksheet.write(row, 12, del_21, activity_format)
             # Closing
-            worksheet.write(row, 12, r.get('closing_bullet_tank_kg', 0), closing_format)
-            worksheet.write(row, 13, r.get('closing_15kg_filled', 0), closing_format)
-            worksheet.write(row, 14, r.get('closing_21kg_filled', 0), closing_format)
-            worksheet.write(row, 15, r.get('closing_15kg_empty', 0), closing_format)
-            worksheet.write(row, 16, r.get('closing_21kg_empty', 0), closing_format)
+            worksheet.write(row, 13, r.get('closing_bullet_tank_kg', 0), closing_format)
+            worksheet.write(row, 14, r.get('closing_15kg_filled', 0), closing_format)
+            worksheet.write(row, 15, r.get('closing_21kg_filled', 0), closing_format)
+            worksheet.write(row, 16, r.get('closing_15kg_empty', 0), closing_format)
+            worksheet.write(row, 17, r.get('closing_21kg_empty', 0), closing_format)
         
         # Create second sheet for warehouse breakdown
         breakdown_sheet = workbook.add_worksheet('Warehouse Breakdown')
