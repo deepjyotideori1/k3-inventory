@@ -57,13 +57,6 @@ const PlantEntry = () => {
     fetchData();
   }, []);
 
-  useEffect(() => {
-    if (formData.date) {
-      fetchWarehouseReceived(formData.date);
-      fetchWarehousesReceivedSummary(formData.date);
-    }
-  }, [formData.date]);
-
   const fetchData = async () => {
     try {
       const [openingRes, warehousesRes] = await Promise.all([
@@ -86,33 +79,6 @@ const PlantEntry = () => {
       console.error('Failed to fetch data:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchWarehouseReceived = async (date) => {
-    setLoadingReceived(true);
-    try {
-      const response = await getPlantReceivedFromWarehouses(date);
-      setWarehouseReceived(response.data);
-      // Only store the reference data, don't auto-populate form fields
-      // User can manually add entries
-    } catch (error) {
-      console.error('Failed to fetch warehouse received:', error);
-    } finally {
-      setLoadingReceived(false);
-    }
-  };
-
-  // Fetch what warehouses recorded as received from plant (notification only)
-  const fetchWarehousesReceivedSummary = async (date) => {
-    setLoadingReceivedSummary(true);
-    try {
-      const response = await getWarehousesReceivedSummary(date);
-      setWarehousesReceivedSummary(response.data);
-    } catch (error) {
-      console.error('Failed to fetch warehouses received summary:', error);
-    } finally {
-      setLoadingReceivedSummary(false);
     }
   };
 
