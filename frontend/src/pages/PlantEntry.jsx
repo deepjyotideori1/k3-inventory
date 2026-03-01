@@ -298,69 +298,31 @@ const PlantEntry = () => {
             </CardContent>
           </Card>
 
-          {/* Empty Received from Warehouses - MANUAL ENTRY */}
+          {/* Empty Received from Warehouses */}
           <Card className="mb-6 border-2 border-amber-200 bg-amber-50" data-testid="received-section">
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <ArrowDownToLine className="w-5 h-5 text-amber-700" />
-                    Empty Received from Warehouses
-                  </CardTitle>
-                  <CardDescription className="text-amber-700">
-                    Enter empty cylinders received from warehouses
-                  </CardDescription>
-                </div>
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => fetchWarehouseReceived(formData.date)}
-                  disabled={loadingReceived}
-                  className="border-blue-300 text-blue-700"
-                >
-                  {loadingReceived ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                  <span className="ml-1">Check Reference</span>
-                </Button>
-              </div>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <ArrowDownToLine className="w-5 h-5 text-amber-700" />
+                Empty Received from Warehouses
+              </CardTitle>
+              <CardDescription className="text-amber-700">
+                Enter empty cylinders received from warehouses
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Warehouse Received Reference Summary */}
-              {warehouseReceived && (warehouseReceived.total_15kg > 0 || warehouseReceived.total_21kg > 0) && (
-                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                  <div className="flex items-center gap-2 mb-3">
-                    <AlertCircle className="w-5 h-5 text-blue-600" />
-                    <span className="font-medium text-blue-800">Reference: Warehouses' "Refilling at Plant" Entries</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="p-3 bg-white rounded-lg text-center border border-blue-200">
-                      <p className="text-xs text-blue-700">15kg Empties (Reference)</p>
-                      <p className="text-2xl font-bold text-blue-800">{warehouseReceived.total_15kg}</p>
-                    </div>
-                    <div className="p-3 bg-white rounded-lg text-center border border-blue-200">
-                      <p className="text-xs text-blue-700">21kg Empties (Reference)</p>
-                      <p className="text-2xl font-bold text-blue-800">{warehouseReceived.total_21kg}</p>
-                    </div>
-                  </div>
-                  <p className="text-xs text-blue-600 mt-2 italic">
-                    This is what warehouses recorded. Verify and enter actual received quantities below.
-                  </p>
-                </div>
-              )}
-
               {/* 15kg Received Details */}
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="font-medium text-slate-700">15kg Empty Received</h4>
                   <Button type="button" variant="outline" size="sm" onClick={() => addReceived('15kg')}>
-                    <Plus className="w-4 h-4 mr-1" /> Add Manual Entry
+                    <Plus className="w-4 h-4 mr-1" /> Add Entry
                   </Button>
                 </div>
                 {formData.received_empty_15kg.length === 0 ? (
                   <div className="p-4 bg-slate-50 rounded-lg text-center">
                     <AlertCircle className="w-6 h-6 text-slate-400 mx-auto mb-2" />
-                    <p className="text-slate-500 text-sm">No 15kg empties received from warehouses today</p>
-                    <p className="text-slate-400 text-xs mt-1">Click "Add Manual Entry" to add received empties</p>
+                    <p className="text-slate-500 text-sm">No 15kg empties added</p>
+                    <p className="text-slate-400 text-xs mt-1">Click "Add Entry" to add received empties</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
