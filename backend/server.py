@@ -1558,6 +1558,79 @@ async def export_pdf(
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
         ]))
         elements.append(table)
+        
+        # Add detailed warehouse breakdown for each report
+        elements.append(Spacer(1, 15))
+        elements.append(Paragraph("Warehouse-wise Breakdown", subtitle_style))
+        elements.append(Spacer(1, 5))
+        
+        for r in reports:
+            report_date = r.get('date', '')
+            deliveries = r.get('delivery_15kg', []) + r.get('delivery_21kg', [])
+            received = r.get('received_empty_15kg', []) + r.get('received_empty_21kg', [])
+            
+            if deliveries or received:
+                elements.append(Paragraph(f"Date: {report_date}", ParagraphStyle('DateHeader', fontSize=10, fontName='Helvetica-Bold')))
+                elements.append(Spacer(1, 3))
+                
+                # Delivery to Warehouses table
+                if r.get('delivery_15kg', []) or r.get('delivery_21kg', []):
+                    elements.append(Paragraph("Delivery to Warehouses (Filled Cylinders)", ParagraphStyle('SubHeader', fontSize=9, textColor=colors.HexColor('#4338ca'))))
+                    del_data = [['Warehouse', '15kg Filled', '21kg Filled']]
+                    warehouse_del = {}
+                    for d in r.get('delivery_15kg', []):
+                        wname = d.get('warehouse_name', 'Unknown')
+                        if wname not in warehouse_del:
+                            warehouse_del[wname] = {'qty15': 0, 'qty21': 0}
+                        warehouse_del[wname]['qty15'] = d.get('quantity', 0)
+                    for d in r.get('delivery_21kg', []):
+                        wname = d.get('warehouse_name', 'Unknown')
+                        if wname not in warehouse_del:
+                            warehouse_del[wname] = {'qty15': 0, 'qty21': 0}
+                        warehouse_del[wname]['qty21'] = d.get('quantity', 0)
+                    for wname, qty in warehouse_del.items():
+                        del_data.append([wname, qty['qty15'], qty['qty21']])
+                    
+                    del_table = Table(del_data, colWidths=[150, 80, 80])
+                    del_table.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#c7d2fe')),
+                        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                        ('FONTSIZE', (0, 0), (-1, -1), 8),
+                        ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+                        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                    ]))
+                    elements.append(del_table)
+                    elements.append(Spacer(1, 5))
+                
+                # Empty Received from Warehouses table
+                if r.get('received_empty_15kg', []) or r.get('received_empty_21kg', []):
+                    elements.append(Paragraph("Empty Received from Warehouses", ParagraphStyle('SubHeader', fontSize=9, textColor=colors.HexColor('#c2410c'))))
+                    recv_data = [['Warehouse', '15kg Empty', '21kg Empty']]
+                    warehouse_recv = {}
+                    for d in r.get('received_empty_15kg', []):
+                        wname = d.get('warehouse_name', 'Unknown')
+                        if wname not in warehouse_recv:
+                            warehouse_recv[wname] = {'qty15': 0, 'qty21': 0}
+                        warehouse_recv[wname]['qty15'] = d.get('quantity', 0)
+                    for d in r.get('received_empty_21kg', []):
+                        wname = d.get('warehouse_name', 'Unknown')
+                        if wname not in warehouse_recv:
+                            warehouse_recv[wname] = {'qty15': 0, 'qty21': 0}
+                        warehouse_recv[wname]['qty21'] = d.get('quantity', 0)
+                    for wname, qty in warehouse_recv.items():
+                        recv_data.append([wname, qty['qty15'], qty['qty21']])
+                    
+                    recv_table = Table(recv_data, colWidths=[150, 80, 80])
+                    recv_table.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#fed7aa')),
+                        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                        ('FONTSIZE', (0, 0), (-1, -1), 8),
+                        ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+                        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                    ]))
+                    elements.append(recv_table)
+                
+                elements.append(Spacer(1, 8))
     
     doc.build(elements)
     buffer.seek(0)
