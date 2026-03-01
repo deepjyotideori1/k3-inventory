@@ -1393,20 +1393,19 @@ async def export_pdf(
     user: dict = Depends(get_current_user)
 ):
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
+    # A4 landscape for fit-to-page
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=15, leftMargin=15, topMargin=15, bottomMargin=15)
     elements = []
     styles = getSampleStyleSheet()
     
-    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=16, spaceAfter=10, alignment=1, textColor=colors.HexColor('#15803d'))
-    subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=10, spaceAfter=5, alignment=1)
-    section_style = ParagraphStyle('Section', parent=styles['Heading3'], fontSize=11, spaceBefore=10, spaceAfter=5, textColor=colors.HexColor('#15803d'))
+    # Header font size 14 bold, body font size 13
+    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=14, spaceAfter=5, alignment=1, textColor=colors.HexColor('#15803d'))
+    subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=12, spaceAfter=3, alignment=1)
     
-    elements.append(Paragraph("K3 GAS SERVICE", title_style))
-    elements.append(Paragraph("Khayal Hamesha", subtitle_style))
+    elements.append(Paragraph("K3 GAS SERVICE - Khayal Hamesha", title_style))
     
     if report_type == "daily":
         query = {}
-        # Filter by warehouse - non-admin users can only see their own warehouse
         if user['role'] != 'admin':
             query['warehouse_id'] = user.get('warehouse_id')
         elif warehouse_id:
@@ -1422,7 +1421,6 @@ async def export_pdf(
         
         reports = await db.daily_reports.find(query, {'_id': 0}).sort('date', -1).to_list(1000)
         
-        # Get warehouse name for title
         warehouse_name = "All Warehouses"
         if user['role'] != 'admin':
             warehouse_name = user.get('warehouse_name', 'My Warehouse')
@@ -1430,28 +1428,25 @@ async def export_pdf(
             wh = await db.warehouses.find_one({'id': warehouse_id}, {'_id': 0})
             warehouse_name = wh['name'] if wh else warehouse_id
         
-        elements.append(Paragraph(f"Daily Inventory Report - {warehouse_name}", styles['Heading2']))
+        elements.append(Paragraph(f"Daily Inventory Report - {warehouse_name}", subtitle_style))
         if start_date and end_date:
-            elements.append(Paragraph(f"Period: {start_date} to {end_date}", styles['Normal']))
-        elements.append(Spacer(1, 10))
+            elements.append(Paragraph(f"Period: {start_date} to {end_date}", ParagraphStyle('Period', fontSize=10, alignment=1)))
+        elements.append(Spacer(1, 5))
         
-        # Comprehensive table with all data
+        # Comprehensive table - fit to A4 landscape
         data = [[
             'Date', 'Warehouse',
-            'Open 15kg\nFilled', 'Open 21kg\nFilled', 'Open 15kg\nEmpty', 'Open 21kg\nEmpty',
-            'Sold\n15kg', 'Sold\n21kg',
-            'Refill\n15kg', 'Refill\n21kg',
-            'To Plant\n15kg', 'To Plant\n21kg',
-            'From Plant\n15kg', 'From Plant\n21kg',
-            'Close 15kg\nFilled', 'Close 21kg\nFilled', 'Close 15kg\nEmpty', 'Close 21kg\nEmpty',
-            'Status'
+            'Op.15F', 'Op.21F', 'Op.15E', 'Op.21E',
+            'Sold15', 'Sold21', 'Ref15', 'Ref21',
+            'ToPl15', 'ToPl21', 'FrPl15', 'FrPl21',
+            'Cl.15F', 'Cl.21F', 'Cl.15E', 'Cl.21E', 'Stat'
         ]]
         
         for r in reports:
-            status = "Disc." if r.get('has_discrepancy') else "OK"
+            status = "Disc" if r.get('has_discrepancy') else "OK"
             data.append([
-                r.get('date', ''),
-                r.get('warehouse_name', '')[:10],  # Truncate for space
+                r.get('date', '')[-5:],  # Show MM-DD only
+                r.get('warehouse_name', '')[:8],
                 r.get('opening_15kg_filled', 0),
                 r.get('opening_21kg_filled', 0),
                 r.get('opening_15kg_empty', 0),
@@ -1471,8 +1466,8 @@ async def export_pdf(
                 status
             ])
         
-        # Calculate column widths
-        col_widths = [55, 55] + [32]*16 + [30]
+        # Calculate column widths to fit A4 landscape (842 points width - 30 margins = 812)
+        col_widths = [42, 45] + [38]*16 + [28]
         table = Table(data, colWidths=col_widths, repeatRows=1)
         table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#15803d')),
@@ -1480,31 +1475,16 @@ async def export_pdf(
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 6),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-            ('TOPPADDING', (0, 0), (-1, 0), 8),
-            # Opening columns - blue background
-            ('BACKGROUND', (2, 1), (5, -1), colors.HexColor('#dbeafe')),
-            # Activity columns - amber background
-            ('BACKGROUND', (6, 1), (13, -1), colors.HexColor('#fef3c7')),
-            # Closing columns - green background
-            ('BACKGROUND', (14, 1), (17, -1), colors.HexColor('#dcfce7')),
+            ('FONTSIZE', (0, 0), (-1, 0), 7),  # Header
+            ('FONTSIZE', (0, 1), (-1, -1), 7),  # Body - smaller to fit
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 4),
+            ('TOPPADDING', (0, 0), (-1, -1), 2),
+            ('BACKGROUND', (2, 1), (5, -1), colors.HexColor('#dbeafe')),  # Opening - blue
+            ('BACKGROUND', (6, 1), (13, -1), colors.HexColor('#fef3c7')),  # Activity - yellow
+            ('BACKGROUND', (14, 1), (17, -1), colors.HexColor('#dcfce7')),  # Closing - green
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ('FONTSIZE', (0, 1), (-1, -1), 7),
         ]))
         elements.append(table)
-        
-        # Add legend
-        elements.append(Spacer(1, 10))
-        legend_data = [['Legend:', 'Blue = Opening Stock', 'Yellow = Day Activities', 'Green = Closing Stock']]
-        legend = Table(legend_data, colWidths=[50, 120, 120, 120])
-        legend.setStyle(TableStyle([
-            ('FONTSIZE', (0, 0), (-1, -1), 8),
-            ('BACKGROUND', (1, 0), (1, 0), colors.HexColor('#dbeafe')),
-            ('BACKGROUND', (2, 0), (2, 0), colors.HexColor('#fef3c7')),
-            ('BACKGROUND', (3, 0), (3, 0), colors.HexColor('#dcfce7')),
-        ]))
-        elements.append(legend)
     
     elif report_type == "plant":
         query = {}
@@ -1518,42 +1498,69 @@ async def export_pdf(
         
         reports = await db.plant_reports.find(query, {'_id': 0}).sort('date', -1).to_list(1000)
         
-        elements.append(Paragraph(f"Plant Hollongi Report", styles['Heading2']))
+        elements.append(Paragraph("Plant Hollongi Report", subtitle_style))
         if start_date and end_date:
-            elements.append(Paragraph(f"Period: {start_date} to {end_date}", styles['Normal']))
-        elements.append(Spacer(1, 10))
+            elements.append(Paragraph(f"Period: {start_date} to {end_date}", ParagraphStyle('Period', fontSize=10, alignment=1)))
+        elements.append(Spacer(1, 5))
         
-        data = [['Date', 'Bullet Tank (kg)', '15kg Filled', '21kg Filled', '15kg Empty', '21kg Empty', 'Refilled 15kg', 'Refilled 21kg']]
+        # Comprehensive Plant table with all form data
+        data = [[
+            'Date',
+            'Op.Tank', 'Op.15F', 'Op.21F', 'Op.15E', 'Op.21E',
+            'Recv15', 'Recv21',
+            'Refill15', 'Refill21',
+            'Del.15', 'Del.21',
+            'Cl.Tank', 'Cl.15F', 'Cl.21F', 'Cl.15E', 'Cl.21E'
+        ]]
+        
         for r in reports:
+            # Calculate totals for deliveries
+            del_15 = sum([d.get('quantity', 0) for d in r.get('delivery_15kg', [])])
+            del_21 = sum([d.get('quantity', 0) for d in r.get('delivery_21kg', [])])
+            recv_15 = sum([d.get('quantity', 0) for d in r.get('received_empty_15kg', [])])
+            recv_21 = sum([d.get('quantity', 0) for d in r.get('received_empty_21kg', [])])
+            
             data.append([
-                r['date'],
-                r['closing_bullet_tank_kg'],
-                r['closing_15kg_filled'],
-                r['closing_21kg_filled'],
-                r['closing_15kg_empty'],
-                r['closing_21kg_empty'],
-                r['day_refilled_15kg'],
-                r['day_refilled_21kg']
+                r.get('date', '')[-5:],
+                r.get('opening_bullet_tank_kg', 0),
+                r.get('opening_15kg_filled', 0),
+                r.get('opening_21kg_filled', 0),
+                r.get('opening_15kg_empty', 0),
+                r.get('opening_21kg_empty', 0),
+                recv_15,
+                recv_21,
+                r.get('day_refilled_15kg', 0),
+                r.get('day_refilled_21kg', 0),
+                del_15,
+                del_21,
+                r.get('closing_bullet_tank_kg', 0),
+                r.get('closing_15kg_filled', 0),
+                r.get('closing_21kg_filled', 0),
+                r.get('closing_15kg_empty', 0),
+                r.get('closing_21kg_empty', 0)
             ])
         
-        table = Table(data, repeatRows=1)
+        col_widths = [45] + [45]*16
+        table = Table(data, colWidths=col_widths, repeatRows=1)
         table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#15803d')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ('FONTSIZE', (0, 0), (-1, 0), 8),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 4),
+            ('BACKGROUND', (1, 1), (5, -1), colors.HexColor('#dbeafe')),  # Opening - blue
+            ('BACKGROUND', (6, 1), (11, -1), colors.HexColor('#fef3c7')),  # Activity - yellow
+            ('BACKGROUND', (12, 1), (16, -1), colors.HexColor('#dcfce7')),  # Closing - green
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
         ]))
         elements.append(table)
     
     doc.build(elements)
     buffer.seek(0)
     
-    # Generate filename based on report type
     date_str = datetime.now().strftime('%d%m%y')
     if report_type == "daily":
         filename = f"Daily_Inventory_Report_{date_str}.pdf"
