@@ -39,6 +39,7 @@ const PlantEntry = () => {
     opening_21kg_filled: 0,
     opening_15kg_empty: 0,
     opening_21kg_empty: 0,
+    day_reloading_kg: 0,
     day_refilled_15kg: 0,
     day_refilled_21kg: 0,
     delivery_15kg: [],
