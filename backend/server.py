@@ -1579,11 +1579,12 @@ async def export_excel(
     worksheet = workbook.add_worksheet('Report')
     
     # Formats
-    header_format = workbook.add_format({'bold': True, 'bg_color': '#15803d', 'font_color': 'white', 'align': 'center', 'border': 1})
+    header_format = workbook.add_format({'bold': True, 'bg_color': '#15803d', 'font_color': 'white', 'align': 'center', 'border': 1, 'text_wrap': True})
     cell_format = workbook.add_format({'align': 'center', 'border': 1})
-    title_format = workbook.add_format({'bold': True, 'font_size': 16, 'align': 'center'})
-    
-    worksheet.merge_range('A1:H1', 'K3 GAS SERVICE - Khayal Hamesha', title_format)
+    title_format = workbook.add_format({'bold': True, 'font_size': 16, 'align': 'center', 'font_color': '#15803d'})
+    opening_format = workbook.add_format({'align': 'center', 'border': 1, 'bg_color': '#dbeafe'})
+    activity_format = workbook.add_format({'align': 'center', 'border': 1, 'bg_color': '#fef3c7'})
+    closing_format = workbook.add_format({'align': 'center', 'border': 1, 'bg_color': '#dcfce7'})
     
     if report_type == "daily":
         query = {}
@@ -1603,21 +1604,65 @@ async def export_excel(
         
         reports = await db.daily_reports.find(query, {'_id': 0}).sort('date', -1).to_list(1000)
         
-        headers = ['Date', 'Warehouse', 'Opening 15kg', 'Opening 21kg', 'Sold 15kg', 'Sold 21kg', 'Closing 15kg', 'Closing 21kg', 'Discrepancy 15kg', 'Discrepancy 21kg']
-        for col, header in enumerate(headers):
-            worksheet.write(2, col, header, header_format)
+        # Get warehouse name for title
+        warehouse_name = "All Warehouses"
+        if user['role'] != 'admin':
+            warehouse_name = user.get('warehouse_name', 'My Warehouse')
+        elif warehouse_id:
+            wh = await db.warehouses.find_one({'id': warehouse_id}, {'_id': 0})
+            warehouse_name = wh['name'] if wh else warehouse_id
         
-        for row, r in enumerate(reports, start=3):
-            worksheet.write(row, 0, r['date'], cell_format)
-            worksheet.write(row, 1, r['warehouse_name'], cell_format)
-            worksheet.write(row, 2, r['opening_15kg_filled'], cell_format)
-            worksheet.write(row, 3, r['opening_21kg_filled'], cell_format)
-            worksheet.write(row, 4, r['sold_15kg_filled'], cell_format)
-            worksheet.write(row, 5, r['sold_21kg_filled'], cell_format)
-            worksheet.write(row, 6, r['closing_15kg_filled'], cell_format)
-            worksheet.write(row, 7, r['closing_21kg_filled'], cell_format)
-            worksheet.write(row, 8, r['discrepancy_15kg_filled'], cell_format)
-            worksheet.write(row, 9, r['discrepancy_21kg_filled'], cell_format)
+        worksheet.merge_range('A1:S1', f'K3 GAS SERVICE - Daily Inventory Report - {warehouse_name}', title_format)
+        if start_date and end_date:
+            worksheet.merge_range('A2:S2', f'Period: {start_date} to {end_date}', workbook.add_format({'align': 'center'}))
+        
+        # Comprehensive headers
+        headers = [
+            'Date', 'Warehouse',
+            'Open 15kg Filled', 'Open 21kg Filled', 'Open 15kg Empty', 'Open 21kg Empty',
+            'Sold 15kg', 'Sold 21kg',
+            'Refill 15kg', 'Refill 21kg',
+            'To Plant 15kg', 'To Plant 21kg',
+            'From Plant 15kg', 'From Plant 21kg',
+            'Close 15kg Filled', 'Close 21kg Filled', 'Close 15kg Empty', 'Close 21kg Empty',
+            'Status'
+        ]
+        
+        row_start = 3
+        for col, header in enumerate(headers):
+            worksheet.write(row_start, col, header, header_format)
+            worksheet.set_column(col, col, 12 if col > 1 else 15)  # Set column width
+        
+        for row, r in enumerate(reports, start=row_start + 1):
+            # Date and Warehouse
+            worksheet.write(row, 0, r.get('date', ''), cell_format)
+            worksheet.write(row, 1, r.get('warehouse_name', ''), cell_format)
+            
+            # Opening Stock (blue)
+            worksheet.write(row, 2, r.get('opening_15kg_filled', 0), opening_format)
+            worksheet.write(row, 3, r.get('opening_21kg_filled', 0), opening_format)
+            worksheet.write(row, 4, r.get('opening_15kg_empty', 0), opening_format)
+            worksheet.write(row, 5, r.get('opening_21kg_empty', 0), opening_format)
+            
+            # Day Activities (yellow)
+            worksheet.write(row, 6, r.get('sold_15kg_filled', 0), activity_format)
+            worksheet.write(row, 7, r.get('sold_21kg_filled', 0), activity_format)
+            worksheet.write(row, 8, r.get('refilling_15kg', 0), activity_format)
+            worksheet.write(row, 9, r.get('refilling_21kg', 0), activity_format)
+            worksheet.write(row, 10, r.get('refilling_plant_15kg', 0), activity_format)
+            worksheet.write(row, 11, r.get('refilling_plant_21kg', 0), activity_format)
+            worksheet.write(row, 12, r.get('received_from_plant_15kg', 0), activity_format)
+            worksheet.write(row, 13, r.get('received_from_plant_21kg', 0), activity_format)
+            
+            # Closing Stock (green)
+            worksheet.write(row, 14, r.get('closing_15kg_filled', 0), closing_format)
+            worksheet.write(row, 15, r.get('closing_21kg_filled', 0), closing_format)
+            worksheet.write(row, 16, r.get('closing_15kg_empty', 0), closing_format)
+            worksheet.write(row, 17, r.get('closing_21kg_empty', 0), closing_format)
+            
+            # Status
+            status = "Discrepancy" if r.get('has_discrepancy') else "OK"
+            worksheet.write(row, 18, status, cell_format)
     
     elif report_type == "plant":
         query = {}
@@ -1631,19 +1676,24 @@ async def export_excel(
         
         reports = await db.plant_reports.find(query, {'_id': 0}).sort('date', -1).to_list(1000)
         
+        worksheet.merge_range('A1:H1', 'K3 GAS SERVICE - Plant Hollongi Report', title_format)
+        if start_date and end_date:
+            worksheet.merge_range('A2:H2', f'Period: {start_date} to {end_date}', workbook.add_format({'align': 'center'}))
+        
         headers = ['Date', 'Bullet Tank (kg)', '15kg Filled', '21kg Filled', '15kg Empty', '21kg Empty', 'Refilled 15kg', 'Refilled 21kg']
         for col, header in enumerate(headers):
-            worksheet.write(2, col, header, header_format)
+            worksheet.write(3, col, header, header_format)
+            worksheet.set_column(col, col, 14)
         
-        for row, r in enumerate(reports, start=3):
-            worksheet.write(row, 0, r['date'], cell_format)
-            worksheet.write(row, 1, r['closing_bullet_tank_kg'], cell_format)
-            worksheet.write(row, 2, r['closing_15kg_filled'], cell_format)
-            worksheet.write(row, 3, r['closing_21kg_filled'], cell_format)
-            worksheet.write(row, 4, r['closing_15kg_empty'], cell_format)
-            worksheet.write(row, 5, r['closing_21kg_empty'], cell_format)
-            worksheet.write(row, 6, r['day_refilled_15kg'], cell_format)
-            worksheet.write(row, 7, r['day_refilled_21kg'], cell_format)
+        for row, r in enumerate(reports, start=4):
+            worksheet.write(row, 0, r.get('date', ''), cell_format)
+            worksheet.write(row, 1, r.get('closing_bullet_tank_kg', 0), cell_format)
+            worksheet.write(row, 2, r.get('closing_15kg_filled', 0), closing_format)
+            worksheet.write(row, 3, r.get('closing_21kg_filled', 0), closing_format)
+            worksheet.write(row, 4, r.get('closing_15kg_empty', 0), closing_format)
+            worksheet.write(row, 5, r.get('closing_21kg_empty', 0), closing_format)
+            worksheet.write(row, 6, r.get('day_refilled_15kg', 0), activity_format)
+            worksheet.write(row, 7, r.get('day_refilled_21kg', 0), activity_format)
     
     workbook.close()
     buffer.seek(0)
