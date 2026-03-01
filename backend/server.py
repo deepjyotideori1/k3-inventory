@@ -219,6 +219,7 @@ class PlantReportCreate(BaseModel):
     opening_21kg_filled: int = 0
     opening_15kg_empty: int = 0
     opening_21kg_empty: int = 0
+    day_reloading_kg: float = 0
     day_refilled_15kg: int = 0
     day_refilled_21kg: int = 0
     delivery_15kg: List[Dict[str, Any]] = []  # [{warehouse_id, quantity}]
@@ -240,6 +241,7 @@ class PlantReportResponse(BaseModel):
     opening_21kg_filled: int
     opening_15kg_empty: int
     opening_21kg_empty: int
+    day_reloading_kg: float = 0
     day_refilled_15kg: int
     day_refilled_21kg: int
     delivery_15kg: List[Dict[str, Any]]
