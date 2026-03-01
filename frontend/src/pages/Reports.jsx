@@ -96,8 +96,8 @@ const Reports = () => {
     setFilters(prev => ({
       ...prev,
       period,
-      start_date: range.startDate,
-      end_date: range.endDate
+      start_date: range.start,
+      end_date: range.end
     }));
   };
 
