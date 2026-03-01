@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
-import { getLatestClosing, createDailyReport, getWarehouseReceivedFromPlant, getTodayReport, updateDailyReport } from '../lib/api';
+import { getLatestClosing, createDailyReport, getTodayReport, updateDailyReport } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -18,8 +18,6 @@ import {
   ArrowRight,
   Calculator,
   Truck,
-  RefreshCw,
-  CheckCircle,
   FileEdit,
   Send,
   FileText
