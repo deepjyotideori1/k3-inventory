@@ -1630,8 +1630,8 @@ async def export_excel(
             'Open 15kg Filled', 'Open 21kg Filled', 'Open 15kg Empty', 'Open 21kg Empty',
             'Sold 15kg', 'Sold 21kg',
             'Refill 15kg', 'Refill 21kg',
-            'To Plant 15kg', 'To Plant 21kg',
-            'From Plant 15kg', 'From Plant 21kg',
+            'Refill to Plant 15kg', 'Refill to Plant 21kg',
+            'Received from Plant-15kg', 'Received from Plant-21kg',
             'Close 15kg Filled', 'Close 21kg Filled', 'Close 15kg Empty', 'Close 21kg Empty',
             'Status'
         ]
