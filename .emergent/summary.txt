@@ -2,78 +2,84 @@
 The initial request was to pull a project from the GitHub URL: .
 
 Over the course of the session, the user added the following feature requests and bug fixes:
-- Fix non-working user credentials and various bugs related to data creation/updates (specifically  serialization errors).
+- Fix non-working user credentials and various bugs related to data creation/updates.
 - Implement a Sales Executive role, password reset features, and enhanced PDF/Excel exports.
-- Create a comprehensive Sales Dashboard with filtering, summary stats, and a Quick Refill feature for frequent customers.
-- Refine data entry forms for sales and orders to have conditional logic based on New Connection vs. Existing Customer (refill) types.
-- Ensure all customer info auto-fills from bulk-uploaded data when an existing customer is selected.
+- Create a comprehensive Sales Dashboard with filtering, summary stats, and a Quick Refill feature.
+- Refine data entry forms for sales and orders with conditional logic.
 - Add 10-digit validation for phone and consumer number fields.
-- Enhance export functionality with filters for connection type and date ranges (Daily, Weekly, Monthly, etc.).
-- Update the bulk customer upload template and instructions with new validation rules and date formats.
-- Implement Indian Rupee currency formatting () across all dashboards and in all exported reports.
-- Make all dashboard forms fully responsive to adapt to mobile, tablet, and desktop screens.
-- Replace the login page image and ensure it fills its container correctly.
-- Implement specific UI scrolling behaviors, such as a fixed (locked) sidebar while the main content and dialogs remain scrollable.
+- Enhance export functionality with various filters.
+- Update the bulk customer upload template and instructions.
+- Implement Indian Rupee currency formatting () across the application.
+- Make all dashboard forms fully responsive.
+- Implement specific UI scrolling behaviors, such as a fixed sidebar.
+- Add a Sales Summary Report export option.
+- Add a warehouse filter to the Customer Management page.
+- Implement warehouse-specific prefixes for order numbers.
+- **Initial Request**: Fix/remove the auto-synchronization of inventory data between warehouses and the central plant (Plant Hollongi). The final decision was to remove all sync/reference features and make the forms pure manual entry.
+- **Latest Request**: Overhaul the reporting system. Warehouse reports should show all data from the entry forms, not just closing stock. This should be reflected on the UI and in all exported files (PDF/Excel). All PDF exports should be standardized to A4 size with specific font styles. Finally, a bug was reported where the Plant Hollongi manager cannot see their own reports.
 
 **User's preferred language**: English
 
 **what currently exists?**
-The application is a full-stack inventory management system with a React frontend and FastAPI backend. It includes role-based access control for admin, manager, and sales executive roles. Key features implemented include: a comprehensive Sales Dashboard for logging daily sales with advanced filtering and a Quick Refill section for frequent customers; role-specific UIs; advanced PDF/Excel reporting with filters; and robust data entry forms for Sales, Orders, and Customers with conditional fields and input validation. The UI has been enhanced with Indian Rupee currency formatting, a new login page image, a fixed sidebar for better navigation, and fully responsive forms that adapt to different screen sizes.
+The application is a full-stack inventory management system for a gas distribution business, built with a React frontend and a monolithic FastAPI backend. It features role-based access for Admin, Warehouse Managers, and Sales Executives.
+
+Key features include:
+-   **Dashboards**: Separate dashboards for Sales, Orders, Customers, Warehouse Daily Entry, and Plant Entry.
+-   **Data Management**: CRUD operations for customers, sales, and orders. Manual daily inventory reporting for warehouses and the central plant.
+-   **Reporting**: A comprehensive reporting page that displays detailed daily reports for warehouses.
+-   **Exports**: Advanced PDF and Excel export capabilities for all modules (Sales, Orders, Customers, Warehouse Reports, Plant Reports), with standardized A4 formatting and custom headers.
+-   **Role-Specific UI**: The UI adapts based on the user's role (e.g., Admins see all data, while managers see data for their specific warehouse).
 
 **Last working item**:
-- **Last item agent was working:** The agent is verifying and updating all PDF and Excel export functionalities to ensure amounts are formatted using the Indian numbering system (e.g., ) and that all report headers are clear and accurate. The agent added a helper function () in  and successfully updated the Sales PDF and Excel export functions. It was in the process of applying the same fixes to the Order export functions.
+- **Last item agent was working:** Fixing a bug where the Plant Hollongi manager cannot see their submitted reports on the  page or in the exported files. The agent identified that the page logic for non-admin users only fetched and displayed warehouse reports () and not plant reports ().
 - **Status:** IN PROGRESS
 - **Agent Testing Done:** N
-- **Which testing method agent to use?** Manual testing by curl. The agent should use  to trigger each of the four export endpoints (, , , ) with various filters, save the output files, and manually inspect them to confirm correct formatting and headers.
+- **Which testing method agent to use?** Frontend testing agent. The agent should log in as the Plant Hollongi manager, navigate to the  page, and verify that their submitted plant reports are now visible in the detailed card format. It should also test the PDF and Excel export functionality from that page to confirm the exported files contain the correct data.
 - **User Testing Done:** N
 
 **All Pending/In progress Issue list**:
-- **Issue 1: Complete and Verify Report Export Formatting (Priority: P0)**
-  - **Description**: The user requested that all exported reports (PDF and Excel for both Sales and Orders) use Indian Rupee formatting for amounts and have clear, descriptive headers. The work is partially complete.
+- **Issue 1: Plant Hollongi Manager Cannot View Their Own Reports (Priority: P0)**
+  - **Description**: The user reported that after submitting a daily entry form, the Plant Hollongi manager cannot see the corresponding report on the reports page. The data is also missing from exports. This is because the frontend logic was not fetching or displaying plant-specific reports for the Plant Manager role.
   - **Details**:
-     - **Attempted fixes**: The agent created a  helper in  and successfully integrated it into the  and  endpoints.
+     - **Attempted fixes**: The agent modified  to:
+        1.  Update the  function to fetch  when the logged-in user's role is  and their warehouse is .
+        2.  Add a new section in the component's JSX to render the  in a detailed card format, specifically for the Plant Hollongi manager.
      - **Next debug checklist**:
-        1. View .
-        2. Locate the  endpoint (around line 3647). Update the code that generates the PDF table to apply the  function to any amount columns. Ensure table headers are correct.
-        3. Locate the  endpoint (around line 3803). Update the code to apply the  function to amount cells and set appropriate headers.
-        4. After modifying the code, restart the backend service.
-        5. Use  to test all four export endpoints. Download and inspect the resulting PDF and Excel files to confirm formatting and headers are correct for both Sales and Orders reports.
-     - **Why fix this issue and what will be achieved with the fix?**: This will ensure that all financial data exported from the system is professional, easy to read, and consistent with the application's UI.
+        1.  Log in as the Plant Hollongi manager.
+        2.  Navigate to the  page.
+        3.  Verify that the submitted plant reports are now visible and correctly formatted.
+        4.  Use the Export PDF and Export Excel buttons on the reports page.
+        5.  Open the downloaded files to confirm they contain the comprehensive plant report data.
+        6.  If it fails, review  to check the conditional rendering logic and the state updates within . Also, check browser console logs for any errors during data fetching.
+     - **Why fix this issue and what will be achieved with the fix?**: This is a critical bug fix that will allow the Plant Hollongi manager to view, verify, and export their own submitted data, which is essential for their workflow.
      - **Status**: IN PROGRESS
      - **Is recurring issue?**: N
-     - **Should Test frontend/backend/both after fix?**: Backend
+     - **Should Test frontend/backend/both after fix?**: Frontend
      - **Blocked on other issue**: None
 
 **In progress Task List**:
-- **Task 1: Complete Report Export Formatting**
-  - **Where to resume**: Resume work in  to update the Order export endpoints ( and ).
-  - **What will be achieved with this?**: All exported reports will consistently display amounts in Indian Rupee format with correct headers.
+- **Task 1: Complete the fix for the Plant Hollongi report visibility issue.**
+  - **Where to resume**: The frontend code in  has been modified. The next step is to test the changes thoroughly by logging in as the Plant Hollongi manager.
+  - **What will be achieved with this?**: The Plant Hollongi manager will be able to see and export their daily reports, resolving a critical bug.
   - **Status**: IN PROGRESS
-  - **Should Test frontend/backend/both after fix?**: Backend
+  - **Should Test frontend/backend/both after fix?**: Frontend
   - **Blocked on something**: None
 
 **Upcoming and Future Tasks**
 There are no upcoming or future tasks requested by the user or planned by the agent.
 
 **Completed work in this session**
-- **Bug Fixes**:
-  - Resolved  serialization errors in create/update endpoints for sales and orders by correctly handling the response data ().
-  - Fixed non-working PDF/Excel exports by adding missing Python library imports (, ) in .
-- **Feature Implementation & Enhancements**:
-  - **Auto-Fill Verification**: Confirmed the customer data auto-fill feature works correctly in sales and order forms.
-  - **Conditional Form Logic**: Implemented logic in  and  to show/hide Cylinder Nos and No of Refills fields based on the selected customer type (New vs. Existing).
-  - **Quick Refill Feature**: Added a new section to  to display top customers for one-click refill entries, supported by a new  endpoint.
-  - **Advanced Export Filters**: Added dialogs in  to filter exports by connection type and date range (Daily, Weekly, Custom, etc.), with supporting backend logic.
-  - **Input Validation**: Added 10-digit validation for Consumer No and Mobile No fields in , , and .
-  - **Bulk Upload Update**: Updated the bulk customer upload instructions and downloadable template with new date formats and validation rules in .
-- **UI/UX Improvements**:
-  - **Indian Rupee Formatting**: Implemented a utility in  and applied it across  for all amount displays.
-  - **Fixed Sidebar**: Modified  to create a fixed-position left sidebar for improved navigation on scrolling pages.
-  - **Responsive Forms**: Made all form dialogs in , , and  fully responsive using Tailwind CSS for better display on mobile and tablet devices.
-  - **Login Page Customization**: Replaced the login page image and adjusted its styling in  and  to fill the container.
+- **Sales Summary Reports**: Implemented a new Sales Summary Report export feature (PDF/Excel) that provides period-based totals (Daily, Weekly, Monthly) with breakdowns by connection type and payment mode.
+- **Warehouse Filter for Customers**: Added a warehouse filter on the Customer Management page, allowing admins to view customers by a specific warehouse.
+- **Warehouse-Specific Order Numbers**: Updated the order generation logic to create unique, prefixed order numbers for each warehouse (e.g.,  for Jullang,  for Naharlagun).
+- **Removal of Sync Logic**: Removed all data synchronization and reference-checking features between warehouse and plant forms, converting them into pure manual data entry forms as per the user's final request.
+- **Comprehensive Warehouse Reports**: Overhauled the Warehouse Reports page and its exports (PDF/Excel) to display detailed cards with all data from the daily entry form, including opening stock, daily activities, and closing stock.
+- **Comprehensive Plant Reports**: Updated the Plant Hollongi report exports (PDF/Excel) to include all data from the plant entry form.
+- **Standardized PDF Formatting**: Updated all PDF export functions across the application to use A4 paper size, fit content to a single page, and apply consistent header (bold, size 14) and body (size 13) font styles.
+- **Descriptive Export Headers**: Renamed cryptic column headers in warehouse report exports to be more descriptive (e.g.,  is now ).
 
 **Earlier issues found/mentioned but not fixed**
-None. All identified issues have been addressed.
+None.
 
 **Known issue recurrence from previous fork**
 - **Issue recurrence in previous fork**: None.
@@ -86,73 +92,75 @@ None. All identified issues have been addressed.
 **Key Technical Concepts**
 - **Frontend**: React, Tailwind CSS, Shadcn/UI, , Axios.
 - **Backend**: Python with FastAPI framework.
-- **Database**: MongoDB (including aggregation pipelines for the Quick Refill feature).
-- **Architecture**: Monolithic full-stack application. Authentication is token-based (JWT).
+- **Database**: MongoDB.
+- **Architecture**: Monolithic full-stack application with token-based (JWT) authentication.
 
 **key DB schema**
 - **users**: 
 - **customers**: 
 - **orders**: 
 - **sales_entries**: 
+- **daily_reports**: 
+- **plant_reports**: 
 
 **changes in tech stack**
 None.
 
 **All files of reference**
-- : Heavily modified for bug fixes, new endpoints (), and logic updates for exports and bulk uploads.
-- : Major updates for the Quick Refill feature, export dialogs, responsive design, input validation, and currency formatting.
-- : Updated with conditional form logic, responsive design, and input validation.
-- : Updated with responsive design and input validation for add/edit forms.
-- : Modified to implement the fixed-position sidebar.
-- : Updated with new background image style for the login page.
-- : Modified to ensure the background image container has full height.
-- : New utility file created for Indian Rupee currency formatting.
-- : Added new  function.
-- : Modified to improve responsiveness of all dialog-based forms.
+- : Major changes to endpoints for sales summary, customer filtering, order numbering, and all report exports (Warehouse, Plant, Sales, Orders, Customers) to add comprehensive data and standardized PDF formatting.
+- : Major overhaul to display detailed report cards instead of a simple table. Currently being modified to fix a bug for the Plant Hollongi manager view.
+- : Simplified to a pure manual entry form by removing all data sync/reference logic.
+- : Simplified to a pure manual entry form by removing all data sync/reference logic.
+- : Updated to include a warehouse filter dropdown for the admin user.
+- : Updated to add a dialog and handler for the new Sales Summary Report export.
+- : Added new functions to call the sales summary export endpoints.
+- : Minor fix to the  function's return object keys.
 
 **Areas that need refactoring**:
-- The  file has become extremely large and complex. It urgently needs to be broken down into smaller, manageable modules using FastAPI's  for different resources (e.g., , , , , ).
-- Form logic is duplicated across , , and . Creating custom hooks (e.g., ) could abstract common state management and validation logic.
+- ****: This file is now over 5,000 lines long and contains all backend logic. It is critically in need of being broken down into smaller, resource-specific modules using FastAPI's  (e.g., , ).
+- ****: The component now contains complex conditional logic to render different views for admins, warehouse managers, and the plant manager. The detailed report card UI is duplicated. This could be simplified by creating a reusable  component and potentially a custom hook () to manage data fetching and state.
 
 **key api endpoints**
-- : Creates a new sales entry.
-- : Updates a sales entry.
-- : **(New)** Retrieves the top 5 most refilled customers.
-- , : Exports sales data. (Updated to accept , ,  filters).
-- , : Exports order data. (Updated to accept filters).
+- , : **(New)** Exports period-based sales summaries.
+- : **(Modified)** Logic updated to generate warehouse-specific order numbers.
+- : **(Modified)** Now accepts a  query parameter for filtering.
+- , : **(Modified)** Overhauled to export comprehensive warehouse data.
+- , : **(Modified)** Overhauled to export comprehensive plant data.
+- : **(Modified)** Updated to use standardized A4 formatting and font styles.
 
 **Critical Info for New Agent**
-- The application's backend logic is almost entirely within the monolithic  file. Be prepared to navigate a very large file.
-- The UI heavily relies on conditional rendering based on user roles and form states (e.g., New Connection vs. Existing Customer).
-- The immediate task is to finish updating the Order export functions in  to ensure correct currency formatting and headers, then test all four export types.
+- **Monolithic Backend**: Be aware that  contains almost all backend logic. Navigating this large file is necessary for most backend tasks.
+- **Iterative User Requests**: The user tends to provide feedback and new requests one after another. Be prepared to address these as they come.
+- **Immediate Task**: The highest priority is to finish and test the bug fix on the  page to ensure the Plant Hollongi manager can see their reports.
+- **Testing Credentials**: To test the current issue, you must log in as a user with the role  and assigned to the  warehouse. The credentials in the handoff are for other roles.
 
 **documents and test reports created in this job**
-None.
+- : Updated with completed tasks.
 
 **Last 10 User Messages and any pending HUMAN messages**
-- : **(IN PROGRESS)** Request to format all exports with Indian numbering and clear headers.
-- : (Completed)
-- : (Completed)
-- : (Completed)
-- : (Completed)
-- : (Completed)
-- : (Completed)
-- : (Completed)
-- : (Completed)
-- : (Completed)
+1.  : **(IN PROGRESS)** - User reported the bug that the agent is currently fixing.
+2.  : (Completed) - User requested more descriptive headers for warehouse report exports.
+3.  : (Completed) - User requested standardized A4 formatting and comprehensive data for Plant Hollongi reports.
+4.  : (Completed) - User requested that warehouse exports match the new detailed UI.
+5.  : (Completed) - User requested a complete overhaul of the warehouse reports UI to be more detailed.
+6.  : (Completed) - User requested to simplify forms to pure manual entry.
+7.  : (Completed) - User asked for manual entry with a reference/sync check. This was later superseded.
+8.  : (Completed) - User requested to change sync to a notification/reference system. This was later superseded.
+9.  : (Completed) - User reported a bug with the sync feature, which was fixed before the feature was removed.
+10. : (Completed) - User requested warehouse-specific order numbers.
 
 **Project Health Check:**
-- **Broken**: The Order PDF/Excel export functionality is currently being modified and may not work as expected until the changes are complete and verified.
+- **Broken**: The  page is not functioning correctly for the Plant Hollongi manager role.
 - **Mocked**: None.
 
 **3rd Party Integrations**
-None were added.
+None.
 
 **Testing status**
-- **Testing agent used after significant changes**: YES (for initial feature verifications).
+- **Testing agent used after significant changes**: NO
 - **Troubleshoot agent used after agent stuck in loop**: NO
 - **Test files created**: None.
-- **Known regressions**: The report export feature was temporarily broken due to missing imports but was subsequently fixed. No other regressions are known.
+- **Known regressions**: None.
 
 **Credentials to test flow:**
 | Role | Email | Password | Warehouse |
@@ -160,6 +168,9 @@ None were added.
 | Master Admin |  |  | N/A (All) |
 | Sales Executive |  |  | Jullang |
 | Jullang Manager |  |  | Jullang |
+| **Plant Hollongi Manager** | **(N/A)** | **(N/A)** | **Plant Hollongi** |
+
+**Note**: To test the current issue, a Plant Hollongi Manager user is required. One may need to be created via the application's user management (if it exists) or directly in the database.
 
 **What agent forgot to execute**
-The agent has been diligent in addressing user requests sequentially and has not forgotten any outstanding tasks. The current work is a direct continuation of the last user request.</analysis>
+The agent was in the process of fixing the user's latest reported bug and had not forgotten any tasks.</analysis>
