@@ -1094,6 +1094,7 @@ async def create_plant_report(data: PlantReportCreate, user: dict = Depends(get_
         'opening_21kg_filled': data.opening_21kg_filled,
         'opening_15kg_empty': data.opening_15kg_empty,
         'opening_21kg_empty': data.opening_21kg_empty,
+        'day_reloading_kg': data.day_reloading_kg,
         'day_refilled_15kg': data.day_refilled_15kg,
         'day_refilled_21kg': data.day_refilled_21kg,
         'delivery_15kg': data.delivery_15kg,
