@@ -1438,7 +1438,7 @@ async def export_pdf(
             'Date', 'Warehouse',
             'Op.15F', 'Op.21F', 'Op.15E', 'Op.21E',
             'Sold15', 'Sold21', 'Ref15', 'Ref21',
-            'ToPl15', 'ToPl21', 'FrPl15', 'FrPl21',
+            'Refill to\nPlant 15kg', 'Refill to\nPlant 21kg', 'Received from\nPlant-15kg', 'Received from\nPlant-21kg',
             'Cl.15F', 'Cl.21F', 'Cl.15E', 'Cl.21E', 'Stat'
         ]]
         
