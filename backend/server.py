@@ -4917,18 +4917,19 @@ async def export_orders_pdf(
         warehouse = await db.warehouses.find_one({'id': user.get('warehouse_id')})
         warehouse_name = warehouse['name'] if warehouse else 'Unknown'
     
-    # Create PDF
+    # Create PDF - A4 landscape fit-to-page
     output = BytesIO()
-    doc = SimpleDocTemplate(output, pagesize=landscape(A4), topMargin=30, bottomMargin=30)
+    doc = SimpleDocTemplate(output, pagesize=landscape(A4), topMargin=15, bottomMargin=15, leftMargin=15, rightMargin=15)
     elements = []
     styles = getSampleStyleSheet()
     
+    # Header 14pt bold
     title_style = ParagraphStyle(
         'CustomTitle',
         parent=styles['Heading1'],
-        fontSize=16,
+        fontSize=14,
         textColor=colors.HexColor('#2d5016'),
-        spaceAfter=20,
+        spaceAfter=5,
         alignment=1
     )
     
@@ -4941,22 +4942,22 @@ async def export_orders_pdf(
         date_range = f" (until {end_date})"
     
     elements.append(Paragraph(f"K3 GAS SERVICE - Orders Report{date_range}", title_style))
-    elements.append(Paragraph(f"Warehouse: {warehouse_name}", styles['Normal']))
-    elements.append(Spacer(1, 20))
+    elements.append(Paragraph(f"Warehouse: {warehouse_name}", ParagraphStyle('Sub', fontSize=10, alignment=1)))
+    elements.append(Spacer(1, 5))
     
     # Table data with clear headers
-    table_data = [['Date', 'Order No.', 'Customer Name', 'Mobile No.', 'Address', 'Connection Type', 'Payment Mode', 'Remarks']]
+    table_data = [['Date', 'Order No', 'Customer', 'Mobile', 'Address', 'Type', 'Payment', 'Remarks']]
     
     for o in orders:
         table_data.append([
             o.get('order_date', ''),
             o.get('order_no', ''),
-            o.get('customer_name', '')[:20],
+            o.get('customer_name', '')[:18],
             o.get('mobile_number', ''),
-            o.get('address_landmark', '')[:25],
-            o.get('connection_type', '').replace('_', ' ').title(),
-            o.get('payment_mode', '').replace('_', ' ').title(),
-            o.get('remarks', '')[:15]
+            o.get('address_landmark', '')[:20],
+            o.get('connection_type', '').replace('_', ' ').title()[:10],
+            o.get('payment_mode', '').title()[:6],
+            o.get('remarks', '')[:12]
         ])
     
     table = Table(table_data, repeatRows=1)
