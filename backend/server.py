@@ -1801,6 +1801,70 @@ async def export_excel(
             worksheet.write(row, 14, r.get('closing_21kg_filled', 0), closing_format)
             worksheet.write(row, 15, r.get('closing_15kg_empty', 0), closing_format)
             worksheet.write(row, 16, r.get('closing_21kg_empty', 0), closing_format)
+        
+        # Create second sheet for warehouse breakdown
+        breakdown_sheet = workbook.add_worksheet('Warehouse Breakdown')
+        breakdown_sheet.merge_range('A1:E1', 'Warehouse-wise Breakdown', title_format)
+        
+        breakdown_header_format = workbook.add_format({'bold': True, 'bg_color': '#15803d', 'font_color': 'white', 'align': 'center', 'border': 1})
+        delivery_header_format = workbook.add_format({'bold': True, 'bg_color': '#c7d2fe', 'align': 'center', 'border': 1})
+        received_header_format = workbook.add_format({'bold': True, 'bg_color': '#fed7aa', 'align': 'center', 'border': 1})
+        
+        breakdown_sheet.set_column(0, 0, 12)  # Date
+        breakdown_sheet.set_column(1, 1, 10)  # Type
+        breakdown_sheet.set_column(2, 2, 15)  # Warehouse
+        breakdown_sheet.set_column(3, 3, 12)  # 15kg
+        breakdown_sheet.set_column(4, 4, 12)  # 21kg
+        
+        breakdown_headers = ['Date', 'Type', 'Warehouse', '15kg Qty', '21kg Qty']
+        for col, header in enumerate(breakdown_headers):
+            breakdown_sheet.write(2, col, header, breakdown_header_format)
+        
+        breakdown_row = 3
+        for r in reports:
+            report_date = r.get('date', '')
+            
+            # Delivery to Warehouses
+            warehouse_del = {}
+            for d in r.get('delivery_15kg', []):
+                wname = d.get('warehouse_name', 'Unknown')
+                if wname not in warehouse_del:
+                    warehouse_del[wname] = {'qty15': 0, 'qty21': 0}
+                warehouse_del[wname]['qty15'] = d.get('quantity', 0)
+            for d in r.get('delivery_21kg', []):
+                wname = d.get('warehouse_name', 'Unknown')
+                if wname not in warehouse_del:
+                    warehouse_del[wname] = {'qty15': 0, 'qty21': 0}
+                warehouse_del[wname]['qty21'] = d.get('quantity', 0)
+            
+            for wname, qty in warehouse_del.items():
+                breakdown_sheet.write(breakdown_row, 0, report_date, cell_format)
+                breakdown_sheet.write(breakdown_row, 1, 'Delivery', delivery_header_format)
+                breakdown_sheet.write(breakdown_row, 2, wname, cell_format)
+                breakdown_sheet.write(breakdown_row, 3, qty['qty15'], cell_format)
+                breakdown_sheet.write(breakdown_row, 4, qty['qty21'], cell_format)
+                breakdown_row += 1
+            
+            # Empty Received from Warehouses
+            warehouse_recv = {}
+            for d in r.get('received_empty_15kg', []):
+                wname = d.get('warehouse_name', 'Unknown')
+                if wname not in warehouse_recv:
+                    warehouse_recv[wname] = {'qty15': 0, 'qty21': 0}
+                warehouse_recv[wname]['qty15'] = d.get('quantity', 0)
+            for d in r.get('received_empty_21kg', []):
+                wname = d.get('warehouse_name', 'Unknown')
+                if wname not in warehouse_recv:
+                    warehouse_recv[wname] = {'qty15': 0, 'qty21': 0}
+                warehouse_recv[wname]['qty21'] = d.get('quantity', 0)
+            
+            for wname, qty in warehouse_recv.items():
+                breakdown_sheet.write(breakdown_row, 0, report_date, cell_format)
+                breakdown_sheet.write(breakdown_row, 1, 'Empty Recv', received_header_format)
+                breakdown_sheet.write(breakdown_row, 2, wname, cell_format)
+                breakdown_sheet.write(breakdown_row, 3, qty['qty15'], cell_format)
+                breakdown_sheet.write(breakdown_row, 4, qty['qty21'], cell_format)
+                breakdown_row += 1
     
     workbook.close()
     buffer.seek(0)
