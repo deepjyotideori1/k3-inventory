@@ -378,7 +378,7 @@ const Reports = () => {
         )}
 
         {/* Non-admin view - Detailed Report Cards */}
-        {!isAdmin && (
+        {!isAdmin && !isPlantUser && (
           <div className="space-y-4" data-testid="my-reports-card">
             {loading ? (
               <div className="flex items-center justify-center h-64">
