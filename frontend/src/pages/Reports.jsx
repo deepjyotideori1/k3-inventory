@@ -519,6 +519,148 @@ const Reports = () => {
             )}
           </div>
         )}
+
+        {/* Plant Hollongi Manager View - Detailed Plant Reports */}
+        {!isAdmin && isPlantUser && (
+          <div className="space-y-4" data-testid="plant-reports-view">
+            {loading ? (
+              <div className="flex items-center justify-center h-64">
+                <Loader2 className="w-8 h-8 animate-spin text-green-700" />
+              </div>
+            ) : plantReports.length > 0 ? (
+              plantReports.map((report) => (
+                <Card key={report.id} className="border-l-4 border-l-purple-600" data-testid={`plant-report-card-${report.id}`}>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <Calendar className="w-5 h-5 text-purple-700" />
+                        {formatDate(report.date)}
+                      </CardTitle>
+                      <Badge className="bg-purple-100 text-purple-700">Plant Report</Badge>
+                    </div>
+                    <p className="text-sm text-slate-500">Submitted by: {report.submitted_by || 'N/A'}</p>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Opening Stock */}
+                    <div className="bg-blue-50 p-3 rounded-lg">
+                      <h4 className="font-semibold text-blue-800 mb-2">Opening Stock</h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm">
+                        <div className="bg-white p-2 rounded text-center">
+                          <p className="text-slate-500">Bullet Tank</p>
+                          <p className="font-bold text-blue-700">{report.opening_bullet_tank_kg || 0} kg</p>
+                        </div>
+                        <div className="bg-white p-2 rounded text-center">
+                          <p className="text-slate-500">15kg Filled</p>
+                          <p className="font-bold text-blue-700">{report.opening_15kg_filled || 0}</p>
+                        </div>
+                        <div className="bg-white p-2 rounded text-center">
+                          <p className="text-slate-500">21kg Filled</p>
+                          <p className="font-bold text-blue-700">{report.opening_21kg_filled || 0}</p>
+                        </div>
+                        <div className="bg-white p-2 rounded text-center">
+                          <p className="text-slate-500">15kg Empty</p>
+                          <p className="font-bold text-blue-700">{report.opening_15kg_empty || 0}</p>
+                        </div>
+                        <div className="bg-white p-2 rounded text-center">
+                          <p className="text-slate-500">21kg Empty</p>
+                          <p className="font-bold text-blue-700">{report.opening_21kg_empty || 0}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Day Activities */}
+                    <div className="bg-amber-50 p-3 rounded-lg">
+                      <h4 className="font-semibold text-amber-800 mb-2">Day Activities</h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                        <div className="bg-white p-2 rounded text-center">
+                          <p className="text-slate-500">Refilled 15kg</p>
+                          <p className="font-bold text-amber-700">{report.day_refilled_15kg || 0}</p>
+                        </div>
+                        <div className="bg-white p-2 rounded text-center">
+                          <p className="text-slate-500">Refilled 21kg</p>
+                          <p className="font-bold text-amber-700">{report.day_refilled_21kg || 0}</p>
+                        </div>
+                        <div className="bg-white p-2 rounded text-center">
+                          <p className="text-slate-500">Delivered 15kg</p>
+                          <p className="font-bold text-amber-700">
+                            {(report.delivery_15kg || []).reduce((sum, d) => sum + (d.quantity || 0), 0)}
+                          </p>
+                        </div>
+                        <div className="bg-white p-2 rounded text-center">
+                          <p className="text-slate-500">Delivered 21kg</p>
+                          <p className="font-bold text-amber-700">
+                            {(report.delivery_21kg || []).reduce((sum, d) => sum + (d.quantity || 0), 0)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Received Empties */}
+                    <div className="bg-orange-50 p-3 rounded-lg">
+                      <h4 className="font-semibold text-orange-800 mb-2">Empty Received from Warehouses</h4>
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div className="bg-white p-2 rounded text-center">
+                          <p className="text-slate-500">15kg Empty</p>
+                          <p className="font-bold text-orange-700">
+                            {(report.received_empty_15kg || []).reduce((sum, d) => sum + (d.quantity || 0), 0)}
+                          </p>
+                        </div>
+                        <div className="bg-white p-2 rounded text-center">
+                          <p className="text-slate-500">21kg Empty</p>
+                          <p className="font-bold text-orange-700">
+                            {(report.received_empty_21kg || []).reduce((sum, d) => sum + (d.quantity || 0), 0)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Closing Stock */}
+                    <div className="bg-green-50 p-3 rounded-lg border-2 border-green-200">
+                      <h4 className="font-semibold text-green-800 mb-2">Closing Stock</h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm">
+                        <div className="bg-white p-2 rounded text-center border border-green-200">
+                          <p className="text-slate-500">Bullet Tank</p>
+                          <p className="font-bold text-green-700 text-lg">{report.closing_bullet_tank_kg || 0} kg</p>
+                        </div>
+                        <div className="bg-white p-2 rounded text-center border border-green-200">
+                          <p className="text-slate-500">15kg Filled</p>
+                          <p className="font-bold text-green-700 text-lg">{report.closing_15kg_filled || 0}</p>
+                        </div>
+                        <div className="bg-white p-2 rounded text-center border border-green-200">
+                          <p className="text-slate-500">21kg Filled</p>
+                          <p className="font-bold text-green-700 text-lg">{report.closing_21kg_filled || 0}</p>
+                        </div>
+                        <div className="bg-white p-2 rounded text-center border border-green-200">
+                          <p className="text-slate-500">15kg Empty</p>
+                          <p className="font-bold text-green-700 text-lg">{report.closing_15kg_empty || 0}</p>
+                        </div>
+                        <div className="bg-white p-2 rounded text-center border border-green-200">
+                          <p className="text-slate-500">21kg Empty</p>
+                          <p className="font-bold text-green-700 text-lg">{report.closing_21kg_empty || 0}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Remarks if any */}
+                    {report.remarks && (
+                      <div className="bg-slate-50 p-3 rounded-lg">
+                        <h4 className="font-semibold text-slate-700 mb-1">Remarks</h4>
+                        <p className="text-sm text-slate-600">{report.remarks}</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))
+            ) : (
+              <Card>
+                <CardContent className="text-center py-12">
+                  <Calendar className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                  <p className="text-slate-500">No plant reports found for the selected period</p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
       </div>
     </Layout>
   );
