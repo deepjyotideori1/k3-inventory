@@ -299,6 +299,33 @@ const PlantEntry = () => {
             </CardContent>
           </Card>
 
+          {/* Day Reloading */}
+          <Card className="mb-6 border-2 border-cyan-200 bg-cyan-50" data-testid="day-reloading-section">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Factory className="w-5 h-5 text-cyan-700" />
+                Day Reloading
+              </CardTitle>
+              <CardDescription className="text-cyan-700">
+                Enter the amount of gas reloaded into the bullet tank
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="max-w-xs">
+                <Label className="text-slate-600">Reloading Quantity (kg)</Label>
+                <Input 
+                  type="number" 
+                  step="0.01"
+                  value={formData.day_reloading_kg}
+                  onChange={(e) => handleChange('day_reloading_kg', e.target.value)}
+                  className="mt-1"
+                  placeholder="Enter kg"
+                  data-testid="day-reloading-kg"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Empty Received from Warehouses */}
           <Card className="mb-6 border-2 border-amber-200 bg-amber-50" data-testid="received-section">
             <CardHeader>
