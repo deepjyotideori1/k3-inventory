@@ -65,7 +65,15 @@ const Reports = () => {
   const fetchReports = async () => {
     setLoading(true);
     try {
-      if (activeTab === 'daily') {
+      // Plant Hollongi users should see plant reports
+      if (isPlantUser && !isAdmin) {
+        const params = {
+          start_date: filters.start_date,
+          end_date: filters.end_date
+        };
+        const response = await getPlantReports(params);
+        setPlantReports(response.data);
+      } else if (activeTab === 'daily') {
         const params = {
           start_date: filters.start_date,
           end_date: filters.end_date
