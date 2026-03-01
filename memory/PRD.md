@@ -183,6 +183,17 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] **Export Connection Type Filters** - Filter by Domestic, Commercial, Refill types
 - [x] **Sales Summary Reports** - Period-based summary exports (Daily/Weekly/Monthly totals) with payment mode and connection type breakdowns
 
+### Reports System Overhaul (March 2026)
+- [x] **Comprehensive Warehouse Reports** - Detailed cards with Opening Stock, Day Activities, Received from Plant, Closing Stock
+- [x] **Comprehensive Plant Reports** - Detailed cards with Bullet Tank, Opening Stock, Day Activities, Empty Received, Closing Stock
+- [x] **Plant Hollongi Manager View Fix** - Plant managers now see their own plant reports on /reports page
+- [x] **Descriptive Export Headers** - Warehouse report exports use clear column names (e.g., "Refill to plant 15kg" instead of "ToPl15")
+- [x] **Standardized PDF Format** - All PDFs use A4 size, fit-to-page, consistent fonts (Header: bold 14pt, Body: 13pt)
+- [x] **Sync Logic Removed** - Warehouse and Plant forms are now pure manual entry (no auto-sync between forms)
+- [x] **Sales Summary Reports** - Period-based exports (Daily/Weekly/Monthly) with payment mode and connection type breakdowns
+- [x] **Warehouse-Specific Order Numbers** - Orders get warehouse prefixes (J-1 for Jullang, N-1 for Naharlagun, D-1 for Doimukh)
+- [x] **Customer Warehouse Filter** - Admin can filter customers by specific warehouse
+
 ### UI/UX
 - [x] Professional green theme matching gas/energy industry
 - [x] K3 Gas Service logo integration
