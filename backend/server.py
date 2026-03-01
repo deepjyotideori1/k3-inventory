@@ -4960,22 +4960,25 @@ async def export_orders_pdf(
             o.get('remarks', '')[:12]
         ])
     
-    table = Table(table_data, repeatRows=1)
+    # Fit to A4 landscape
+    col_widths = [60, 50, 120, 80, 140, 80, 60, 80]
+    table = Table(table_data, colWidths=col_widths, repeatRows=1)
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2d5016')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 9),
-        ('FONTSIZE', (0, 1), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+        ('FONTSIZE', (0, 0), (-1, 0), 8),
+        ('FONTSIZE', (0, 1), (-1, -1), 7),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f0f0f0')])
     ]))
     
     elements.append(table)
-    elements.append(Spacer(1, 20))
-    elements.append(Paragraph(f"Total Orders: {len(orders)}", styles['Normal']))
+    elements.append(Spacer(1, 10))
+    elements.append(Paragraph(f"Total Orders: {len(orders)}", ParagraphStyle('Total', fontSize=10)))
     
     doc.build(elements)
     output.seek(0)
