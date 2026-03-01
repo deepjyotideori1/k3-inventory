@@ -41,7 +41,7 @@ const Reports = () => {
   useEffect(() => {
     fetchWarehouses();
     const range = getDateRange('weekly');
-    setFilters(prev => ({ ...prev, start_date: range.startDate, end_date: range.endDate }));
+    setFilters(prev => ({ ...prev, start_date: range.start, end_date: range.end }));
   }, []);
 
   useEffect(() => {
