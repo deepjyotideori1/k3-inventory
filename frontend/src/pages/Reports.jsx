@@ -114,7 +114,7 @@ const Reports = () => {
 
   const handleExportPDF = async () => {
     const params = {
-      report_type: activeTab,
+      report_type: isPlantUser ? 'plant' : activeTab,
       start_date: filters.start_date,
       end_date: filters.end_date
     };
@@ -131,7 +131,7 @@ const Reports = () => {
 
   const handleExportExcel = async () => {
     const params = {
-      report_type: activeTab,
+      report_type: isPlantUser ? 'plant' : activeTab,
       start_date: filters.start_date,
       end_date: filters.end_date
     };
