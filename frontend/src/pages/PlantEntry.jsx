@@ -368,14 +368,14 @@ const PlantEntry = () => {
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="font-medium text-slate-700">21kg Empty Received</h4>
                   <Button type="button" variant="outline" size="sm" onClick={() => addReceived('21kg')}>
-                    <Plus className="w-4 h-4 mr-1" /> Add Manual Entry
+                    <Plus className="w-4 h-4 mr-1" /> Add Entry
                   </Button>
                 </div>
                 {formData.received_empty_21kg.length === 0 ? (
                   <div className="p-4 bg-slate-50 rounded-lg text-center">
                     <AlertCircle className="w-6 h-6 text-slate-400 mx-auto mb-2" />
-                    <p className="text-slate-500 text-sm">No 21kg empties received from warehouses today</p>
-                    <p className="text-slate-400 text-xs mt-1">Click "Add Manual Entry" to add received empties</p>
+                    <p className="text-slate-500 text-sm">No 21kg empties added</p>
+                    <p className="text-slate-400 text-xs mt-1">Click "Add Entry" to add received empties</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
