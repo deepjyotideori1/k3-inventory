@@ -1511,7 +1511,7 @@ async def export_pdf(
         data = [[
             'Date',
             'Op.Tank', 'Op.15F', 'Op.21F', 'Op.15E', 'Op.21E',
-            'Recv15', 'Recv21',
+            'Reload', 'Recv15', 'Recv21',
             'Refill15', 'Refill21',
             'Del.15', 'Del.21',
             'Cl.Tank', 'Cl.15F', 'Cl.21F', 'Cl.15E', 'Cl.21E'
@@ -1531,6 +1531,7 @@ async def export_pdf(
                 r.get('opening_21kg_filled', 0),
                 r.get('opening_15kg_empty', 0),
                 r.get('opening_21kg_empty', 0),
+                r.get('day_reloading_kg', 0),
                 recv_15,
                 recv_21,
                 r.get('day_refilled_15kg', 0),
@@ -1544,7 +1545,7 @@ async def export_pdf(
                 r.get('closing_21kg_empty', 0)
             ])
         
-        col_widths = [45] + [45]*16
+        col_widths = [42] + [42]*17
         table = Table(data, colWidths=col_widths, repeatRows=1)
         table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#15803d')),
@@ -1552,12 +1553,13 @@ async def export_pdf(
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 8),
-            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('FONTSIZE', (0, 0), (-1, 0), 7),
+            ('FONTSIZE', (0, 1), (-1, -1), 7),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 4),
             ('BACKGROUND', (1, 1), (5, -1), colors.HexColor('#dbeafe')),  # Opening - blue
-            ('BACKGROUND', (6, 1), (11, -1), colors.HexColor('#fef3c7')),  # Activity - yellow
-            ('BACKGROUND', (12, 1), (16, -1), colors.HexColor('#dcfce7')),  # Closing - green
+            ('BACKGROUND', (6, 1), (6, -1), colors.HexColor('#cffafe')),  # Reloading - cyan
+            ('BACKGROUND', (7, 1), (12, -1), colors.HexColor('#fef3c7')),  # Activity - yellow
+            ('BACKGROUND', (13, 1), (17, -1), colors.HexColor('#dcfce7')),  # Closing - green
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
         ]))
         elements.append(table)
