@@ -1393,16 +1393,16 @@ async def export_pdf(
     user: dict = Depends(get_current_user)
 ):
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
     elements = []
     styles = getSampleStyleSheet()
     
-    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=18, spaceAfter=20, alignment=1)
-    subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=12, spaceAfter=10, alignment=1)
+    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=16, spaceAfter=10, alignment=1, textColor=colors.HexColor('#15803d'))
+    subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=10, spaceAfter=5, alignment=1)
+    section_style = ParagraphStyle('Section', parent=styles['Heading3'], fontSize=11, spaceBefore=10, spaceAfter=5, textColor=colors.HexColor('#15803d'))
     
     elements.append(Paragraph("K3 GAS SERVICE", title_style))
     elements.append(Paragraph("Khayal Hamesha", subtitle_style))
-    elements.append(Spacer(1, 20))
     
     if report_type == "daily":
         query = {}
@@ -1435,32 +1435,76 @@ async def export_pdf(
             elements.append(Paragraph(f"Period: {start_date} to {end_date}", styles['Normal']))
         elements.append(Spacer(1, 10))
         
-        data = [['Date', 'Warehouse', '15kg Filled', '21kg Filled', '15kg Empty', '21kg Empty', 'Discrepancy']]
+        # Comprehensive table with all data
+        data = [[
+            'Date', 'Warehouse',
+            'Open 15kg\nFilled', 'Open 21kg\nFilled', 'Open 15kg\nEmpty', 'Open 21kg\nEmpty',
+            'Sold\n15kg', 'Sold\n21kg',
+            'Refill\n15kg', 'Refill\n21kg',
+            'To Plant\n15kg', 'To Plant\n21kg',
+            'From Plant\n15kg', 'From Plant\n21kg',
+            'Close 15kg\nFilled', 'Close 21kg\nFilled', 'Close 15kg\nEmpty', 'Close 21kg\nEmpty',
+            'Status'
+        ]]
+        
         for r in reports:
-            disc = "Yes" if r['has_discrepancy'] else "No"
+            status = "Disc." if r.get('has_discrepancy') else "OK"
             data.append([
-                r['date'],
-                r['warehouse_name'],
-                r['closing_15kg_filled'],
-                r['closing_21kg_filled'],
-                r['closing_15kg_empty'],
-                r['closing_21kg_empty'],
-                disc
+                r.get('date', ''),
+                r.get('warehouse_name', '')[:10],  # Truncate for space
+                r.get('opening_15kg_filled', 0),
+                r.get('opening_21kg_filled', 0),
+                r.get('opening_15kg_empty', 0),
+                r.get('opening_21kg_empty', 0),
+                r.get('sold_15kg_filled', 0),
+                r.get('sold_21kg_filled', 0),
+                r.get('refilling_15kg', 0),
+                r.get('refilling_21kg', 0),
+                r.get('refilling_plant_15kg', 0),
+                r.get('refilling_plant_21kg', 0),
+                r.get('received_from_plant_15kg', 0),
+                r.get('received_from_plant_21kg', 0),
+                r.get('closing_15kg_filled', 0),
+                r.get('closing_21kg_filled', 0),
+                r.get('closing_15kg_empty', 0),
+                r.get('closing_21kg_empty', 0),
+                status
             ])
         
-        table = Table(data, repeatRows=1)
+        # Calculate column widths
+        col_widths = [55, 55] + [32]*16 + [30]
+        table = Table(data, colWidths=col_widths, repeatRows=1)
         table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#15803d')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ('FONTSIZE', (0, 0), (-1, 0), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('TOPPADDING', (0, 0), (-1, 0), 8),
+            # Opening columns - blue background
+            ('BACKGROUND', (2, 1), (5, -1), colors.HexColor('#dbeafe')),
+            # Activity columns - amber background
+            ('BACKGROUND', (6, 1), (13, -1), colors.HexColor('#fef3c7')),
+            # Closing columns - green background
+            ('BACKGROUND', (14, 1), (17, -1), colors.HexColor('#dcfce7')),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('FONTSIZE', (0, 1), (-1, -1), 7),
         ]))
         elements.append(table)
+        
+        # Add legend
+        elements.append(Spacer(1, 10))
+        legend_data = [['Legend:', 'Blue = Opening Stock', 'Yellow = Day Activities', 'Green = Closing Stock']]
+        legend = Table(legend_data, colWidths=[50, 120, 120, 120])
+        legend.setStyle(TableStyle([
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('BACKGROUND', (1, 0), (1, 0), colors.HexColor('#dbeafe')),
+            ('BACKGROUND', (2, 0), (2, 0), colors.HexColor('#fef3c7')),
+            ('BACKGROUND', (3, 0), (3, 0), colors.HexColor('#dcfce7')),
+        ]))
+        elements.append(legend)
     
     elif report_type == "plant":
         query = {}
