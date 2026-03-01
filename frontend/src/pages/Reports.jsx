@@ -366,59 +366,147 @@ const Reports = () => {
           </Tabs>
         )}
 
-        {/* Non-admin view */}
+        {/* Non-admin view - Detailed Report Cards */}
         {!isAdmin && (
-          <Card data-testid="my-reports-card">
-            <CardContent className="p-0">
-              {loading ? (
-                <div className="flex items-center justify-center h-64">
-                  <Loader2 className="w-8 h-8 animate-spin text-green-700" />
-                </div>
-              ) : dailyReports.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Date</th>
-                        <th>15kg Filled</th>
-                        <th>21kg Filled</th>
-                        <th>15kg Empty</th>
-                        <th>21kg Empty</th>
-                        <th>Status</th>
-                        <th>Submitted By</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {dailyReports.map((report) => (
-                        <tr key={report.id} data-testid={`report-row-${report.id}`}>
-                          <td>{formatDate(report.date)}</td>
-                          <td>{report.closing_15kg_filled}</td>
-                          <td>{report.closing_21kg_filled}</td>
-                          <td>{report.closing_15kg_empty}</td>
-                          <td>{report.closing_21kg_empty}</td>
-                          <td>
-                            {report.has_discrepancy ? (
-                              <Badge variant="destructive" className="bg-red-100 text-red-700">
-                                Discrepancy
-                              </Badge>
-                            ) : (
-                              <Badge className="bg-green-100 text-green-700">OK</Badge>
-                            )}
-                          </td>
-                          <td className="text-slate-500 text-sm">{report.submitted_by}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="text-center py-12">
+          <div className="space-y-4" data-testid="my-reports-card">
+            {loading ? (
+              <div className="flex items-center justify-center h-64">
+                <Loader2 className="w-8 h-8 animate-spin text-green-700" />
+              </div>
+            ) : dailyReports.length > 0 ? (
+              dailyReports.map((report) => (
+                <Card key={report.id} className="border-l-4 border-l-green-600" data-testid={`report-card-${report.id}`}>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <Calendar className="w-5 h-5 text-green-700" />
+                        {formatDate(report.date)}
+                      </CardTitle>
+                      <div className="flex gap-2">
+                        {report.status === 'draft' && (
+                          <Badge className="bg-amber-100 text-amber-700">Draft</Badge>
+                        )}
+                        {report.has_discrepancy ? (
+                          <Badge variant="destructive" className="bg-red-100 text-red-700">Discrepancy</Badge>
+                        ) : report.status !== 'draft' ? (
+                          <Badge className="bg-green-100 text-green-700">OK</Badge>
+                        ) : null}
+                      </div>
+                    </div>
+                    <p className="text-sm text-slate-500">Submitted by: {report.submitted_by || 'N/A'}</p>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Opening Stock */}
+                    <div className="bg-blue-50 p-3 rounded-lg">
+                      <h4 className="font-semibold text-blue-800 mb-2">Opening Stock</h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                        <div className="bg-white p-2 rounded text-center">
+                          <p className="text-slate-500">15kg Filled</p>
+                          <p className="font-bold text-blue-700">{report.opening_15kg_filled || 0}</p>
+                        </div>
+                        <div className="bg-white p-2 rounded text-center">
+                          <p className="text-slate-500">21kg Filled</p>
+                          <p className="font-bold text-blue-700">{report.opening_21kg_filled || 0}</p>
+                        </div>
+                        <div className="bg-white p-2 rounded text-center">
+                          <p className="text-slate-500">15kg Empty</p>
+                          <p className="font-bold text-blue-700">{report.opening_15kg_empty || 0}</p>
+                        </div>
+                        <div className="bg-white p-2 rounded text-center">
+                          <p className="text-slate-500">21kg Empty</p>
+                          <p className="font-bold text-blue-700">{report.opening_21kg_empty || 0}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Day Activities */}
+                    <div className="bg-amber-50 p-3 rounded-lg">
+                      <h4 className="font-semibold text-amber-800 mb-2">Day Activities</h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-sm">
+                        <div className="bg-white p-2 rounded text-center">
+                          <p className="text-slate-500">Sold 15kg</p>
+                          <p className="font-bold text-amber-700">{report.sold_15kg_filled || 0}</p>
+                        </div>
+                        <div className="bg-white p-2 rounded text-center">
+                          <p className="text-slate-500">Sold 21kg</p>
+                          <p className="font-bold text-amber-700">{report.sold_21kg_filled || 0}</p>
+                        </div>
+                        <div className="bg-white p-2 rounded text-center">
+                          <p className="text-slate-500">Refilling 15kg</p>
+                          <p className="font-bold text-amber-700">{report.refilling_15kg || 0}</p>
+                        </div>
+                        <div className="bg-white p-2 rounded text-center">
+                          <p className="text-slate-500">Refilling 21kg</p>
+                          <p className="font-bold text-amber-700">{report.refilling_21kg || 0}</p>
+                        </div>
+                        <div className="bg-white p-2 rounded text-center">
+                          <p className="text-slate-500">To Plant 15kg</p>
+                          <p className="font-bold text-amber-700">{report.refilling_plant_15kg || 0}</p>
+                        </div>
+                        <div className="bg-white p-2 rounded text-center">
+                          <p className="text-slate-500">To Plant 21kg</p>
+                          <p className="font-bold text-amber-700">{report.refilling_plant_21kg || 0}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Received from Plant */}
+                    <div className="bg-purple-50 p-3 rounded-lg">
+                      <h4 className="font-semibold text-purple-800 mb-2">Received from Plant</h4>
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div className="bg-white p-2 rounded text-center">
+                          <p className="text-slate-500">15kg Filled</p>
+                          <p className="font-bold text-purple-700">{report.received_from_plant_15kg || 0}</p>
+                        </div>
+                        <div className="bg-white p-2 rounded text-center">
+                          <p className="text-slate-500">21kg Filled</p>
+                          <p className="font-bold text-purple-700">{report.received_from_plant_21kg || 0}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Closing Stock */}
+                    <div className="bg-green-50 p-3 rounded-lg border-2 border-green-200">
+                      <h4 className="font-semibold text-green-800 mb-2">Closing Stock</h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                        <div className="bg-white p-2 rounded text-center border border-green-200">
+                          <p className="text-slate-500">15kg Filled</p>
+                          <p className="font-bold text-green-700 text-lg">{report.closing_15kg_filled || 0}</p>
+                        </div>
+                        <div className="bg-white p-2 rounded text-center border border-green-200">
+                          <p className="text-slate-500">21kg Filled</p>
+                          <p className="font-bold text-green-700 text-lg">{report.closing_21kg_filled || 0}</p>
+                        </div>
+                        <div className="bg-white p-2 rounded text-center border border-green-200">
+                          <p className="text-slate-500">15kg Empty</p>
+                          <p className="font-bold text-green-700 text-lg">{report.closing_15kg_empty || 0}</p>
+                        </div>
+                        <div className="bg-white p-2 rounded text-center border border-green-200">
+                          <p className="text-slate-500">21kg Empty</p>
+                          <p className="font-bold text-green-700 text-lg">{report.closing_21kg_empty || 0}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Remarks if any */}
+                    {report.remarks && (
+                      <div className="bg-slate-50 p-3 rounded-lg">
+                        <h4 className="font-semibold text-slate-700 mb-1">Remarks</h4>
+                        <p className="text-sm text-slate-600">{report.remarks}</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))
+            ) : (
+              <Card>
+                <CardContent className="text-center py-12">
                   <Calendar className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                   <p className="text-slate-500">No reports found for the selected period</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         )}
       </div>
     </Layout>
