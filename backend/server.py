@@ -3724,31 +3724,32 @@ async def export_sales_pdf(
         data.append([
             str(i),
             e['date'],
-            e['consumer_name'][:20] if len(e.get('consumer_name', '')) > 20 else e.get('consumer_name', ''),
+            e['consumer_name'][:18] if len(e.get('consumer_name', '')) > 18 else e.get('consumer_name', ''),
             e.get('address', '')[:15] if len(e.get('address', '')) > 15 else e.get('address', ''),
             e.get('consumer_no', ''),
             e.get('memo_no', ''),
             format_inr(e.get('amount', 0)),
-            e.get('payment_mode', 'cash').capitalize(),
-            str(e.get('no_of_refills', 0)),
-            e.get('remarks', '')[:15] if len(e.get('remarks', '')) > 15 else e.get('remarks', '')
+            e.get('payment_mode', 'cash')[:4].title(),
+            str(e.get('no_of_refills', 0))
         ])
         total_amount += e.get('amount', 0)
         total_refills += e.get('no_of_refills', 0)
     
     # Add total row
-    data.append(['', '', '', '', '', 'TOTAL:', format_inr(total_amount), '', str(total_refills), ''])
+    data.append(['', '', '', '', '', 'TOTAL:', format_inr(total_amount), '', str(total_refills)])
     
-    # Create table
-    col_widths = [0.4*inch, 0.8*inch, 1.2*inch, 1*inch, 0.8*inch, 0.7*inch, 0.8*inch, 0.7*inch, 0.5*inch, 1*inch]
-    table = Table(data, colWidths=col_widths)
+    # Create table - fit A4 landscape
+    col_widths = [25, 55, 110, 95, 70, 50, 70, 45, 40]
+    table = Table(data, colWidths=col_widths, repeatRows=1)
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#16a34a')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+        ('FONTSIZE', (0, 0), (-1, 0), 8),
+        ('FONTSIZE', (0, 1), (-1, -1), 7),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
         ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#f0fdf4')),
         ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
