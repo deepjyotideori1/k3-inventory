@@ -150,28 +150,6 @@ const DailyEntry = () => {
     }
   };
 
-  const fetchPlantDeliveries = async (date) => {
-    if (!user?.warehouse_id) return;
-    
-    setLoadingPlantDelivery(true);
-    try {
-      const response = await getWarehouseReceivedFromPlant(user.warehouse_id, date);
-      const data = response.data;
-      
-      // Store Plant Hollongi's recorded deliveries as reference info only (no auto-population)
-      setPlantDeliverySync({
-        synced: data.synced_from_plant,
-        date: date,
-        plant_recorded_15kg: data.received_15kg_filled || 0,
-        plant_recorded_21kg: data.received_21kg_filled || 0
-      });
-    } catch (error) {
-      console.error('Failed to fetch plant deliveries:', error);
-    } finally {
-      setLoadingPlantDelivery(false);
-    }
-  };
-
   const calculateDiscrepancies = () => {
     // System-calculated expected closing stock
     // Formula for Filled: Opening - Sold - Refilling (local) + Received from Plant
