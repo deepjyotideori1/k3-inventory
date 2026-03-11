@@ -10,7 +10,6 @@ import {
   deleteAccessoryDealer,
   getAccessoryEntries, 
   createAccessoryEntry,
-  updateAccessoryEntry,
   getAccessorySummary,
   exportAccessoryPDF,
   exportAccessoryExcel
@@ -37,9 +36,7 @@ import {
   Save,
   Users,
   Boxes,
-  ShoppingCart,
-  Edit,
-  Search
+  ShoppingCart
 } from 'lucide-react';
 import { getTodayDate, formatDate, getDateRange } from '../lib/utils';
 import { toast } from 'sonner';
@@ -63,13 +60,9 @@ const AccessoryReports = () => {
     remarks: ''
   });
   const [submitting, setSubmitting] = useState(false);
-  const [previousDayRemaining, setPreviousDayRemaining] = useState(0);
-  const [editingEntry, setEditingEntry] = useState(null);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [editForm, setEditForm] = useState({ total_issued: 0, total_sold: 0, remarks: '' });
   
-  // System calculated remaining: Opening (previous day remaining) + Issued - Sold
-  const calculatedRemaining = previousDayRemaining + entryForm.total_issued - entryForm.total_sold;
+  // System calculated remaining
+  const calculatedRemaining = entryForm.total_issued - entryForm.total_sold;
   
   // New accessory form
   const [newAccessory, setNewAccessory] = useState({ name: '', description: '', unit: 'pcs' });
@@ -103,36 +96,6 @@ const AccessoryReports = () => {
       fetchSummary();
     }
   }, [startDate, endDate, filterAccessory, filterDealer]);
-
-  // Fetch previous day remaining when accessory and dealer are selected
-  useEffect(() => {
-    const fetchPreviousDayRemaining = async () => {
-      if (selectedAccessory && selectedDealer) {
-        try {
-          const response = await getAccessoryEntries({
-            accessory_id: selectedAccessory,
-            dealer_id: selectedDealer
-          });
-          // Get the most recent entry to find the last remaining value
-          const latestEntry = response.data.find(e => e.date < entryDate) || response.data[0];
-          if (latestEntry && latestEntry.date < entryDate) {
-            setPreviousDayRemaining(latestEntry.total_remaining || 0);
-          } else if (latestEntry && latestEntry.date === entryDate) {
-            // Same day entry exists - use its remaining as base
-            setPreviousDayRemaining(0);
-          } else {
-            setPreviousDayRemaining(0);
-          }
-        } catch (error) {
-          console.error('Failed to fetch previous day remaining:', error);
-          setPreviousDayRemaining(0);
-        }
-      } else {
-        setPreviousDayRemaining(0);
-      }
-    };
-    fetchPreviousDayRemaining();
-  }, [selectedAccessory, selectedDealer, entryDate]);
 
   const fetchAccessories = async () => {
     try {
@@ -314,35 +277,6 @@ const AccessoryReports = () => {
       toast.error('Failed to export Excel');
     } finally {
       setExporting(false);
-    }
-  };
-
-  const handleEditEntry = (entry) => {
-    setEditingEntry(entry);
-    setEditForm({
-      total_issued: entry.total_issued,
-      total_sold: entry.total_sold,
-      remarks: entry.remarks || ''
-    });
-    setEditDialogOpen(true);
-  };
-
-  const handleEditSubmit = async () => {
-    if (!editingEntry) return;
-    
-    setSubmitting(true);
-    try {
-      await updateAccessoryEntry(editingEntry.id, editForm);
-      toast.success('Entry updated successfully');
-      setEditDialogOpen(false);
-      setEditingEntry(null);
-      fetchEntries();
-      fetchSummary();
-    } catch (error) {
-      console.error('Failed to update entry:', error);
-      toast.error('Failed to update entry');
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -564,20 +498,7 @@ const AccessoryReports = () => {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-4 gap-4">
-                    <div>
-                      <Label className="text-blue-700 flex items-center gap-1">
-                        Opening Balance
-                        <span className="text-xs text-slate-500">(Previous day remaining)</span>
-                      </Label>
-                      <Input 
-                        type="number" 
-                        value={previousDayRemaining}
-                        readOnly
-                        className="mt-1 bg-blue-50 font-semibold text-blue-900"
-                        data-testid="acc-opening-balance"
-                      />
-                    </div>
+                  <div className="grid grid-cols-3 gap-4">
                     <div>
                       <Label className="text-purple-700">Total Issued</Label>
                       <Input 
@@ -610,7 +531,7 @@ const AccessoryReports = () => {
                         className="mt-1 bg-green-50 font-semibold text-green-900"
                         data-testid="acc-total-remaining"
                       />
-                      <p className="text-xs text-slate-500 mt-1">Formula: Opening + Issued - Sold</p>
+                      <p className="text-xs text-slate-500 mt-1">Formula: Issued - Sold</p>
                     </div>
                   </div>
 
@@ -927,7 +848,6 @@ const AccessoryReports = () => {
                           <th>Sold</th>
                           <th>Remaining</th>
                           <th>Remarks</th>
-                          <th>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -940,17 +860,6 @@ const AccessoryReports = () => {
                             <td>{e.total_sold}</td>
                             <td>{e.total_remaining}</td>
                             <td className="text-sm text-slate-600">{e.remarks || '-'}</td>
-                            <td>
-                              <Button 
-                                variant="ghost" 
-                                size="sm"
-                                onClick={() => handleEditEntry(e)}
-                                className="text-blue-600 hover:text-blue-800"
-                                data-testid={`edit-acc-entry-${e.id}`}
-                              >
-                                <Edit className="w-4 h-4" />
-                              </Button>
-                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -966,77 +875,6 @@ const AccessoryReports = () => {
             </Card>
           </TabsContent>
         </Tabs>
-
-        {/* Edit Entry Dialog */}
-        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Edit Accessory Entry</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Accessory</Label>
-                  <Input 
-                    value={editingEntry?.accessory_name || ''}
-                    readOnly
-                    className="mt-1 bg-slate-100"
-                  />
-                </div>
-                <div>
-                  <Label>Dealer</Label>
-                  <Input 
-                    value={editingEntry?.dealer_name || ''}
-                    readOnly
-                    className="mt-1 bg-slate-100"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-purple-700">Total Issued</Label>
-                  <Input 
-                    type="number"
-                    value={editForm.total_issued}
-                    onChange={(e) => setEditForm({ ...editForm, total_issued: parseInt(e.target.value) || 0 })}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label className="text-orange-700">Total Sold</Label>
-                  <Input 
-                    type="number"
-                    value={editForm.total_sold}
-                    onChange={(e) => setEditForm({ ...editForm, total_sold: parseInt(e.target.value) || 0 })}
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-              <div>
-                <Label>Remarks</Label>
-                <Input 
-                  value={editForm.remarks || ''}
-                  onChange={(e) => setEditForm({ ...editForm, remarks: e.target.value })}
-                  className="mt-1"
-                  placeholder="Optional remarks"
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button variant="outline">Cancel</Button>
-              </DialogClose>
-              <Button 
-                onClick={handleEditSubmit} 
-                disabled={submitting}
-                className="bg-purple-700 hover:bg-purple-800"
-              >
-                {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-                Save Changes
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
     </Layout>
   );

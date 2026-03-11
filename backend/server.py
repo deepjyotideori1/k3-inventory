@@ -1551,17 +1551,10 @@ async def get_dealer_entries(
     end_date: Optional[str] = None,
     user: dict = Depends(get_current_user)
 ):
-    """Get dealer entries with optional filters (excludes deleted dealers)"""
-    # Get active dealer IDs
-    active_dealers = await db.dealers.find({'is_active': True}, {'id': 1, '_id': 0}).to_list(1000)
-    active_dealer_ids = [d['id'] for d in active_dealers]
-    
-    query = {'dealer_id': {'$in': active_dealer_ids}}
+    """Get dealer entries with optional filters"""
+    query = {}
     if dealer_id:
-        if dealer_id in active_dealer_ids:
-            query['dealer_id'] = dealer_id
-        else:
-            return []  # Dealer not found or deleted
+        query['dealer_id'] = dealer_id
     if start_date:
         query['date'] = {'$gte': start_date}
     if end_date:
@@ -1579,12 +1572,8 @@ async def get_dealer_summary(
     end_date: Optional[str] = None,
     user: dict = Depends(get_current_user)
 ):
-    """Get dealer-wise summary with totals (excludes deleted dealers)"""
-    # Get active dealer IDs
-    active_dealers = await db.dealers.find({'is_active': True}, {'id': 1, '_id': 0}).to_list(1000)
-    active_dealer_ids = [d['id'] for d in active_dealers]
-    
-    query = {'dealer_id': {'$in': active_dealer_ids}}
+    """Get dealer-wise summary with totals"""
+    query = {}
     if start_date:
         query['date'] = {'$gte': start_date}
     if end_date:
@@ -1593,9 +1582,9 @@ async def get_dealer_summary(
         else:
             query['date'] = {'$lte': end_date}
     
-    # Aggregate by dealer (only active dealers)
+    # Aggregate by dealer
     pipeline = [
-        {'$match': query},
+        {'$match': query} if query else {'$match': {}},
         {'$group': {
             '_id': '$dealer_id',
             'dealer_name': {'$first': '$dealer_name'},
@@ -1809,34 +1798,6 @@ async def get_accessory_entries(
     
     entries = await db.accessory_entries.find(query, {'_id': 0}).sort('date', -1).to_list(1000)
     return entries
-
-class AccessoryEntryUpdate(BaseModel):
-    total_issued: int
-    total_sold: int
-    remarks: str = ""
-
-@api_router.put("/accessory-entries/{entry_id}")
-async def update_accessory_entry(entry_id: str, data: AccessoryEntryUpdate, user: dict = Depends(require_admin)):
-    """Update an accessory entry - Admin only"""
-    existing = await db.accessory_entries.find_one({'id': entry_id})
-    if not existing:
-        raise HTTPException(status_code=404, detail="Entry not found")
-    
-    # Calculate new remaining based on updated values
-    total_remaining = data.total_issued - data.total_sold
-    
-    update_data = {
-        'total_issued': data.total_issued,
-        'total_sold': data.total_sold,
-        'total_remaining': total_remaining,
-        'remarks': data.remarks[:500] if data.remarks else "",
-        'updated_by': user['name'],
-        'updated_at': datetime.now(timezone.utc).isoformat()
-    }
-    
-    await db.accessory_entries.update_one({'id': entry_id}, {'$set': update_data})
-    updated = await db.accessory_entries.find_one({'id': entry_id}, {'_id': 0})
-    return updated
 
 @api_router.get("/accessory-entries/summary")
 async def get_accessory_summary(
@@ -2053,315 +2014,6 @@ async def export_accessory_excel(
         headers={"Content-Disposition": f"attachment; filename=accessory_report_{datetime.now().strftime('%Y%m%d')}.xlsx"}
     )
 
-# ============ ACCESSORY SALES ============
-
-class AccessorySaleCreate(BaseModel):
-    sale_date: str
-    customer_id: Optional[str] = None
-    customer_name: str
-    mobile_number: str = ""
-    address: str = ""
-    connection_type: str = "domestic"
-    accessory_id: str
-    dealer_id: str
-    quantity: int = 1
-    payment_mode: str = "cash"
-    remarks: str = ""
-    warehouse_id: Optional[str] = None
-
-class AccessorySaleUpdate(BaseModel):
-    sale_date: Optional[str] = None
-    customer_name: Optional[str] = None
-    mobile_number: Optional[str] = None
-    address: Optional[str] = None
-    connection_type: Optional[str] = None
-    accessory_id: Optional[str] = None
-    dealer_id: Optional[str] = None
-    quantity: Optional[int] = None
-    payment_mode: Optional[str] = None
-    remarks: Optional[str] = None
-
-@api_router.post("/accessory-sales")
-async def create_accessory_sale(data: AccessorySaleCreate, user: dict = Depends(get_current_user)):
-    """Create a new accessory sale"""
-    # Verify accessory exists
-    accessory = await db.accessories.find_one({'id': data.accessory_id}, {'_id': 0})
-    if not accessory:
-        raise HTTPException(status_code=404, detail="Accessory not found")
-    
-    # Verify dealer exists
-    dealer = await db.accessory_dealers.find_one({'id': data.dealer_id}, {'_id': 0})
-    if not dealer:
-        raise HTTPException(status_code=404, detail="Dealer not found")
-    
-    sale = {
-        'id': str(uuid.uuid4()),
-        'sale_date': data.sale_date,
-        'customer_id': data.customer_id,
-        'customer_name': data.customer_name,
-        'mobile_number': data.mobile_number,
-        'address': data.address,
-        'connection_type': data.connection_type,
-        'accessory_id': data.accessory_id,
-        'accessory_name': accessory['name'],
-        'dealer_id': data.dealer_id,
-        'dealer_name': dealer['name'],
-        'quantity': data.quantity,
-        'payment_mode': data.payment_mode,
-        'remarks': data.remarks[:500] if data.remarks else "",
-        'warehouse_id': data.warehouse_id or user.get('warehouse_id'),
-        'created_by': user['name'],
-        'created_at': datetime.now(timezone.utc).isoformat()
-    }
-    
-    await db.accessory_sales.insert_one(sale)
-    return {k: v for k, v in sale.items() if k != '_id'}
-
-@api_router.get("/accessory-sales")
-async def get_accessory_sales(
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    accessory_id: Optional[str] = None,
-    dealer_id: Optional[str] = None,
-    search: Optional[str] = None,
-    user: dict = Depends(get_current_user)
-):
-    """Get accessory sales with optional filters"""
-    query = {}
-    
-    # Filter by warehouse for non-admin users
-    if user['role'] != 'admin':
-        query['warehouse_id'] = user.get('warehouse_id')
-    
-    if start_date:
-        query['sale_date'] = {'$gte': start_date}
-    if end_date:
-        if 'sale_date' in query:
-            query['sale_date']['$lte'] = end_date
-        else:
-            query['sale_date'] = {'$lte': end_date}
-    if accessory_id:
-        query['accessory_id'] = accessory_id
-    if dealer_id:
-        query['dealer_id'] = dealer_id
-    if search:
-        query['$or'] = [
-            {'customer_name': {'$regex': search, '$options': 'i'}},
-            {'mobile_number': {'$regex': search, '$options': 'i'}}
-        ]
-    
-    sales = await db.accessory_sales.find(query, {'_id': 0}).sort('sale_date', -1).to_list(1000)
-    return sales
-
-@api_router.put("/accessory-sales/{sale_id}")
-async def update_accessory_sale(sale_id: str, data: AccessorySaleUpdate, user: dict = Depends(get_current_user)):
-    """Update an accessory sale"""
-    existing = await db.accessory_sales.find_one({'id': sale_id})
-    if not existing:
-        raise HTTPException(status_code=404, detail="Sale not found")
-    
-    # Check warehouse access for non-admin
-    if user['role'] != 'admin' and existing.get('warehouse_id') != user.get('warehouse_id'):
-        raise HTTPException(status_code=403, detail="Access denied")
-    
-    update_data = {}
-    if data.sale_date is not None:
-        update_data['sale_date'] = data.sale_date
-    if data.customer_name is not None:
-        update_data['customer_name'] = data.customer_name
-    if data.mobile_number is not None:
-        update_data['mobile_number'] = data.mobile_number
-    if data.address is not None:
-        update_data['address'] = data.address
-    if data.connection_type is not None:
-        update_data['connection_type'] = data.connection_type
-    if data.accessory_id is not None:
-        accessory = await db.accessories.find_one({'id': data.accessory_id}, {'_id': 0})
-        if accessory:
-            update_data['accessory_id'] = data.accessory_id
-            update_data['accessory_name'] = accessory['name']
-    if data.dealer_id is not None:
-        dealer = await db.accessory_dealers.find_one({'id': data.dealer_id}, {'_id': 0})
-        if dealer:
-            update_data['dealer_id'] = data.dealer_id
-            update_data['dealer_name'] = dealer['name']
-    if data.quantity is not None:
-        update_data['quantity'] = data.quantity
-    if data.payment_mode is not None:
-        update_data['payment_mode'] = data.payment_mode
-    if data.remarks is not None:
-        update_data['remarks'] = data.remarks[:500]
-    
-    update_data['updated_by'] = user['name']
-    update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
-    
-    await db.accessory_sales.update_one({'id': sale_id}, {'$set': update_data})
-    updated = await db.accessory_sales.find_one({'id': sale_id}, {'_id': 0})
-    return updated
-
-@api_router.delete("/accessory-sales/{sale_id}")
-async def delete_accessory_sale(sale_id: str, user: dict = Depends(require_admin)):
-    """Delete an accessory sale - Admin only"""
-    result = await db.accessory_sales.delete_one({'id': sale_id})
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Sale not found")
-    return {"message": "Sale deleted successfully"}
-
-@api_router.get("/export/accessory-sales-pdf")
-async def export_accessory_sales_pdf(
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    accessory_id: Optional[str] = None,
-    dealer_id: Optional[str] = None,
-    user: dict = Depends(get_current_user)
-):
-    """Export accessory sales to PDF"""
-    query = {}
-    if user['role'] != 'admin':
-        query['warehouse_id'] = user.get('warehouse_id')
-    if start_date:
-        query['sale_date'] = {'$gte': start_date}
-    if end_date:
-        if 'sale_date' in query:
-            query['sale_date']['$lte'] = end_date
-        else:
-            query['sale_date'] = {'$lte': end_date}
-    if accessory_id:
-        query['accessory_id'] = accessory_id
-    if dealer_id:
-        query['dealer_id'] = dealer_id
-    
-    sales = await db.accessory_sales.find(query, {'_id': 0}).sort('sale_date', -1).to_list(1000)
-    
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
-    elements = []
-    styles = getSampleStyleSheet()
-    
-    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=18, textColor=colors.HexColor('#15803d'), alignment=1)
-    elements.append(Paragraph("K3 GAS SERVICE - Accessory Sales Report", title_style))
-    elements.append(Paragraph("Khayal Hamesha", styles['Normal']))
-    elements.append(Spacer(1, 20))
-    
-    if start_date and end_date:
-        elements.append(Paragraph(f"Period: {start_date} to {end_date}", styles['Normal']))
-    elements.append(Spacer(1, 10))
-    
-    data = [['Date', 'Customer', 'Mobile', 'Type', 'Accessory', 'Dealer', 'Qty', 'Payment']]
-    total_qty = 0
-    
-    for s in sales:
-        data.append([
-            s.get('sale_date', ''),
-            s.get('customer_name', '')[:20],
-            s.get('mobile_number', ''),
-            s.get('connection_type', '').capitalize(),
-            s.get('accessory_name', ''),
-            s.get('dealer_name', ''),
-            s.get('quantity', 0),
-            s.get('payment_mode', '').capitalize()
-        ])
-        total_qty += s.get('quantity', 0)
-    
-    data.append(['TOTAL', '', '', '', '', '', total_qty, ''])
-    
-    table = Table(data, repeatRows=1)
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#15803d')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 10),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('BACKGROUND', (0, 1), (-1, -2), colors.beige),
-        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#166534')),
-        ('TEXTCOLOR', (0, -1), (-1, -1), colors.whitesmoke),
-        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black),
-        ('FONTSIZE', (0, 1), (-1, -1), 9),
-    ]))
-    elements.append(table)
-    
-    doc.build(elements)
-    buffer.seek(0)
-    
-    return Response(
-        content=buffer.getvalue(),
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=accessory_sales_{datetime.now().strftime('%Y%m%d')}.pdf"}
-    )
-
-@api_router.get("/export/accessory-sales-excel")
-async def export_accessory_sales_excel(
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    accessory_id: Optional[str] = None,
-    dealer_id: Optional[str] = None,
-    user: dict = Depends(get_current_user)
-):
-    """Export accessory sales to Excel"""
-    query = {}
-    if user['role'] != 'admin':
-        query['warehouse_id'] = user.get('warehouse_id')
-    if start_date:
-        query['sale_date'] = {'$gte': start_date}
-    if end_date:
-        if 'sale_date' in query:
-            query['sale_date']['$lte'] = end_date
-        else:
-            query['sale_date'] = {'$lte': end_date}
-    if accessory_id:
-        query['accessory_id'] = accessory_id
-    if dealer_id:
-        query['dealer_id'] = dealer_id
-    
-    sales = await db.accessory_sales.find(query, {'_id': 0}).sort('sale_date', -1).to_list(1000)
-    
-    buffer = BytesIO()
-    workbook = xlsxwriter.Workbook(buffer)
-    
-    header_format = workbook.add_format({'bold': True, 'bg_color': '#15803d', 'font_color': 'white', 'border': 1, 'align': 'center'})
-    cell_format = workbook.add_format({'border': 1, 'align': 'center'})
-    total_format = workbook.add_format({'bold': True, 'bg_color': '#166534', 'font_color': 'white', 'border': 1, 'align': 'center'})
-    
-    sheet = workbook.add_worksheet('Accessory Sales')
-    headers = ['Date', 'Customer', 'Mobile', 'Address', 'Type', 'Accessory', 'Dealer', 'Quantity', 'Payment', 'Remarks']
-    
-    for col, header in enumerate(headers):
-        sheet.write(0, col, header, header_format)
-        sheet.set_column(col, col, 15)
-    
-    total_qty = 0
-    for row, s in enumerate(sales, 1):
-        sheet.write(row, 0, s.get('sale_date', ''), cell_format)
-        sheet.write(row, 1, s.get('customer_name', ''), cell_format)
-        sheet.write(row, 2, s.get('mobile_number', ''), cell_format)
-        sheet.write(row, 3, s.get('address', ''), cell_format)
-        sheet.write(row, 4, s.get('connection_type', '').capitalize(), cell_format)
-        sheet.write(row, 5, s.get('accessory_name', ''), cell_format)
-        sheet.write(row, 6, s.get('dealer_name', ''), cell_format)
-        sheet.write(row, 7, s.get('quantity', 0), cell_format)
-        sheet.write(row, 8, s.get('payment_mode', '').capitalize(), cell_format)
-        sheet.write(row, 9, s.get('remarks', ''), cell_format)
-        total_qty += s.get('quantity', 0)
-    
-    total_row = len(sales) + 1
-    sheet.write(total_row, 0, 'TOTAL', total_format)
-    for col in range(1, 7):
-        sheet.write(total_row, col, '', total_format)
-    sheet.write(total_row, 7, total_qty, total_format)
-    sheet.write(total_row, 8, '', total_format)
-    sheet.write(total_row, 9, '', total_format)
-    
-    workbook.close()
-    buffer.seek(0)
-    
-    return Response(
-        content=buffer.getvalue(),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=accessory_sales_{datetime.now().strftime('%Y%m%d')}.xlsx"}
-    )
-
 # ============ DEALER REPORT EXPORTS ============
 
 @api_router.get("/export/dealer-pdf")
@@ -2371,7 +2023,7 @@ async def export_dealer_pdf(
     end_date: Optional[str] = None,
     user: dict = Depends(get_current_user)
 ):
-    """Export dealer report as PDF (excludes deleted dealers)"""
+    """Export dealer report as PDF"""
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     elements = []
@@ -2383,12 +2035,8 @@ async def export_dealer_pdf(
     elements.append(Paragraph("Khayal Hamesha", styles['Normal']))
     elements.append(Spacer(1, 20))
     
-    # Get active dealer IDs
-    active_dealers = await db.dealers.find({'is_active': True}, {'id': 1, '_id': 0}).to_list(1000)
-    active_dealer_ids = [d['id'] for d in active_dealers]
-    
-    query = {'dealer_id': {'$in': active_dealer_ids}}
-    if dealer_id and dealer_id in active_dealer_ids:
+    query = {}
+    if dealer_id:
         query['dealer_id'] = dealer_id
     if start_date:
         query['date'] = {'$gte': start_date}
@@ -2453,7 +2101,7 @@ async def export_dealer_pdf(
     
     # Get summary
     pipeline = [
-        {'$match': query},
+        {'$match': query} if query else {'$match': {}},
         {'$group': {
             '_id': '$dealer_id',
             'dealer_name': {'$first': '$dealer_name'},
@@ -2505,7 +2153,7 @@ async def export_dealer_excel(
     end_date: Optional[str] = None,
     user: dict = Depends(get_current_user)
 ):
-    """Export dealer report as Excel (excludes deleted dealers)"""
+    """Export dealer report as Excel"""
     buffer = BytesIO()
     workbook = xlsxwriter.Workbook(buffer)
     
@@ -2516,12 +2164,8 @@ async def export_dealer_excel(
     summary_header = workbook.add_format({'bold': True, 'bg_color': '#1e40af', 'font_color': 'white', 'border': 1, 'align': 'center'})
     summary_total = workbook.add_format({'bold': True, 'bg_color': '#1e3a8a', 'font_color': 'white', 'border': 1, 'align': 'center'})
     
-    # Get active dealer IDs
-    active_dealers = await db.dealers.find({'is_active': True}, {'id': 1, '_id': 0}).to_list(1000)
-    active_dealer_ids = [d['id'] for d in active_dealers]
-    
-    query = {'dealer_id': {'$in': active_dealer_ids}}
-    if dealer_id and dealer_id in active_dealer_ids:
+    query = {}
+    if dealer_id:
         query['dealer_id'] = dealer_id
     if start_date:
         query['date'] = {'$gte': start_date}
@@ -2580,7 +2224,7 @@ async def export_dealer_excel(
     
     # Get summary
     pipeline = [
-        {'$match': query},
+        {'$match': query} if query else {'$match': {}},
         {'$group': {
             '_id': '$dealer_id',
             'dealer_name': {'$first': '$dealer_name'},
@@ -3194,7 +2838,7 @@ async def export_customers_pdf(
     elements.append(Spacer(1, 20))
     
     # Table data
-    table_data = [['Date', 'Type', 'Customer Name', 'Phone', 'Address', 'Consumer No', 'Cylinder Nos', 'Gas Card', 'KYC']]
+    table_data = [['Date', 'Type', 'Customer Name', 'Phone', 'Address', 'Consumer No', 'Gas Card', 'KYC']]
     
     for c in customers:
         table_data.append([
@@ -3204,7 +2848,6 @@ async def export_customers_pdf(
             c.get('phone', ''),
             c.get('address', '')[:25],
             c.get('consumer_no', ''),
-            c.get('cylinder_nos', ''),
             'Yes' if c.get('gas_card_issued') else 'No',
             'Yes' if c.get('kyc_done') else 'No'
         ])
@@ -3614,16 +3257,20 @@ async def update_order(
     order: OrderUpdate,
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
-    """Update an order (all users can edit all fields)"""
+    """Update an order (admin only or same day by creator)"""
     user = await get_current_user(credentials)
     
     existing = await db.orders.find_one({'id': order_id})
     if not existing:
         raise HTTPException(status_code=404, detail="Order not found")
     
-    # Check warehouse access - user must be admin or belong to same warehouse
-    if user['role'] != 'admin' and existing.get('warehouse_id') != user.get('warehouse_id'):
-        raise HTTPException(status_code=403, detail="You can only edit orders from your warehouse")
+    # Check access - admin can edit any, others can edit same-day orders they created
+    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    if user['role'] != 'admin':
+        if existing.get('created_by') != user['id']:
+            raise HTTPException(status_code=403, detail="You can only edit your own orders")
+        if existing.get('order_date') != today:
+            raise HTTPException(status_code=403, detail="You can only edit today's orders")
     
     update_data = {}
     if order.order_date is not None:

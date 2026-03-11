@@ -187,7 +187,6 @@ export const deleteAccessoryDealer = (dealerId) => api.delete(`/accessory-dealer
 export const createAccessoryEntry = (data) => api.post('/accessory-entries', data);
 export const getAccessoryEntries = (params) => api.get('/accessory-entries', { params });
 export const getAccessorySummary = (params) => api.get('/accessory-entries/summary', { params });
-export const updateAccessoryEntry = (entryId, data) => api.put(`/accessory-entries/${entryId}`, data);
 
 // Accessory Report Exports
 export const exportAccessoryPDF = async (params) => {

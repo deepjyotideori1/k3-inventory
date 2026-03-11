@@ -20,7 +20,6 @@ import AccessoryReports from "./pages/AccessoryReports";
 import CustomerManagement from "./pages/CustomerManagement";
 import OrderManagement from "./pages/OrderManagement";
 import BulkMessaging from "./pages/BulkMessaging";
-import AccessorySales from "./pages/AccessorySales";
 
 // Protected Route Component
 const ProtectedRoute = ({ children, adminOnly = false }) => {
@@ -201,14 +200,6 @@ function AppRoutes() {
         element={
           <ProtectedRoute adminOnly>
             <BulkMessaging />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/accessory-sales"
-        element={
-          <ProtectedRoute>
-            <AccessorySales />
           </ProtectedRoute>
         }
       />

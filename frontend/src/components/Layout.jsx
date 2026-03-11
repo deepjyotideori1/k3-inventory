@@ -17,8 +17,7 @@ import {
   Boxes,
   UserPlus,
   ShoppingCart,
-  MessageSquare,
-  ShoppingBag
+  MessageSquare
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
@@ -40,7 +39,6 @@ const Layout = ({ children }) => {
     { path: '/reports', label: 'Reports', icon: FileText },
     { path: '/customers', label: 'Customers', icon: UserPlus },
     { path: '/orders', label: 'Orders', icon: ShoppingCart },
-    { path: '/accessory-sales', label: 'Accessory Sales', icon: ShoppingBag },
     { path: '/bulk-messaging', label: 'Bulk Messaging', icon: MessageSquare },
     { path: '/plant-hollongi', label: 'Plant Hollongi', icon: Factory },
     { path: '/dealer-reports', label: 'Dealer Reports', icon: UserCheck },
@@ -54,7 +52,6 @@ const Layout = ({ children }) => {
     { path: '/daily-entry', label: 'Daily Entry', icon: ClipboardList },
     { path: '/customers', label: 'Customers', icon: UserPlus },
     { path: '/orders', label: 'Orders', icon: ShoppingCart },
-    { path: '/accessory-sales', label: 'Accessory Sales', icon: ShoppingBag },
     { path: '/my-reports', label: 'My Reports', icon: FileText },
   ];
 
