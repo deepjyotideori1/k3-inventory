@@ -1,34 +1,206 @@
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
+/* K3 GAS SERVICE - Custom Styles */
+
+/* Login page specific */
+.login-bg-image {
+    background-image: url('https://images.pexels.com/photos/20820493/pexels-photo-20820493.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940');
+    background-size: cover;
+    background-position: center;
+    position: relative;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
+.login-bg-image::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(21, 128, 61, 0.3), rgba(0, 0, 0, 0.4));
 }
 
-.App-header {
-    background-color: #0f0f10;
-    min-height: 100vh;
+/* Sidebar styles */
+.sidebar {
+    background: linear-gradient(180deg, #15803d 0%, #166534 100%);
+}
+
+.sidebar-link {
+    position: relative;
     display: flex;
-    flex-direction: column;
     align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+    color: rgba(255, 255, 255, 0.8);
+    transition: all 0.2s ease;
+}
+
+.sidebar-link:hover {
+    background: rgba(255, 255, 255, 0.1);
     color: white;
 }
 
-.App-link {
-    color: #61dafb;
+.sidebar-link.active {
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+    font-weight: 600;
 }
 
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
+.sidebar-link.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 24px;
+    background: white;
+    border-radius: 0 4px 4px 0;
+}
+
+/* Dashboard cards */
+.stat-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+    border: 1px solid #e2e8f0;
+    transition: all 0.2s ease;
+}
+
+.stat-card:hover {
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    transform: translateY(-2px);
+}
+
+/* Table styles */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table th {
+    background: #f8fafc;
+    padding: 0.75rem 1rem;
+    text-align: left;
+    font-weight: 600;
+    color: #475569;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.data-table td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.data-table tr:hover {
+    background: #f8fafc;
+}
+
+/* Alert badge */
+.alert-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.alert-badge.warning {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.alert-badge.error {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.alert-badge.success {
+    background: #dcfce7;
+    color: #16a34a;
+}
+
+/* Form styles */
+.form-group {
+    margin-bottom: 1.25rem;
+}
+
+.form-label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #374151;
+    margin-bottom: 0.5rem;
+}
+
+.form-input {
+    width: 100%;
+    padding: 0.625rem 0.875rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: #15803d;
+    box-shadow: 0 0 0 3px rgba(21, 128, 61, 0.1);
+}
+
+/* Discrepancy highlight */
+.discrepancy-positive {
+    color: #16a34a;
+    font-weight: 600;
+}
+
+.discrepancy-negative {
+    color: #dc2626;
+    font-weight: 600;
+}
+
+/* Bullet tank visualization */
+.bullet-tank {
+    width: 60px;
+    height: 120px;
+    background: linear-gradient(180deg, #e2e8f0 0%, #cbd5e1 100%);
+    border-radius: 30px;
+    position: relative;
+    overflow: hidden;
+    border: 3px solid #94a3b8;
+}
+
+.bullet-tank-fill {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(180deg, #22c55e 0%, #15803d 100%);
+    transition: height 0.5s ease;
+}
+
+/* Maintenance banner */
+.maintenance-banner {
+    background: linear-gradient(90deg, #ea580c, #dc2626);
+    color: white;
+    padding: 0.75rem 1rem;
+    text-align: center;
+    font-weight: 500;
+}
+
+/* Logo text */
+.logo-text {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 800;
+    color: #15803d;
+    letter-spacing: -0.02em;
+}
+
+/* Print styles */
+@media print {
+    .no-print {
+        display: none !important;
     }
-    to {
-        transform: rotate(360deg);
+    
+    .print-only {
+        display: block !important;
     }
 }
