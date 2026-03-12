@@ -14,14 +14,47 @@ import jwt
 import bcrypt
 from io import BytesIO
 import json
+import locale
 
 # PDF and Excel imports
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.pagesizes import A4, letter, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 import xlsxwriter
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+# Helper function for Indian Rupee formatting
+def format_inr(amount):
+    """Format number in Indian Rupee format (₹XX,XX,XXX)"""
+    if amount is None or amount == '':
+        return '₹0'
+    try:
+        num = float(amount)
+        # Indian numbering: last 3 digits, then groups of 2
+        if num < 0:
+            return '-₹' + format_inr(-num)[1:]
+        
+        s = str(int(num))
+        if len(s) <= 3:
+            result = s
+        else:
+            result = s[-3:]
+            s = s[:-3]
+            while s:
+                result = s[-2:] + ',' + result
+                s = s[:-2]
+        
+        # Add decimal part if exists
+        decimal_part = num - int(num)
+        if decimal_part > 0:
+            result += f'.{int(decimal_part * 100):02d}'
+        
+        return '₹' + result
+    except (ValueError, TypeError):
+        return '₹0'
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -58,14 +91,14 @@ class UserBase(BaseModel):
     model_config = ConfigDict(extra="ignore")
     email: str
     name: str
-    role: str  # 'admin' or 'warehouse_manager'
+    role: str  # 'admin', 'warehouse_manager', or 'sales_executive'
     warehouse_id: Optional[str] = None
 
 class UserCreate(BaseModel):
     email: str
     password: str
     name: str
-    role: str
+    role: str  # 'admin', 'warehouse_manager', or 'sales_executive'
     warehouse_id: Optional[str] = None
 
 class UserLogin(BaseModel):
@@ -80,6 +113,10 @@ class UserResponse(BaseModel):
     warehouse_id: Optional[str] = None
     warehouse_name: Optional[str] = None
     created_at: str
+    visible_password: Optional[str] = None  # Only shown after password reset
+
+class ResetPasswordRequest(BaseModel):
+    new_password: Optional[str] = None  # If not provided, auto-generate
 
 class LoginResponse(BaseModel):
     token: str
@@ -182,6 +219,7 @@ class PlantReportCreate(BaseModel):
     opening_21kg_filled: int = 0
     opening_15kg_empty: int = 0
     opening_21kg_empty: int = 0
+    day_reloading_kg: float = 0
     day_refilled_15kg: int = 0
     day_refilled_21kg: int = 0
     delivery_15kg: List[Dict[str, Any]] = []  # [{warehouse_id, quantity}]
@@ -203,6 +241,7 @@ class PlantReportResponse(BaseModel):
     opening_21kg_filled: int
     opening_15kg_empty: int
     opening_21kg_empty: int
+    day_reloading_kg: float = 0
     day_refilled_15kg: int
     day_refilled_21kg: int
     delivery_15kg: List[Dict[str, Any]]
@@ -557,7 +596,8 @@ async def get_users(user: dict = Depends(require_admin)):
             role=u['role'],
             warehouse_id=u.get('warehouse_id'),
             warehouse_name=warehouse_name,
-            created_at=u['created_at']
+            created_at=u['created_at'],
+            visible_password=u.get('visible_password')
         ))
     return result
 
@@ -567,10 +607,25 @@ async def create_user(data: UserCreate, user: dict = Depends(require_admin)):
     if existing:
         raise HTTPException(status_code=400, detail="Email already exists")
     
+    # Validate warehouse assignment for sales_executive
+    if data.role == 'sales_executive':
+        if not data.warehouse_id:
+            raise HTTPException(status_code=400, detail="Sales Executive must be assigned to a warehouse")
+        warehouse = await db.warehouses.find_one({'id': data.warehouse_id}, {'_id': 0})
+        if not warehouse:
+            raise HTTPException(status_code=400, detail="Warehouse not found")
+        if warehouse.get('is_plant'):
+            raise HTTPException(status_code=400, detail="Sales Executive cannot be assigned to Plant Hollongi")
+    
+    # Validate warehouse assignment for warehouse_manager
+    if data.role == 'warehouse_manager' and not data.warehouse_id:
+        raise HTTPException(status_code=400, detail="Warehouse Manager must be assigned to a warehouse")
+    
     new_user = {
         'id': str(uuid.uuid4()),
         'email': data.email,
         'password': hash_password(data.password),
+        'visible_password': data.password,  # Store visible password for admin reference
         'name': data.name,
         'role': data.role,
         'warehouse_id': data.warehouse_id,
@@ -591,7 +646,8 @@ async def create_user(data: UserCreate, user: dict = Depends(require_admin)):
         role=new_user['role'],
         warehouse_id=new_user.get('warehouse_id'),
         warehouse_name=warehouse_name,
-        created_at=new_user['created_at']
+        created_at=new_user['created_at'],
+        visible_password=new_user['visible_password']
     )
 
 @api_router.delete("/users/{user_id}")
@@ -600,6 +656,38 @@ async def delete_user(user_id: str, user: dict = Depends(require_admin)):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="User not found")
     return {"message": "User deleted successfully"}
+
+@api_router.post("/users/{user_id}/reset-password")
+async def reset_user_password(user_id: str, data: ResetPasswordRequest = None, user: dict = Depends(require_admin)):
+    """Reset a user's password - Admin only"""
+    target_user = await db.users.find_one({'id': user_id}, {'_id': 0})
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Generate new password if not provided
+    if data and data.new_password:
+        new_password = data.new_password
+    else:
+        # Auto-generate password based on user's name
+        name_part = target_user['name'].split()[0] if target_user['name'] else 'User'
+        new_password = f"{name_part}@123"
+    
+    # Hash and update password
+    hashed = hash_password(new_password)
+    await db.users.update_one(
+        {'id': user_id},
+        {'$set': {
+            'password': hashed,
+            'visible_password': new_password,
+            'password_reset_at': datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    return {
+        "message": "Password reset successfully",
+        "new_password": new_password,
+        "user_email": target_user['email']
+    }
 
 # ============ WAREHOUSE ROUTES ============
 
@@ -890,6 +978,61 @@ async def get_plant_received_from_warehouses(date: str, user: dict = Depends(get
         'total_21kg': total_21kg
     }
 
+@api_router.get("/reports/warehouses-received-summary/{date}")
+async def get_warehouses_received_from_plant_summary(date: str, user: dict = Depends(get_current_user)):
+    """Get summary of what all warehouses recorded as received from Plant Hollongi for a given date"""
+    # Allow admin and Plant Hollongi managers to access this
+    if user['role'] != 'admin':
+        # Check if user is from Plant Hollongi
+        warehouse = await db.warehouses.find_one({'id': user.get('warehouse_id')})
+        if not warehouse or not warehouse.get('is_plant'):
+            return {'detail': 'Access restricted to admin and Plant Hollongi managers'}
+    
+    # Get all warehouse daily reports for the date
+    reports = await db.daily_reports.find(
+        {'date': date},
+        {'_id': 0}
+    ).to_list(100)
+    
+    received_15kg = []
+    received_21kg = []
+    total_15kg = 0
+    total_21kg = 0
+    
+    for r in reports:
+        warehouse = await db.warehouses.find_one({'id': r.get('warehouse_id')})
+        warehouse_name = warehouse['name'] if warehouse else 'Unknown'
+        
+        # Skip Plant Hollongi itself
+        if warehouse_name == 'Plant Hollongi':
+            continue
+        
+        if r.get('received_from_plant_15kg', 0) > 0:
+            received_15kg.append({
+                'warehouse_id': r.get('warehouse_id'),
+                'warehouse_name': warehouse_name,
+                'quantity': r.get('received_from_plant_15kg'),
+                'status': r.get('status')
+            })
+            total_15kg += r.get('received_from_plant_15kg', 0)
+        
+        if r.get('received_from_plant_21kg', 0) > 0:
+            received_21kg.append({
+                'warehouse_id': r.get('warehouse_id'),
+                'warehouse_name': warehouse_name,
+                'quantity': r.get('received_from_plant_21kg'),
+                'status': r.get('status')
+            })
+            total_21kg += r.get('received_from_plant_21kg', 0)
+    
+    return {
+        'date': date,
+        'received_15kg': received_15kg,
+        'received_21kg': received_21kg,
+        'total_15kg': total_15kg,
+        'total_21kg': total_21kg
+    }
+
 @api_router.get("/reports/daily", response_model=List[DailyReportResponse])
 async def get_daily_reports(
     warehouse_id: Optional[str] = None,
@@ -951,6 +1094,7 @@ async def create_plant_report(data: PlantReportCreate, user: dict = Depends(get_
         'opening_21kg_filled': data.opening_21kg_filled,
         'opening_15kg_empty': data.opening_15kg_empty,
         'opening_21kg_empty': data.opening_21kg_empty,
+        'day_reloading_kg': data.day_reloading_kg,
         'day_refilled_15kg': data.day_refilled_15kg,
         'day_refilled_21kg': data.day_refilled_21kg,
         'delivery_15kg': data.delivery_15kg,
@@ -1252,16 +1396,281 @@ async def export_pdf(
     user: dict = Depends(get_current_user)
 ):
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+    # A4 landscape for fit-to-page
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=15, leftMargin=15, topMargin=15, bottomMargin=15)
     elements = []
     styles = getSampleStyleSheet()
     
-    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=18, spaceAfter=20, alignment=1)
-    subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=12, spaceAfter=10, alignment=1)
+    # Header font size 14 bold, body font size 13
+    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=14, spaceAfter=5, alignment=1, textColor=colors.HexColor('#15803d'))
+    subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=12, spaceAfter=3, alignment=1)
     
-    elements.append(Paragraph("K3 GAS SERVICE", title_style))
-    elements.append(Paragraph("Khayal Hamesha", subtitle_style))
-    elements.append(Spacer(1, 20))
+    elements.append(Paragraph("K3 GAS SERVICE - Khayal Hamesha", title_style))
+    
+    if report_type == "daily":
+        query = {}
+        if user['role'] != 'admin':
+            query['warehouse_id'] = user.get('warehouse_id')
+        elif warehouse_id:
+            query['warehouse_id'] = warehouse_id
+        
+        if start_date:
+            query['date'] = {'$gte': start_date}
+        if end_date:
+            if 'date' in query:
+                query['date']['$lte'] = end_date
+            else:
+                query['date'] = {'$lte': end_date}
+        
+        reports = await db.daily_reports.find(query, {'_id': 0}).sort('date', -1).to_list(1000)
+        
+        warehouse_name = "All Warehouses"
+        if user['role'] != 'admin':
+            warehouse_name = user.get('warehouse_name', 'My Warehouse')
+        elif warehouse_id:
+            wh = await db.warehouses.find_one({'id': warehouse_id}, {'_id': 0})
+            warehouse_name = wh['name'] if wh else warehouse_id
+        
+        elements.append(Paragraph(f"Daily Inventory Report - {warehouse_name}", subtitle_style))
+        if start_date and end_date:
+            elements.append(Paragraph(f"Period: {start_date} to {end_date}", ParagraphStyle('Period', fontSize=10, alignment=1)))
+        elements.append(Spacer(1, 5))
+        
+        # Comprehensive table - fit to A4 landscape
+        data = [[
+            'Date', 'Warehouse',
+            'Op.15F', 'Op.21F', 'Op.15E', 'Op.21E',
+            'Sold15', 'Sold21', 'Ref15', 'Ref21',
+            'Refill to\nPlant 15kg', 'Refill to\nPlant 21kg', 'Received from\nPlant-15kg', 'Received from\nPlant-21kg',
+            'Cl.15F', 'Cl.21F', 'Cl.15E', 'Cl.21E', 'Stat'
+        ]]
+        
+        for r in reports:
+            status = "Disc" if r.get('has_discrepancy') else "OK"
+            data.append([
+                r.get('date', '')[-5:],  # Show MM-DD only
+                r.get('warehouse_name', '')[:8],
+                r.get('opening_15kg_filled', 0),
+                r.get('opening_21kg_filled', 0),
+                r.get('opening_15kg_empty', 0),
+                r.get('opening_21kg_empty', 0),
+                r.get('sold_15kg_filled', 0),
+                r.get('sold_21kg_filled', 0),
+                r.get('refilling_15kg', 0),
+                r.get('refilling_21kg', 0),
+                r.get('refilling_plant_15kg', 0),
+                r.get('refilling_plant_21kg', 0),
+                r.get('received_from_plant_15kg', 0),
+                r.get('received_from_plant_21kg', 0),
+                r.get('closing_15kg_filled', 0),
+                r.get('closing_21kg_filled', 0),
+                r.get('closing_15kg_empty', 0),
+                r.get('closing_21kg_empty', 0),
+                status
+            ])
+        
+        # Calculate column widths to fit A4 landscape (842 points width - 30 margins = 812)
+        # Wider columns for the longer headers (Refill to Plant, Received from Plant)
+        col_widths = [40, 42, 32, 32, 32, 32, 32, 32, 32, 32, 52, 52, 55, 55, 32, 32, 32, 32, 26]
+        table = Table(data, colWidths=col_widths, repeatRows=1)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#15803d')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 6),  # Header - smaller for longer text
+            ('FONTSIZE', (0, 1), (-1, -1), 7),  # Body
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 2),
+            ('BACKGROUND', (2, 1), (5, -1), colors.HexColor('#dbeafe')),  # Opening - blue
+            ('BACKGROUND', (6, 1), (13, -1), colors.HexColor('#fef3c7')),  # Activity - yellow
+            ('BACKGROUND', (14, 1), (17, -1), colors.HexColor('#dcfce7')),  # Closing - green
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ]))
+        elements.append(table)
+    
+    elif report_type == "plant":
+        query = {}
+        if start_date:
+            query['date'] = {'$gte': start_date}
+        if end_date:
+            if 'date' in query:
+                query['date']['$lte'] = end_date
+            else:
+                query['date'] = {'$lte': end_date}
+        
+        reports = await db.plant_reports.find(query, {'_id': 0}).sort('date', -1).to_list(1000)
+        
+        elements.append(Paragraph("Plant Hollongi Report", subtitle_style))
+        if start_date and end_date:
+            elements.append(Paragraph(f"Period: {start_date} to {end_date}", ParagraphStyle('Period', fontSize=10, alignment=1)))
+        elements.append(Spacer(1, 5))
+        
+        # Comprehensive Plant table with all form data
+        data = [[
+            'Date',
+            'Op.Tank', 'Op.15F', 'Op.21F', 'Op.15E', 'Op.21E',
+            'Reload', 'Recv15', 'Recv21',
+            'Refill15', 'Refill21',
+            'Del.15', 'Del.21',
+            'Cl.Tank', 'Cl.15F', 'Cl.21F', 'Cl.15E', 'Cl.21E'
+        ]]
+        
+        for r in reports:
+            # Calculate totals for deliveries
+            del_15 = sum([d.get('quantity', 0) for d in r.get('delivery_15kg', [])])
+            del_21 = sum([d.get('quantity', 0) for d in r.get('delivery_21kg', [])])
+            recv_15 = sum([d.get('quantity', 0) for d in r.get('received_empty_15kg', [])])
+            recv_21 = sum([d.get('quantity', 0) for d in r.get('received_empty_21kg', [])])
+            
+            data.append([
+                r.get('date', '')[-5:],
+                r.get('opening_bullet_tank_kg', 0),
+                r.get('opening_15kg_filled', 0),
+                r.get('opening_21kg_filled', 0),
+                r.get('opening_15kg_empty', 0),
+                r.get('opening_21kg_empty', 0),
+                r.get('day_reloading_kg', 0),
+                recv_15,
+                recv_21,
+                r.get('day_refilled_15kg', 0),
+                r.get('day_refilled_21kg', 0),
+                del_15,
+                del_21,
+                r.get('closing_bullet_tank_kg', 0),
+                r.get('closing_15kg_filled', 0),
+                r.get('closing_21kg_filled', 0),
+                r.get('closing_15kg_empty', 0),
+                r.get('closing_21kg_empty', 0)
+            ])
+        
+        col_widths = [42] + [42]*17
+        table = Table(data, colWidths=col_widths, repeatRows=1)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#15803d')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 7),
+            ('FONTSIZE', (0, 1), (-1, -1), 7),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 4),
+            ('BACKGROUND', (1, 1), (5, -1), colors.HexColor('#dbeafe')),  # Opening - blue
+            ('BACKGROUND', (6, 1), (6, -1), colors.HexColor('#cffafe')),  # Reloading - cyan
+            ('BACKGROUND', (7, 1), (12, -1), colors.HexColor('#fef3c7')),  # Activity - yellow
+            ('BACKGROUND', (13, 1), (17, -1), colors.HexColor('#dcfce7')),  # Closing - green
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ]))
+        elements.append(table)
+        
+        # Add detailed warehouse breakdown for each report
+        elements.append(Spacer(1, 15))
+        elements.append(Paragraph("Warehouse-wise Breakdown", subtitle_style))
+        elements.append(Spacer(1, 5))
+        
+        for r in reports:
+            report_date = r.get('date', '')
+            deliveries = r.get('delivery_15kg', []) + r.get('delivery_21kg', [])
+            received = r.get('received_empty_15kg', []) + r.get('received_empty_21kg', [])
+            
+            if deliveries or received:
+                elements.append(Paragraph(f"Date: {report_date}", ParagraphStyle('DateHeader', fontSize=10, fontName='Helvetica-Bold')))
+                elements.append(Spacer(1, 3))
+                
+                # Delivery to Warehouses table
+                if r.get('delivery_15kg', []) or r.get('delivery_21kg', []):
+                    elements.append(Paragraph("Delivery to Warehouses (Filled Cylinders)", ParagraphStyle('SubHeader', fontSize=9, textColor=colors.HexColor('#4338ca'))))
+                    del_data = [['Warehouse', '15kg Filled', '21kg Filled']]
+                    warehouse_del = {}
+                    for d in r.get('delivery_15kg', []):
+                        wname = d.get('warehouse_name', 'Unknown')
+                        if wname not in warehouse_del:
+                            warehouse_del[wname] = {'qty15': 0, 'qty21': 0}
+                        warehouse_del[wname]['qty15'] = d.get('quantity', 0)
+                    for d in r.get('delivery_21kg', []):
+                        wname = d.get('warehouse_name', 'Unknown')
+                        if wname not in warehouse_del:
+                            warehouse_del[wname] = {'qty15': 0, 'qty21': 0}
+                        warehouse_del[wname]['qty21'] = d.get('quantity', 0)
+                    for wname, qty in warehouse_del.items():
+                        del_data.append([wname, qty['qty15'], qty['qty21']])
+                    
+                    del_table = Table(del_data, colWidths=[150, 80, 80])
+                    del_table.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#c7d2fe')),
+                        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                        ('FONTSIZE', (0, 0), (-1, -1), 8),
+                        ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+                        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                    ]))
+                    elements.append(del_table)
+                    elements.append(Spacer(1, 5))
+                
+                # Empty Received from Warehouses table
+                if r.get('received_empty_15kg', []) or r.get('received_empty_21kg', []):
+                    elements.append(Paragraph("Empty Received from Warehouses", ParagraphStyle('SubHeader', fontSize=9, textColor=colors.HexColor('#c2410c'))))
+                    recv_data = [['Warehouse', '15kg Empty', '21kg Empty']]
+                    warehouse_recv = {}
+                    for d in r.get('received_empty_15kg', []):
+                        wname = d.get('warehouse_name', 'Unknown')
+                        if wname not in warehouse_recv:
+                            warehouse_recv[wname] = {'qty15': 0, 'qty21': 0}
+                        warehouse_recv[wname]['qty15'] = d.get('quantity', 0)
+                    for d in r.get('received_empty_21kg', []):
+                        wname = d.get('warehouse_name', 'Unknown')
+                        if wname not in warehouse_recv:
+                            warehouse_recv[wname] = {'qty15': 0, 'qty21': 0}
+                        warehouse_recv[wname]['qty21'] = d.get('quantity', 0)
+                    for wname, qty in warehouse_recv.items():
+                        recv_data.append([wname, qty['qty15'], qty['qty21']])
+                    
+                    recv_table = Table(recv_data, colWidths=[150, 80, 80])
+                    recv_table.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#fed7aa')),
+                        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                        ('FONTSIZE', (0, 0), (-1, -1), 8),
+                        ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+                        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                    ]))
+                    elements.append(recv_table)
+                
+                elements.append(Spacer(1, 8))
+    
+    doc.build(elements)
+    buffer.seek(0)
+    
+    date_str = datetime.now().strftime('%d%m%y')
+    if report_type == "daily":
+        filename = f"Daily_Inventory_Report_{date_str}.pdf"
+    else:
+        filename = f"Plant_Hollongi_Report_{date_str}.pdf"
+    
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+@api_router.get("/export/excel")
+async def export_excel(
+    warehouse_id: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    report_type: str = "daily",
+    user: dict = Depends(get_current_user)
+):
+    buffer = BytesIO()
+    workbook = xlsxwriter.Workbook(buffer)
+    worksheet = workbook.add_worksheet('Report')
+    
+    # Formats
+    header_format = workbook.add_format({'bold': True, 'bg_color': '#15803d', 'font_color': 'white', 'align': 'center', 'border': 1, 'text_wrap': True})
+    cell_format = workbook.add_format({'align': 'center', 'border': 1})
+    title_format = workbook.add_format({'bold': True, 'font_size': 16, 'align': 'center', 'font_color': '#15803d'})
+    opening_format = workbook.add_format({'align': 'center', 'border': 1, 'bg_color': '#dbeafe'})
+    activity_format = workbook.add_format({'align': 'center', 'border': 1, 'bg_color': '#fef3c7'})
+    closing_format = workbook.add_format({'align': 'center', 'border': 1, 'bg_color': '#dcfce7'})
     
     if report_type == "daily":
         query = {}
@@ -1289,37 +1698,57 @@ async def export_pdf(
             wh = await db.warehouses.find_one({'id': warehouse_id}, {'_id': 0})
             warehouse_name = wh['name'] if wh else warehouse_id
         
-        elements.append(Paragraph(f"Daily Inventory Report - {warehouse_name}", styles['Heading2']))
+        worksheet.merge_range('A1:S1', f'K3 GAS SERVICE - Daily Inventory Report - {warehouse_name}', title_format)
         if start_date and end_date:
-            elements.append(Paragraph(f"Period: {start_date} to {end_date}", styles['Normal']))
-        elements.append(Spacer(1, 10))
+            worksheet.merge_range('A2:S2', f'Period: {start_date} to {end_date}', workbook.add_format({'align': 'center'}))
         
-        data = [['Date', 'Warehouse', '15kg Filled', '21kg Filled', '15kg Empty', '21kg Empty', 'Discrepancy']]
-        for r in reports:
-            disc = "Yes" if r['has_discrepancy'] else "No"
-            data.append([
-                r['date'],
-                r['warehouse_name'],
-                r['closing_15kg_filled'],
-                r['closing_21kg_filled'],
-                r['closing_15kg_empty'],
-                r['closing_21kg_empty'],
-                disc
-            ])
+        # Comprehensive headers
+        headers = [
+            'Date', 'Warehouse',
+            'Open 15kg Filled', 'Open 21kg Filled', 'Open 15kg Empty', 'Open 21kg Empty',
+            'Sold 15kg', 'Sold 21kg',
+            'Refill 15kg', 'Refill 21kg',
+            'Refill to Plant 15kg', 'Refill to Plant 21kg',
+            'Received from Plant-15kg', 'Received from Plant-21kg',
+            'Close 15kg Filled', 'Close 21kg Filled', 'Close 15kg Empty', 'Close 21kg Empty',
+            'Status'
+        ]
         
-        table = Table(data, repeatRows=1)
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#15803d')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('FONTSIZE', (0, 1), (-1, -1), 9),
-        ]))
-        elements.append(table)
+        row_start = 3
+        for col, header in enumerate(headers):
+            worksheet.write(row_start, col, header, header_format)
+            worksheet.set_column(col, col, 12 if col > 1 else 15)  # Set column width
+        
+        for row, r in enumerate(reports, start=row_start + 1):
+            # Date and Warehouse
+            worksheet.write(row, 0, r.get('date', ''), cell_format)
+            worksheet.write(row, 1, r.get('warehouse_name', ''), cell_format)
+            
+            # Opening Stock (blue)
+            worksheet.write(row, 2, r.get('opening_15kg_filled', 0), opening_format)
+            worksheet.write(row, 3, r.get('opening_21kg_filled', 0), opening_format)
+            worksheet.write(row, 4, r.get('opening_15kg_empty', 0), opening_format)
+            worksheet.write(row, 5, r.get('opening_21kg_empty', 0), opening_format)
+            
+            # Day Activities (yellow)
+            worksheet.write(row, 6, r.get('sold_15kg_filled', 0), activity_format)
+            worksheet.write(row, 7, r.get('sold_21kg_filled', 0), activity_format)
+            worksheet.write(row, 8, r.get('refilling_15kg', 0), activity_format)
+            worksheet.write(row, 9, r.get('refilling_21kg', 0), activity_format)
+            worksheet.write(row, 10, r.get('refilling_plant_15kg', 0), activity_format)
+            worksheet.write(row, 11, r.get('refilling_plant_21kg', 0), activity_format)
+            worksheet.write(row, 12, r.get('received_from_plant_15kg', 0), activity_format)
+            worksheet.write(row, 13, r.get('received_from_plant_21kg', 0), activity_format)
+            
+            # Closing Stock (green)
+            worksheet.write(row, 14, r.get('closing_15kg_filled', 0), closing_format)
+            worksheet.write(row, 15, r.get('closing_21kg_filled', 0), closing_format)
+            worksheet.write(row, 16, r.get('closing_15kg_empty', 0), closing_format)
+            worksheet.write(row, 17, r.get('closing_21kg_empty', 0), closing_format)
+            
+            # Status
+            status = "Discrepancy" if r.get('has_discrepancy') else "OK"
+            worksheet.write(row, 18, status, cell_format)
     
     elif report_type == "plant":
         query = {}
@@ -1333,133 +1762,135 @@ async def export_pdf(
         
         reports = await db.plant_reports.find(query, {'_id': 0}).sort('date', -1).to_list(1000)
         
-        elements.append(Paragraph(f"Plant Hollongi Report", styles['Heading2']))
+        worksheet.merge_range('A1:R1', 'K3 GAS SERVICE - Plant Hollongi Report', title_format)
         if start_date and end_date:
-            elements.append(Paragraph(f"Period: {start_date} to {end_date}", styles['Normal']))
-        elements.append(Spacer(1, 10))
+            worksheet.merge_range('A2:R2', f'Period: {start_date} to {end_date}', workbook.add_format({'align': 'center'}))
         
-        data = [['Date', 'Bullet Tank (kg)', '15kg Filled', '21kg Filled', '15kg Empty', '21kg Empty', 'Refilled 15kg', 'Refilled 21kg']]
+        # Comprehensive headers for Plant with Day Reloading
+        headers = [
+            'Date',
+            'Op.Tank(kg)', 'Op.15F', 'Op.21F', 'Op.15E', 'Op.21E',
+            'Reload(kg)', 'Recv.15E', 'Recv.21E',
+            'Refill.15', 'Refill.21',
+            'Del.15F', 'Del.21F',
+            'Cl.Tank(kg)', 'Cl.15F', 'Cl.21F', 'Cl.15E', 'Cl.21E'
+        ]
+        
+        # Create a reloading format (cyan background)
+        reloading_format = workbook.add_format({'bg_color': '#cffafe', 'align': 'center', 'border': 1})
+        
+        for col, header in enumerate(headers):
+            worksheet.write(3, col, header, header_format)
+            worksheet.set_column(col, col, 10)
+        
+        for row, r in enumerate(reports, start=4):
+            # Calculate totals for deliveries and received
+            del_15 = sum([d.get('quantity', 0) for d in r.get('delivery_15kg', [])])
+            del_21 = sum([d.get('quantity', 0) for d in r.get('delivery_21kg', [])])
+            recv_15 = sum([d.get('quantity', 0) for d in r.get('received_empty_15kg', [])])
+            recv_21 = sum([d.get('quantity', 0) for d in r.get('received_empty_21kg', [])])
+            
+            worksheet.write(row, 0, r.get('date', ''), cell_format)
+            # Opening
+            worksheet.write(row, 1, r.get('opening_bullet_tank_kg', 0), opening_format)
+            worksheet.write(row, 2, r.get('opening_15kg_filled', 0), opening_format)
+            worksheet.write(row, 3, r.get('opening_21kg_filled', 0), opening_format)
+            worksheet.write(row, 4, r.get('opening_15kg_empty', 0), opening_format)
+            worksheet.write(row, 5, r.get('opening_21kg_empty', 0), opening_format)
+            # Day Reloading
+            worksheet.write(row, 6, r.get('day_reloading_kg', 0), reloading_format)
+            # Activities
+            worksheet.write(row, 7, recv_15, activity_format)
+            worksheet.write(row, 8, recv_21, activity_format)
+            worksheet.write(row, 9, r.get('day_refilled_15kg', 0), activity_format)
+            worksheet.write(row, 10, r.get('day_refilled_21kg', 0), activity_format)
+            worksheet.write(row, 11, del_15, activity_format)
+            worksheet.write(row, 12, del_21, activity_format)
+            # Closing
+            worksheet.write(row, 13, r.get('closing_bullet_tank_kg', 0), closing_format)
+            worksheet.write(row, 14, r.get('closing_15kg_filled', 0), closing_format)
+            worksheet.write(row, 15, r.get('closing_21kg_filled', 0), closing_format)
+            worksheet.write(row, 16, r.get('closing_15kg_empty', 0), closing_format)
+            worksheet.write(row, 17, r.get('closing_21kg_empty', 0), closing_format)
+        
+        # Create second sheet for warehouse breakdown
+        breakdown_sheet = workbook.add_worksheet('Warehouse Breakdown')
+        breakdown_sheet.merge_range('A1:E1', 'Warehouse-wise Breakdown', title_format)
+        
+        breakdown_header_format = workbook.add_format({'bold': True, 'bg_color': '#15803d', 'font_color': 'white', 'align': 'center', 'border': 1})
+        delivery_header_format = workbook.add_format({'bold': True, 'bg_color': '#c7d2fe', 'align': 'center', 'border': 1})
+        received_header_format = workbook.add_format({'bold': True, 'bg_color': '#fed7aa', 'align': 'center', 'border': 1})
+        
+        breakdown_sheet.set_column(0, 0, 12)  # Date
+        breakdown_sheet.set_column(1, 1, 10)  # Type
+        breakdown_sheet.set_column(2, 2, 15)  # Warehouse
+        breakdown_sheet.set_column(3, 3, 12)  # 15kg
+        breakdown_sheet.set_column(4, 4, 12)  # 21kg
+        
+        breakdown_headers = ['Date', 'Type', 'Warehouse', '15kg Qty', '21kg Qty']
+        for col, header in enumerate(breakdown_headers):
+            breakdown_sheet.write(2, col, header, breakdown_header_format)
+        
+        breakdown_row = 3
         for r in reports:
-            data.append([
-                r['date'],
-                r['closing_bullet_tank_kg'],
-                r['closing_15kg_filled'],
-                r['closing_21kg_filled'],
-                r['closing_15kg_empty'],
-                r['closing_21kg_empty'],
-                r['day_refilled_15kg'],
-                r['day_refilled_21kg']
-            ])
-        
-        table = Table(data, repeatRows=1)
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#15803d')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('FONTSIZE', (0, 1), (-1, -1), 9),
-        ]))
-        elements.append(table)
-    
-    doc.build(elements)
-    buffer.seek(0)
-    
-    return Response(
-        content=buffer.getvalue(),
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=k3_gas_report_{datetime.now().strftime('%Y%m%d')}.pdf"}
-    )
-
-@api_router.get("/export/excel")
-async def export_excel(
-    warehouse_id: Optional[str] = None,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    report_type: str = "daily",
-    user: dict = Depends(get_current_user)
-):
-    buffer = BytesIO()
-    workbook = xlsxwriter.Workbook(buffer)
-    worksheet = workbook.add_worksheet('Report')
-    
-    # Formats
-    header_format = workbook.add_format({'bold': True, 'bg_color': '#15803d', 'font_color': 'white', 'align': 'center', 'border': 1})
-    cell_format = workbook.add_format({'align': 'center', 'border': 1})
-    title_format = workbook.add_format({'bold': True, 'font_size': 16, 'align': 'center'})
-    
-    worksheet.merge_range('A1:H1', 'K3 GAS SERVICE - Khayal Hamesha', title_format)
-    
-    if report_type == "daily":
-        query = {}
-        # Filter by warehouse - non-admin users can only see their own warehouse
-        if user['role'] != 'admin':
-            query['warehouse_id'] = user.get('warehouse_id')
-        elif warehouse_id:
-            query['warehouse_id'] = warehouse_id
-        
-        if start_date:
-            query['date'] = {'$gte': start_date}
-        if end_date:
-            if 'date' in query:
-                query['date']['$lte'] = end_date
-            else:
-                query['date'] = {'$lte': end_date}
-        
-        reports = await db.daily_reports.find(query, {'_id': 0}).sort('date', -1).to_list(1000)
-        
-        headers = ['Date', 'Warehouse', 'Opening 15kg', 'Opening 21kg', 'Sold 15kg', 'Sold 21kg', 'Closing 15kg', 'Closing 21kg', 'Discrepancy 15kg', 'Discrepancy 21kg']
-        for col, header in enumerate(headers):
-            worksheet.write(2, col, header, header_format)
-        
-        for row, r in enumerate(reports, start=3):
-            worksheet.write(row, 0, r['date'], cell_format)
-            worksheet.write(row, 1, r['warehouse_name'], cell_format)
-            worksheet.write(row, 2, r['opening_15kg_filled'], cell_format)
-            worksheet.write(row, 3, r['opening_21kg_filled'], cell_format)
-            worksheet.write(row, 4, r['sold_15kg_filled'], cell_format)
-            worksheet.write(row, 5, r['sold_21kg_filled'], cell_format)
-            worksheet.write(row, 6, r['closing_15kg_filled'], cell_format)
-            worksheet.write(row, 7, r['closing_21kg_filled'], cell_format)
-            worksheet.write(row, 8, r['discrepancy_15kg_filled'], cell_format)
-            worksheet.write(row, 9, r['discrepancy_21kg_filled'], cell_format)
-    
-    elif report_type == "plant":
-        query = {}
-        if start_date:
-            query['date'] = {'$gte': start_date}
-        if end_date:
-            if 'date' in query:
-                query['date']['$lte'] = end_date
-            else:
-                query['date'] = {'$lte': end_date}
-        
-        reports = await db.plant_reports.find(query, {'_id': 0}).sort('date', -1).to_list(1000)
-        
-        headers = ['Date', 'Bullet Tank (kg)', '15kg Filled', '21kg Filled', '15kg Empty', '21kg Empty', 'Refilled 15kg', 'Refilled 21kg']
-        for col, header in enumerate(headers):
-            worksheet.write(2, col, header, header_format)
-        
-        for row, r in enumerate(reports, start=3):
-            worksheet.write(row, 0, r['date'], cell_format)
-            worksheet.write(row, 1, r['closing_bullet_tank_kg'], cell_format)
-            worksheet.write(row, 2, r['closing_15kg_filled'], cell_format)
-            worksheet.write(row, 3, r['closing_21kg_filled'], cell_format)
-            worksheet.write(row, 4, r['closing_15kg_empty'], cell_format)
-            worksheet.write(row, 5, r['closing_21kg_empty'], cell_format)
-            worksheet.write(row, 6, r['day_refilled_15kg'], cell_format)
-            worksheet.write(row, 7, r['day_refilled_21kg'], cell_format)
+            report_date = r.get('date', '')
+            
+            # Delivery to Warehouses
+            warehouse_del = {}
+            for d in r.get('delivery_15kg', []):
+                wname = d.get('warehouse_name', 'Unknown')
+                if wname not in warehouse_del:
+                    warehouse_del[wname] = {'qty15': 0, 'qty21': 0}
+                warehouse_del[wname]['qty15'] = d.get('quantity', 0)
+            for d in r.get('delivery_21kg', []):
+                wname = d.get('warehouse_name', 'Unknown')
+                if wname not in warehouse_del:
+                    warehouse_del[wname] = {'qty15': 0, 'qty21': 0}
+                warehouse_del[wname]['qty21'] = d.get('quantity', 0)
+            
+            for wname, qty in warehouse_del.items():
+                breakdown_sheet.write(breakdown_row, 0, report_date, cell_format)
+                breakdown_sheet.write(breakdown_row, 1, 'Delivery', delivery_header_format)
+                breakdown_sheet.write(breakdown_row, 2, wname, cell_format)
+                breakdown_sheet.write(breakdown_row, 3, qty['qty15'], cell_format)
+                breakdown_sheet.write(breakdown_row, 4, qty['qty21'], cell_format)
+                breakdown_row += 1
+            
+            # Empty Received from Warehouses
+            warehouse_recv = {}
+            for d in r.get('received_empty_15kg', []):
+                wname = d.get('warehouse_name', 'Unknown')
+                if wname not in warehouse_recv:
+                    warehouse_recv[wname] = {'qty15': 0, 'qty21': 0}
+                warehouse_recv[wname]['qty15'] = d.get('quantity', 0)
+            for d in r.get('received_empty_21kg', []):
+                wname = d.get('warehouse_name', 'Unknown')
+                if wname not in warehouse_recv:
+                    warehouse_recv[wname] = {'qty15': 0, 'qty21': 0}
+                warehouse_recv[wname]['qty21'] = d.get('quantity', 0)
+            
+            for wname, qty in warehouse_recv.items():
+                breakdown_sheet.write(breakdown_row, 0, report_date, cell_format)
+                breakdown_sheet.write(breakdown_row, 1, 'Empty Recv', received_header_format)
+                breakdown_sheet.write(breakdown_row, 2, wname, cell_format)
+                breakdown_sheet.write(breakdown_row, 3, qty['qty15'], cell_format)
+                breakdown_sheet.write(breakdown_row, 4, qty['qty21'], cell_format)
+                breakdown_row += 1
     
     workbook.close()
     buffer.seek(0)
     
+    # Generate filename based on report type
+    date_str = datetime.now().strftime('%d%m%y')
+    if report_type == "daily":
+        filename = f"Daily_Inventory_Report_{date_str}.xlsx"
+    else:
+        filename = f"Plant_Hollongi_Report_{date_str}.xlsx"
+    
     return Response(
         content=buffer.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=k3_gas_report_{datetime.now().strftime('%Y%m%d')}.xlsx"}
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
 # ============ ROOT ROUTES ============
@@ -1937,7 +2368,7 @@ async def export_accessory_pdf(
     return Response(
         content=buffer.getvalue(),
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=accessory_report_{datetime.now().strftime('%Y%m%d')}.pdf"}
+        headers={"Content-Disposition": f"attachment; filename=LPG_Accessories_Report_{datetime.now().strftime('%d%m%y')}.pdf"}
     )
 
 @api_router.get("/export/accessory-excel")
@@ -2011,7 +2442,7 @@ async def export_accessory_excel(
     return Response(
         content=buffer.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=accessory_report_{datetime.now().strftime('%Y%m%d')}.xlsx"}
+        headers={"Content-Disposition": f"attachment; filename=LPG_Accessories_Report_{datetime.now().strftime('%d%m%y')}.xlsx"}
     )
 
 # ============ DEALER REPORT EXPORTS ============
@@ -2143,7 +2574,7 @@ async def export_dealer_pdf(
     return Response(
         content=buffer.getvalue(),
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=dealer_report_{datetime.now().strftime('%Y%m%d')}.pdf"}
+        headers={"Content-Disposition": f"attachment; filename=Dealer_Report_{datetime.now().strftime('%d%m%y')}.pdf"}
     )
 
 @api_router.get("/export/dealer-excel")
@@ -2258,7 +2689,7 @@ async def export_dealer_excel(
     return Response(
         content=buffer.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=dealer_report_{datetime.now().strftime('%Y%m%d')}.xlsx"}
+        headers={"Content-Disposition": f"attachment; filename=Dealer_Report_{datetime.now().strftime('%d%m%y')}.xlsx"}
     )
 
 # ============ CUSTOMER MANAGEMENT ============
@@ -2317,6 +2748,7 @@ async def get_customers(
     search: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    warehouse_id: Optional[str] = None,
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Get customers for the user's warehouse (or all for admin)"""
@@ -2327,6 +2759,9 @@ async def get_customers(
     # Filter by warehouse for non-admin users
     if user['role'] != 'admin':
         query['warehouse_id'] = user.get('warehouse_id')
+    elif warehouse_id and warehouse_id != 'all':
+        # Admin can filter by specific warehouse
+        query['warehouse_id'] = warehouse_id
     
     # Filter by category (domestic/commercial)
     if category and category != 'all':
@@ -2668,6 +3103,7 @@ async def bulk_upload_customers_for_warehouse(
 
 @api_router.get("/customers/summary")
 async def get_customer_summary(
+    warehouse_id: Optional[str] = None,
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Get customer summary statistics"""
@@ -2676,6 +3112,9 @@ async def get_customer_summary(
     query = {}
     if user['role'] != 'admin':
         query['warehouse_id'] = user.get('warehouse_id')
+    elif warehouse_id and warehouse_id != 'all':
+        # Admin can filter by specific warehouse
+        query['warehouse_id'] = warehouse_id
     
     # Get total counts
     total_domestic = await db.customers.count_documents({**query, 'connection_type': 'domestic'})
@@ -2721,12 +3160,12 @@ async def download_sample_excel(
     
     # Headers
     headers = [
-        'Date (YYYY-MM-DD)',
+        'Date (DD-MM-YYYY)',
         'Connection Type (domestic/commercial)',
         'Customer Name',
         'Address',
-        'Phone',
-        'Consumer No',
+        'Phone (10 digits)',
+        'Consumer No (10 digits)',
         'Cash Memo No',
         'Cylinder Nos',
         'Gas Card Issued (yes/no)',
@@ -2735,7 +3174,7 @@ async def download_sample_excel(
     ]
     
     # Set column widths
-    column_widths = [18, 30, 25, 35, 15, 15, 15, 15, 22, 18, 30]
+    column_widths = [18, 30, 25, 35, 18, 18, 15, 15, 22, 18, 30]
     for i, width in enumerate(column_widths):
         worksheet.set_column(i, i, width)
     
@@ -2743,11 +3182,11 @@ async def download_sample_excel(
     for col, header in enumerate(headers):
         worksheet.write(0, col, header, header_format)
     
-    # Sample data rows
+    # Sample data rows with DD-MM-YYYY format
     sample_data = [
-        ['2026-02-23', 'domestic', 'Rahul Sharma', 'House No. 123, Itanagar', '9876543210', 'CON001', 'CM001', 'CYL-001, CYL-002', 'yes', 'yes', 'Regular customer'],
-        ['2026-02-23', 'commercial', 'ABC Restaurant', 'Market Complex, Naharlagun', '9876543211', 'CON002', 'CM002', 'CYL-003', 'no', 'yes', 'New connection'],
-        ['2026-02-22', 'domestic', 'Priya Devi', 'Ward No. 5, Doimukh', '9876543212', 'CON003', 'CM003', 'CYL-004, CYL-005', 'yes', 'no', ''],
+        ['28-02-2026', 'domestic', 'Rahul Sharma', 'House No. 123, Itanagar', '9876543210', '9876543210', 'CM001', 'CYL-001, CYL-002', 'yes', 'yes', 'Regular customer'],
+        ['28-02-2026', 'commercial', 'ABC Restaurant', 'Market Complex, Naharlagun', '9876543211', '9876543211', 'CM002', 'CYL-003', 'no', 'yes', 'New connection'],
+        ['27-02-2026', 'domestic', 'Priya Devi', 'Ward No. 5, Doimukh', '9876543212', '9876543212', 'CM003', 'CYL-004, CYL-005', 'yes', 'no', ''],
     ]
     
     for row_num, row_data in enumerate(sample_data, start=1):
@@ -2762,14 +3201,15 @@ async def download_sample_excel(
     title_format = workbook.add_format({'bold': True, 'font_size': 14})
     
     instructions.write(0, 0, 'BULK CUSTOMER UPLOAD INSTRUCTIONS', title_format)
-    instructions.write(2, 0, '1. Date Format: Use YYYY-MM-DD format (e.g., 2026-02-23)', instruction_format)
+    instructions.write(2, 0, '1. Date Format: Use DD-MM-YYYY format (e.g., 28-02-2026)', instruction_format)
     instructions.write(3, 0, '2. Connection Type: Must be either "domestic" or "commercial" (lowercase)', instruction_format)
     instructions.write(4, 0, '3. Customer Name: Required field - cannot be empty', instruction_format)
-    instructions.write(5, 0, '4. Phone: Customer mobile number for SMS/WhatsApp messaging (10+ digits)', instruction_format)
-    instructions.write(6, 0, '5. Gas Card Issued: Use "yes" or "no" (lowercase)', instruction_format)
-    instructions.write(7, 0, '6. KYC Done: Use "yes" or "no" (lowercase)', instruction_format)
-    instructions.write(8, 0, '7. Delete the sample data rows before uploading your actual data', instruction_format)
-    instructions.write(9, 0, '8. Do not modify the header row', instruction_format)
+    instructions.write(5, 0, '4. Phone: Customer mobile number for SMS/WhatsApp messaging (10 digits)', instruction_format)
+    instructions.write(6, 0, '5. Consumer No: Customer consumer number (10 digits)', instruction_format)
+    instructions.write(7, 0, '6. Gas Card Issued: Use "yes" or "no" (lowercase)', instruction_format)
+    instructions.write(8, 0, '7. KYC Done: Use "yes" or "no" (lowercase)', instruction_format)
+    instructions.write(9, 0, '8. Delete the sample data rows before uploading your actual data', instruction_format)
+    instructions.write(10, 0, '9. Do not modify the header row', instruction_format)
     
     workbook.close()
     output.seek(0)
@@ -2785,6 +3225,7 @@ async def export_customers_pdf(
     category: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    warehouse_id: Optional[str] = None,
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Export customers to PDF"""
@@ -2793,6 +3234,8 @@ async def export_customers_pdf(
     query = {}
     if user['role'] != 'admin':
         query['warehouse_id'] = user.get('warehouse_id')
+    elif warehouse_id and warehouse_id != 'all':
+        query['warehouse_id'] = warehouse_id
     
     if category and category != 'all':
         query['connection_type'] = category
@@ -2812,20 +3255,23 @@ async def export_customers_pdf(
     if user['role'] != 'admin':
         warehouse = await db.warehouses.find_one({'id': user.get('warehouse_id')})
         warehouse_name = warehouse['name'] if warehouse else 'Unknown'
+    elif warehouse_id and warehouse_id != 'all':
+        warehouse = await db.warehouses.find_one({'id': warehouse_id})
+        warehouse_name = warehouse['name'] if warehouse else 'Unknown'
     
-    # Create PDF
+    # Create PDF - A4 landscape fit-to-page
     output = BytesIO()
-    doc = SimpleDocTemplate(output, pagesize=landscape(A4), topMargin=30, bottomMargin=30)
+    doc = SimpleDocTemplate(output, pagesize=landscape(A4), topMargin=15, bottomMargin=15, leftMargin=15, rightMargin=15)
     elements = []
     styles = getSampleStyleSheet()
     
-    # Title
+    # Header 14pt bold
     title_style = ParagraphStyle(
         'CustomTitle',
         parent=styles['Heading1'],
-        fontSize=16,
+        fontSize=14,
         textColor=colors.HexColor('#2d5016'),
-        spaceAfter=20,
+        spaceAfter=5,
         alignment=1
     )
     
@@ -2833,36 +3279,37 @@ async def export_customers_pdf(
     title = Paragraph(f"K3 GAS SERVICE - {category_text} Customer Report", title_style)
     elements.append(title)
     
-    subtitle = Paragraph(f"Warehouse: {warehouse_name}", styles['Normal'])
+    subtitle = Paragraph(f"Warehouse: {warehouse_name}", ParagraphStyle('Sub', fontSize=10, alignment=1))
     elements.append(subtitle)
-    elements.append(Spacer(1, 20))
+    elements.append(Spacer(1, 5))
     
     # Table data
-    table_data = [['Date', 'Type', 'Customer Name', 'Phone', 'Address', 'Consumer No', 'Gas Card', 'KYC']]
+    table_data = [['Date', 'Type', 'Customer', 'Phone', 'Address', 'Cons.No', 'Card', 'KYC']]
     
     for c in customers:
         table_data.append([
             c.get('date', ''),
-            c.get('connection_type', '').capitalize(),
-            c.get('customer_name', '')[:20],
+            c.get('connection_type', '')[:6].title(),
+            c.get('customer_name', '')[:18],
             c.get('phone', ''),
-            c.get('address', '')[:25],
+            c.get('address', '')[:22],
             c.get('consumer_no', ''),
-            'Yes' if c.get('gas_card_issued') else 'No',
-            'Yes' if c.get('kyc_done') else 'No'
+            'Y' if c.get('gas_card_issued') else 'N',
+            'Y' if c.get('kyc_done') else 'N'
         ])
     
-    # Create table
-    table = Table(table_data, repeatRows=1)
+    # Create table - fit A4 landscape
+    col_widths = [60, 55, 130, 85, 160, 90, 35, 35]
+    table = Table(table_data, colWidths=col_widths, repeatRows=1)
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2d5016')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 9),
-        ('FONTSIZE', (0, 1), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+        ('FONTSIZE', (0, 0), (-1, 0), 8),
+        ('FONTSIZE', (0, 1), (-1, -1), 7),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f0f0f0')])
     ]))
@@ -2870,19 +3317,24 @@ async def export_customers_pdf(
     elements.append(table)
     
     # Summary
-    elements.append(Spacer(1, 20))
+    elements.append(Spacer(1, 10))
     domestic_count = sum(1 for c in customers if c.get('connection_type') == 'domestic')
     commercial_count = sum(1 for c in customers if c.get('connection_type') == 'commercial')
-    summary = Paragraph(f"Total: {len(customers)} customers (Domestic: {domestic_count}, Commercial: {commercial_count})", styles['Normal'])
+    summary = Paragraph(f"Total: {len(customers)} (Domestic: {domestic_count}, Commercial: {commercial_count})", ParagraphStyle('Sum', fontSize=10))
     elements.append(summary)
     
     doc.build(elements)
     output.seek(0)
     
+    # Generate filename with category
+    category_name = category.capitalize() if category and category != 'all' else 'All'
+    date_str = datetime.now().strftime('%d%m%y')
+    filename = f"Customer_Report_{category_name}_{date_str}.pdf"
+    
     return Response(
         content=output.getvalue(),
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=customers_{category or 'all'}_{datetime.now().strftime('%Y%m%d')}.pdf"}
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
 @api_router.get("/export/customers-excel")
@@ -2890,6 +3342,7 @@ async def export_customers_excel(
     category: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    warehouse_id: Optional[str] = None,
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Export customers to Excel"""
@@ -2898,6 +3351,8 @@ async def export_customers_excel(
     query = {}
     if user['role'] != 'admin':
         query['warehouse_id'] = user.get('warehouse_id')
+    elif warehouse_id and warehouse_id != 'all':
+        query['warehouse_id'] = warehouse_id
     
     if category and category != 'all':
         query['connection_type'] = category
@@ -2960,10 +3415,1036 @@ async def export_customers_excel(
     workbook.close()
     output.seek(0)
     
+    # Generate filename with category
+    category_name = category.capitalize() if category and category != 'all' else 'All'
+    date_str = datetime.now().strftime('%d%m%y')
+    filename = f"Customer_Report_{category_name}_{date_str}.xlsx"
+    
     return Response(
         content=output.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=customers_{category or 'all'}_{datetime.now().strftime('%Y%m%d')}.xlsx"}
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+# ============ SALES DASHBOARD ============
+
+class SalesEntryCreate(BaseModel):
+    date: str
+    customer_id: Optional[str] = None  # Existing customer
+    consumer_name: str
+    address: str = ""
+    consumer_no: str = ""
+    memo_no: str = ""
+    amount: float = 0
+    connection_type: str = "domestic"  # domestic, domestic_refill, commercial, commercial_refill
+    cylinder_nos: str = ""  # Required for refill types
+    payment_mode: str = "cash"  # cash, online, pending
+    no_of_refills: int = 0
+    remarks: str = ""
+
+class SalesEntryUpdate(BaseModel):
+    date: Optional[str] = None
+    consumer_name: Optional[str] = None
+    address: Optional[str] = None
+    consumer_no: Optional[str] = None
+    memo_no: Optional[str] = None
+    amount: Optional[float] = None
+    connection_type: Optional[str] = None
+    cylinder_nos: Optional[str] = None
+    payment_mode: Optional[str] = None
+    no_of_refills: Optional[int] = None
+    remarks: Optional[str] = None
+
+@api_router.get("/sales-entries")
+async def get_sales_entries(
+    warehouse_id: str = None,
+    start_date: str = None,
+    end_date: str = None,
+    payment_mode: str = None,
+    search: str = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get sales entries with filters"""
+    user = await get_current_user(credentials)
+    
+    query = {}
+    
+    # Filter by warehouse
+    if user['role'] == 'admin':
+        if warehouse_id:
+            query['warehouse_id'] = warehouse_id
+    else:
+        query['warehouse_id'] = user.get('warehouse_id')
+    
+    # Filter by date range
+    if start_date:
+        query['date'] = query.get('date', {})
+        query['date']['$gte'] = start_date
+    if end_date:
+        if 'date' not in query:
+            query['date'] = {}
+        query['date']['$lte'] = end_date
+    
+    # Filter by payment mode
+    if payment_mode and payment_mode != 'all':
+        query['payment_mode'] = payment_mode
+    
+    # Search
+    if search:
+        query['$or'] = [
+            {'consumer_name': {'$regex': search, '$options': 'i'}},
+            {'consumer_no': {'$regex': search, '$options': 'i'}},
+            {'memo_no': {'$regex': search, '$options': 'i'}},
+            {'address': {'$regex': search, '$options': 'i'}}
+        ]
+    
+    entries = await db.sales_entries.find(query, {'_id': 0}).sort('date', -1).to_list(5000)
+    
+    # Get warehouse names
+    warehouse_ids = list(set(e.get('warehouse_id') for e in entries if e.get('warehouse_id')))
+    warehouses = await db.warehouses.find({'id': {'$in': warehouse_ids}}, {'_id': 0}).to_list(100)
+    warehouse_map = {w['id']: w['name'] for w in warehouses}
+    
+    # Get user names
+    user_ids = list(set(e.get('created_by') for e in entries if e.get('created_by')))
+    users = await db.users.find({'id': {'$in': user_ids}}, {'_id': 0, 'password': 0}).to_list(100)
+    user_map = {u['id']: u['name'] for u in users}
+    
+    result = []
+    for e in entries:
+        result.append({
+            'id': e['id'],
+            'warehouse_id': e.get('warehouse_id', ''),
+            'warehouse_name': warehouse_map.get(e.get('warehouse_id', ''), 'Unknown'),
+            'date': e['date'],
+            'customer_id': e.get('customer_id'),
+            'consumer_name': e['consumer_name'],
+            'address': e.get('address', ''),
+            'consumer_no': e.get('consumer_no', ''),
+            'memo_no': e.get('memo_no', ''),
+            'amount': e.get('amount', 0),
+            'connection_type': e.get('connection_type', 'domestic'),
+            'cylinder_nos': e.get('cylinder_nos', ''),
+            'payment_mode': e.get('payment_mode', 'cash'),
+            'no_of_refills': e.get('no_of_refills', 0),
+            'remarks': e.get('remarks', ''),
+            'created_by': e.get('created_by', ''),
+            'created_by_name': user_map.get(e.get('created_by', ''), 'Unknown'),
+            'created_at': e.get('created_at', ''),
+            'updated_at': e.get('updated_at')
+        })
+    
+    return result
+
+@api_router.post("/sales-entries")
+async def create_sales_entry(
+    entry: SalesEntryCreate,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Create a new sales entry"""
+    user = await get_current_user(credentials)
+    
+    warehouse_id = user.get('warehouse_id')
+    if user['role'] == 'admin':
+        raise HTTPException(status_code=400, detail="Admin must use warehouse-specific endpoint")
+    
+    if not warehouse_id:
+        raise HTTPException(status_code=400, detail="User has no assigned warehouse")
+    
+    # Get warehouse name
+    warehouse = await db.warehouses.find_one({'id': warehouse_id}, {'_id': 0})
+    warehouse_name = warehouse['name'] if warehouse else 'Unknown'
+    
+    entry_doc = {
+        'id': str(uuid.uuid4()),
+        'warehouse_id': warehouse_id,
+        'date': entry.date,
+        'customer_id': entry.customer_id,
+        'consumer_name': entry.consumer_name,
+        'address': entry.address,
+        'consumer_no': entry.consumer_no,
+        'memo_no': entry.memo_no,
+        'amount': entry.amount,
+        'connection_type': entry.connection_type,
+        'cylinder_nos': entry.cylinder_nos,
+        'payment_mode': entry.payment_mode,
+        'no_of_refills': entry.no_of_refills,
+        'remarks': entry.remarks,
+        'created_by': user['id'],
+        'created_at': datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.sales_entries.insert_one(entry_doc)
+    
+    # Remove MongoDB's _id before returning (insert_one mutates the dict)
+    entry_doc.pop('_id', None)
+    
+    return {
+        **entry_doc,
+        'warehouse_name': warehouse_name,
+        'created_by_name': user['name']
+    }
+
+@api_router.post("/sales-entries/warehouse/{warehouse_id}")
+async def create_sales_entry_for_warehouse(
+    warehouse_id: str,
+    entry: SalesEntryCreate,
+    user: dict = Depends(require_admin)
+):
+    """Create a sales entry for a specific warehouse (admin only)"""
+    warehouse = await db.warehouses.find_one({'id': warehouse_id}, {'_id': 0})
+    if not warehouse:
+        raise HTTPException(status_code=404, detail="Warehouse not found")
+    
+    entry_doc = {
+        'id': str(uuid.uuid4()),
+        'warehouse_id': warehouse_id,
+        'date': entry.date,
+        'customer_id': entry.customer_id,
+        'consumer_name': entry.consumer_name,
+        'address': entry.address,
+        'consumer_no': entry.consumer_no,
+        'memo_no': entry.memo_no,
+        'amount': entry.amount,
+        'connection_type': entry.connection_type,
+        'cylinder_nos': entry.cylinder_nos,
+        'payment_mode': entry.payment_mode,
+        'no_of_refills': entry.no_of_refills,
+        'remarks': entry.remarks,
+        'created_by': user['id'],
+        'created_at': datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.sales_entries.insert_one(entry_doc)
+    
+    # Remove MongoDB's _id before returning (insert_one mutates the dict)
+    entry_doc.pop('_id', None)
+    
+    return {
+        **entry_doc,
+        'warehouse_name': warehouse['name'],
+        'created_by_name': user['name']
+    }
+
+@api_router.put("/sales-entries/{entry_id}")
+async def update_sales_entry(
+    entry_id: str,
+    entry: SalesEntryUpdate,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Update a sales entry"""
+    user = await get_current_user(credentials)
+    
+    existing = await db.sales_entries.find_one({'id': entry_id}, {'_id': 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Sales entry not found")
+    
+    # Check access - admin can edit any, others can only edit their own warehouse's entries
+    if user['role'] != 'admin' and existing.get('warehouse_id') != user.get('warehouse_id'):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    update_data = {k: v for k, v in entry.dict().items() if v is not None}
+    update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
+    
+    await db.sales_entries.update_one({'id': entry_id}, {'$set': update_data})
+    
+    updated = await db.sales_entries.find_one({'id': entry_id}, {'_id': 0})
+    warehouse = await db.warehouses.find_one({'id': updated.get('warehouse_id')}, {'_id': 0})
+    
+    return {
+        **updated,
+        'warehouse_name': warehouse['name'] if warehouse else 'Unknown'
+    }
+
+@api_router.delete("/sales-entries/{entry_id}")
+async def delete_sales_entry(
+    entry_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Delete a sales entry"""
+    user = await get_current_user(credentials)
+    
+    existing = await db.sales_entries.find_one({'id': entry_id}, {'_id': 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Sales entry not found")
+    
+    # Check access
+    if user['role'] != 'admin' and existing.get('warehouse_id') != user.get('warehouse_id'):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    await db.sales_entries.delete_one({'id': entry_id})
+    return {"message": "Sales entry deleted successfully"}
+
+@api_router.get("/sales-entries/summary")
+async def get_sales_summary(
+    warehouse_id: str = None,
+    start_date: str = None,
+    end_date: str = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get sales summary with totals"""
+    user = await get_current_user(credentials)
+    
+    match_stage = {}
+    
+    if user['role'] == 'admin':
+        if warehouse_id:
+            match_stage['warehouse_id'] = warehouse_id
+    else:
+        match_stage['warehouse_id'] = user.get('warehouse_id')
+    
+    if start_date:
+        match_stage['date'] = match_stage.get('date', {})
+        match_stage['date']['$gte'] = start_date
+    if end_date:
+        if 'date' not in match_stage:
+            match_stage['date'] = {}
+        match_stage['date']['$lte'] = end_date
+    
+    pipeline = [
+        {'$match': match_stage},
+        {'$group': {
+            '_id': '$payment_mode',
+            'total_amount': {'$sum': '$amount'},
+            'total_refills': {'$sum': '$no_of_refills'},
+            'count': {'$sum': 1}
+        }}
+    ]
+    
+    results = await db.sales_entries.aggregate(pipeline).to_list(100)
+    
+    summary = {
+        'cash': {'amount': 0, 'refills': 0, 'count': 0},
+        'online': {'amount': 0, 'refills': 0, 'count': 0},
+        'pending': {'amount': 0, 'refills': 0, 'count': 0},
+        'total': {'amount': 0, 'refills': 0, 'count': 0}
+    }
+    
+    for r in results:
+        mode = r['_id'] or 'cash'
+        if mode in summary:
+            summary[mode] = {
+                'amount': r['total_amount'],
+                'refills': r['total_refills'],
+                'count': r['count']
+            }
+        summary['total']['amount'] += r['total_amount']
+        summary['total']['refills'] += r['total_refills']
+        summary['total']['count'] += r['count']
+    
+    return summary
+
+@api_router.get("/sales-entries/frequent-customers")
+async def get_frequent_customers(
+    limit: int = 10,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get frequently refilled customers for quick refill feature"""
+    user = await get_current_user(credentials)
+    
+    # Build match stage based on user role
+    match_stage = {}
+    if user['role'] != 'admin':
+        match_stage['warehouse_id'] = user.get('warehouse_id')
+    
+    # Only include refill entries
+    match_stage['connection_type'] = {'$in': ['domestic_refill', 'commercial_refill']}
+    
+    # Aggregate to find customers with most refills
+    pipeline = [
+        {'$match': match_stage},
+        {'$group': {
+            '_id': {
+                'consumer_name': '$consumer_name',
+                'consumer_no': '$consumer_no',
+                'address': '$address',
+                'warehouse_id': '$warehouse_id'
+            },
+            'total_refills': {'$sum': {'$ifNull': ['$no_of_refills', 1]}},
+            'total_entries': {'$sum': 1},
+            'last_refill_date': {'$max': '$date'},
+            'avg_amount': {'$avg': '$amount'},
+            'connection_type': {'$last': '$connection_type'},
+            'memo_no': {'$last': '$memo_no'}
+        }},
+        {'$sort': {'total_refills': -1, 'last_refill_date': -1}},
+        {'$limit': limit}
+    ]
+    
+    results = await db.sales_entries.aggregate(pipeline).to_list(limit)
+    
+    # Get warehouse names
+    warehouse_ids = list(set([r['_id'].get('warehouse_id') for r in results if r['_id'].get('warehouse_id')]))
+    warehouses = {}
+    if warehouse_ids:
+        warehouse_docs = await db.warehouses.find({'id': {'$in': warehouse_ids}}, {'_id': 0}).to_list(100)
+        warehouses = {w['id']: w['name'] for w in warehouse_docs}
+    
+    # Format response
+    frequent_customers = []
+    for r in results:
+        customer_data = r['_id']
+        frequent_customers.append({
+            'consumer_name': customer_data.get('consumer_name', ''),
+            'consumer_no': customer_data.get('consumer_no', ''),
+            'address': customer_data.get('address', ''),
+            'warehouse_id': customer_data.get('warehouse_id', ''),
+            'warehouse_name': warehouses.get(customer_data.get('warehouse_id', ''), 'Unknown'),
+            'total_refills': r.get('total_refills', 0),
+            'total_entries': r.get('total_entries', 0),
+            'last_refill_date': r.get('last_refill_date', ''),
+            'avg_amount': round(r.get('avg_amount', 0), 2),
+            'connection_type': r.get('connection_type', 'domestic_refill'),
+            'memo_no': r.get('memo_no', '')
+        })
+    
+    return frequent_customers
+
+@api_router.get("/export/sales-pdf")
+async def export_sales_pdf(
+    warehouse_id: str = None,
+    start_date: str = None,
+    end_date: str = None,
+    payment_mode: str = None,
+    connection_type: str = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Export sales entries to PDF - A4 fit-to-page"""
+    user = await get_current_user(credentials)
+    
+    query = {}
+    
+    if user['role'] == 'admin':
+        if warehouse_id:
+            query['warehouse_id'] = warehouse_id
+    else:
+        query['warehouse_id'] = user.get('warehouse_id')
+    
+    if start_date:
+        query['date'] = query.get('date', {})
+        query['date']['$gte'] = start_date
+    if end_date:
+        if 'date' not in query:
+            query['date'] = {}
+        query['date']['$lte'] = end_date
+    
+    if payment_mode and payment_mode != 'all':
+        query['payment_mode'] = payment_mode
+    
+    if connection_type and connection_type != 'all':
+        query['connection_type'] = connection_type
+    
+    entries = await db.sales_entries.find(query, {'_id': 0}).sort('date', -1).to_list(5000)
+    
+    warehouse_name = "All Warehouses"
+    if query.get('warehouse_id'):
+        warehouse = await db.warehouses.find_one({'id': query['warehouse_id']}, {'_id': 0})
+        warehouse_name = warehouse['name'] if warehouse else 'Unknown'
+    
+    # Create PDF - A4 landscape fit-to-page
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), topMargin=15, bottomMargin=15, leftMargin=15, rightMargin=15)
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    # Title - Header 14pt bold
+    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=14, alignment=1, textColor=colors.HexColor('#15803d'))
+    elements.append(Paragraph(f"K3 GAS SERVICE - Sales Report - {warehouse_name}", title_style))
+    
+    date_range = ""
+    if start_date and end_date:
+        date_range = f"Period: {start_date} to {end_date}"
+    elif start_date:
+        date_range = f"From: {start_date}"
+    elif end_date:
+        date_range = f"Until: {end_date}"
+    
+    if date_range:
+        elements.append(Paragraph(date_range, ParagraphStyle('DateRange', fontSize=10, alignment=1)))
+    
+    elements.append(Spacer(1, 5))
+    
+    # Table data
+    data = [['SL', 'Date', 'Consumer', 'Address', 'Cons.No', 'Memo', 'Amount', 'Mode', 'Refills']]
+    
+    total_amount = 0
+    total_refills = 0
+    
+    for i, e in enumerate(entries, 1):
+        data.append([
+            str(i),
+            e['date'],
+            e['consumer_name'][:18] if len(e.get('consumer_name', '')) > 18 else e.get('consumer_name', ''),
+            e.get('address', '')[:15] if len(e.get('address', '')) > 15 else e.get('address', ''),
+            e.get('consumer_no', ''),
+            e.get('memo_no', ''),
+            format_inr(e.get('amount', 0)),
+            e.get('payment_mode', 'cash')[:4].title(),
+            str(e.get('no_of_refills', 0))
+        ])
+        total_amount += e.get('amount', 0)
+        total_refills += e.get('no_of_refills', 0)
+    
+    # Add total row
+    data.append(['', '', '', '', '', 'TOTAL:', format_inr(total_amount), '', str(total_refills)])
+    
+    # Create table - fit A4 landscape
+    col_widths = [25, 55, 110, 95, 70, 50, 70, 45, 40]
+    table = Table(data, colWidths=col_widths, repeatRows=1)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#16a34a')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 8),
+        ('FONTSIZE', (0, 1), (-1, -1), 7),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#f0fdf4')),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#f8fafc')])
+    ]))
+    
+    elements.append(table)
+    doc.build(elements)
+    
+    date_str = datetime.now().strftime('%d%m%y')
+    filename = f"Sales_Report_{warehouse_name.replace(' ', '_')}_{date_str}.pdf"
+    
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+@api_router.get("/export/sales-excel")
+async def export_sales_excel(
+    warehouse_id: str = None,
+    start_date: str = None,
+    end_date: str = None,
+    payment_mode: str = None,
+    connection_type: str = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Export sales entries to Excel"""
+    user = await get_current_user(credentials)
+    
+    query = {}
+    
+    if user['role'] == 'admin':
+        if warehouse_id:
+            query['warehouse_id'] = warehouse_id
+    else:
+        query['warehouse_id'] = user.get('warehouse_id')
+    
+    if start_date:
+        query['date'] = query.get('date', {})
+        query['date']['$gte'] = start_date
+    if end_date:
+        if 'date' not in query:
+            query['date'] = {}
+        query['date']['$lte'] = end_date
+    
+    if payment_mode and payment_mode != 'all':
+        query['payment_mode'] = payment_mode
+    
+    if connection_type and connection_type != 'all':
+        query['connection_type'] = connection_type
+    
+    entries = await db.sales_entries.find(query, {'_id': 0}).sort('date', -1).to_list(5000)
+    
+    # Get warehouse name
+    warehouse_name = "All_Warehouses"
+    if query.get('warehouse_id'):
+        warehouse = await db.warehouses.find_one({'id': query['warehouse_id']}, {'_id': 0})
+        warehouse_name = warehouse['name'].replace(' ', '_') if warehouse else 'Unknown'
+    
+    # Create Excel
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sales Data"
+    
+    # Headers with clear form heads
+    headers = ['SL No.', 'Date', 'Consumer Name', 'Address', 'Consumer No.', 'Memo No.', 'Amount (₹)', 'Payment Mode', 'No. of Refills', 'Remarks']
+    ws.append(headers)
+    
+    # Style headers
+    header_fill = PatternFill(start_color="16a34a", end_color="16a34a", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF")
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center')
+    
+    total_amount = 0
+    total_refills = 0
+    
+    for i, e in enumerate(entries, 1):
+        ws.append([
+            i,
+            e['date'],
+            e.get('consumer_name', ''),
+            e.get('address', ''),
+            e.get('consumer_no', ''),
+            e.get('memo_no', ''),
+            format_inr(e.get('amount', 0)),
+            e.get('payment_mode', 'cash').capitalize(),
+            e.get('no_of_refills', 0),
+            e.get('remarks', '')
+        ])
+        total_amount += e.get('amount', 0)
+        total_refills += e.get('no_of_refills', 0)
+    
+    # Add total row with Indian formatting
+    total_row = len(entries) + 2
+    ws.append(['', '', '', '', '', 'TOTAL:', format_inr(total_amount), '', total_refills, ''])
+    
+    # Style total row
+    total_fill = PatternFill(start_color="f0fdf4", end_color="f0fdf4", fill_type="solid")
+    total_font = Font(bold=True)
+    for cell in ws[total_row]:
+        cell.fill = total_fill
+        cell.font = total_font
+    
+    # Adjust column widths
+    column_widths = [8, 12, 25, 20, 15, 12, 12, 15, 12, 20]
+    for i, width in enumerate(column_widths, 1):
+        ws.column_dimensions[chr(64 + i)].width = width
+    
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    
+    date_str = datetime.now().strftime('%d%m%y')
+    filename = f"Sales_Report_{warehouse_name}_{date_str}.xlsx"
+    
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+# ============ SALES SUMMARY REPORTS ============
+
+@api_router.get("/export/sales-summary-pdf")
+async def export_sales_summary_pdf(
+    warehouse_id: str = None,
+    start_date: str = None,
+    end_date: str = None,
+    group_by: str = "daily",  # daily, weekly, monthly
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Export sales summary report to PDF with period-based totals"""
+    user = await get_current_user(credentials)
+    
+    query = {}
+    
+    if user['role'] == 'admin':
+        if warehouse_id:
+            query['warehouse_id'] = warehouse_id
+    else:
+        query['warehouse_id'] = user.get('warehouse_id')
+    
+    if start_date:
+        query['date'] = query.get('date', {})
+        query['date']['$gte'] = start_date
+    if end_date:
+        if 'date' not in query:
+            query['date'] = {}
+        query['date']['$lte'] = end_date
+    
+    entries = await db.sales_entries.find(query, {'_id': 0}).sort('date', 1).to_list(10000)
+    
+    # Get warehouse name
+    warehouse_name = "All Warehouses"
+    if query.get('warehouse_id'):
+        warehouse = await db.warehouses.find_one({'id': query['warehouse_id']}, {'_id': 0})
+        warehouse_name = warehouse['name'] if warehouse else 'Unknown'
+    
+    # Group entries by period
+    from collections import defaultdict
+    from datetime import datetime as dt
+    
+    summary_data = defaultdict(lambda: {
+        'cash_amount': 0, 'cash_entries': 0,
+        'online_amount': 0, 'online_entries': 0,
+        'pending_amount': 0, 'pending_entries': 0,
+        'total_amount': 0, 'total_entries': 0, 'total_refills': 0,
+        'domestic_new': 0, 'domestic_refill': 0,
+        'commercial_new': 0, 'commercial_refill': 0
+    })
+    
+    for entry in entries:
+        entry_date = entry.get('date', '')
+        if not entry_date:
+            continue
+            
+        try:
+            date_obj = dt.strptime(entry_date, '%Y-%m-%d')
+        except:
+            continue
+        
+        # Determine period key based on group_by
+        if group_by == 'daily':
+            period_key = entry_date
+        elif group_by == 'weekly':
+            # Get ISO week number
+            week_num = date_obj.isocalendar()[1]
+            year = date_obj.year
+            period_key = f"{year}-W{week_num:02d}"
+        elif group_by == 'monthly':
+            period_key = date_obj.strftime('%Y-%m')
+        else:
+            period_key = entry_date
+        
+        amount = entry.get('amount', 0) or 0
+        refills = entry.get('no_of_refills', 0) or 0
+        payment_mode = entry.get('payment_mode', 'cash')
+        connection_type = entry.get('connection_type', '')
+        
+        summary_data[period_key]['total_amount'] += amount
+        summary_data[period_key]['total_entries'] += 1
+        summary_data[period_key]['total_refills'] += refills
+        
+        # Payment mode breakdown
+        if payment_mode == 'cash':
+            summary_data[period_key]['cash_amount'] += amount
+            summary_data[period_key]['cash_entries'] += 1
+        elif payment_mode == 'online':
+            summary_data[period_key]['online_amount'] += amount
+            summary_data[period_key]['online_entries'] += 1
+        else:  # pending
+            summary_data[period_key]['pending_amount'] += amount
+            summary_data[period_key]['pending_entries'] += 1
+        
+        # Connection type breakdown
+        if connection_type == 'domestic':
+            summary_data[period_key]['domestic_new'] += 1
+        elif connection_type == 'domestic_refill':
+            summary_data[period_key]['domestic_refill'] += 1
+        elif connection_type == 'commercial':
+            summary_data[period_key]['commercial_new'] += 1
+        elif connection_type == 'commercial_refill':
+            summary_data[period_key]['commercial_refill'] += 1
+    
+    # Create PDF
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), topMargin=0.5*inch, bottomMargin=0.5*inch)
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    # Title
+    group_label = {'daily': 'Daily', 'weekly': 'Weekly', 'monthly': 'Monthly'}.get(group_by, 'Daily')
+    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=16, alignment=1, textColor=colors.HexColor('#16a34a'))
+    elements.append(Paragraph(f"K3 GAS SERVICE - {group_label} Sales Summary", title_style))
+    elements.append(Paragraph(f"Warehouse: {warehouse_name}", ParagraphStyle('Subtitle', parent=styles['Normal'], alignment=1)))
+    
+    date_range = ""
+    if start_date and end_date:
+        date_range = f"Period: {start_date} to {end_date}"
+    elif start_date:
+        date_range = f"From: {start_date}"
+    elif end_date:
+        date_range = f"Until: {end_date}"
+    
+    if date_range:
+        elements.append(Paragraph(date_range, ParagraphStyle('DateRange', parent=styles['Normal'], alignment=1)))
+    
+    elements.append(Spacer(1, 0.25*inch))
+    
+    # Summary Table
+    headers = ['Period', 'Total (₹)', 'Entries', 'Refills', 'Cash (₹)', 'Online (₹)', 'Pending (₹)', 'Dom. New', 'Dom. Refill', 'Comm. New', 'Comm. Refill']
+    data = [headers]
+    
+    # Grand totals
+    grand_total = {'amount': 0, 'entries': 0, 'refills': 0, 'cash': 0, 'online': 0, 'pending': 0, 'dn': 0, 'dr': 0, 'cn': 0, 'cr': 0}
+    
+    for period in sorted(summary_data.keys()):
+        s = summary_data[period]
+        data.append([
+            period,
+            format_inr(s['total_amount']),
+            str(s['total_entries']),
+            str(s['total_refills']),
+            format_inr(s['cash_amount']),
+            format_inr(s['online_amount']),
+            format_inr(s['pending_amount']),
+            str(s['domestic_new']),
+            str(s['domestic_refill']),
+            str(s['commercial_new']),
+            str(s['commercial_refill'])
+        ])
+        grand_total['amount'] += s['total_amount']
+        grand_total['entries'] += s['total_entries']
+        grand_total['refills'] += s['total_refills']
+        grand_total['cash'] += s['cash_amount']
+        grand_total['online'] += s['online_amount']
+        grand_total['pending'] += s['pending_amount']
+        grand_total['dn'] += s['domestic_new']
+        grand_total['dr'] += s['domestic_refill']
+        grand_total['cn'] += s['commercial_new']
+        grand_total['cr'] += s['commercial_refill']
+    
+    # Add grand total row
+    data.append([
+        'GRAND TOTAL',
+        format_inr(grand_total['amount']),
+        str(grand_total['entries']),
+        str(grand_total['refills']),
+        format_inr(grand_total['cash']),
+        format_inr(grand_total['online']),
+        format_inr(grand_total['pending']),
+        str(grand_total['dn']),
+        str(grand_total['dr']),
+        str(grand_total['cn']),
+        str(grand_total['cr'])
+    ])
+    
+    # Create table with styling
+    col_widths = [0.9*inch, 0.8*inch, 0.6*inch, 0.6*inch, 0.8*inch, 0.8*inch, 0.8*inch, 0.6*inch, 0.7*inch, 0.6*inch, 0.7*inch]
+    table = Table(data, colWidths=col_widths)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#16a34a')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#dcfce7')),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#f8fafc')])
+    ]))
+    
+    elements.append(table)
+    elements.append(Spacer(1, 0.3*inch))
+    
+    # Footer note
+    footer_style = ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8, textColor=colors.grey)
+    elements.append(Paragraph(f"Generated on: {datetime.now().strftime('%d-%m-%Y %H:%M')}", footer_style))
+    
+    doc.build(elements)
+    
+    date_str = datetime.now().strftime('%d%m%y')
+    filename = f"Sales_Summary_{group_label}_{warehouse_name.replace(' ', '_')}_{date_str}.pdf"
+    
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+@api_router.get("/export/sales-summary-excel")
+async def export_sales_summary_excel(
+    warehouse_id: str = None,
+    start_date: str = None,
+    end_date: str = None,
+    group_by: str = "daily",  # daily, weekly, monthly
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Export sales summary report to Excel with period-based totals"""
+    user = await get_current_user(credentials)
+    
+    query = {}
+    
+    if user['role'] == 'admin':
+        if warehouse_id:
+            query['warehouse_id'] = warehouse_id
+    else:
+        query['warehouse_id'] = user.get('warehouse_id')
+    
+    if start_date:
+        query['date'] = query.get('date', {})
+        query['date']['$gte'] = start_date
+    if end_date:
+        if 'date' not in query:
+            query['date'] = {}
+        query['date']['$lte'] = end_date
+    
+    entries = await db.sales_entries.find(query, {'_id': 0}).sort('date', 1).to_list(10000)
+    
+    # Get warehouse name
+    warehouse_name = "All_Warehouses"
+    if query.get('warehouse_id'):
+        warehouse = await db.warehouses.find_one({'id': query['warehouse_id']}, {'_id': 0})
+        warehouse_name = warehouse['name'].replace(' ', '_') if warehouse else 'Unknown'
+    
+    # Group entries by period
+    from collections import defaultdict
+    from datetime import datetime as dt
+    
+    summary_data = defaultdict(lambda: {
+        'cash_amount': 0, 'cash_entries': 0,
+        'online_amount': 0, 'online_entries': 0,
+        'pending_amount': 0, 'pending_entries': 0,
+        'total_amount': 0, 'total_entries': 0, 'total_refills': 0,
+        'domestic_new': 0, 'domestic_refill': 0,
+        'commercial_new': 0, 'commercial_refill': 0
+    })
+    
+    for entry in entries:
+        entry_date = entry.get('date', '')
+        if not entry_date:
+            continue
+            
+        try:
+            date_obj = dt.strptime(entry_date, '%Y-%m-%d')
+        except:
+            continue
+        
+        # Determine period key based on group_by
+        if group_by == 'daily':
+            period_key = entry_date
+        elif group_by == 'weekly':
+            week_num = date_obj.isocalendar()[1]
+            year = date_obj.year
+            period_key = f"{year}-W{week_num:02d}"
+        elif group_by == 'monthly':
+            period_key = date_obj.strftime('%Y-%m')
+        else:
+            period_key = entry_date
+        
+        amount = entry.get('amount', 0) or 0
+        refills = entry.get('no_of_refills', 0) or 0
+        payment_mode = entry.get('payment_mode', 'cash')
+        connection_type = entry.get('connection_type', '')
+        
+        summary_data[period_key]['total_amount'] += amount
+        summary_data[period_key]['total_entries'] += 1
+        summary_data[period_key]['total_refills'] += refills
+        
+        if payment_mode == 'cash':
+            summary_data[period_key]['cash_amount'] += amount
+            summary_data[period_key]['cash_entries'] += 1
+        elif payment_mode == 'online':
+            summary_data[period_key]['online_amount'] += amount
+            summary_data[period_key]['online_entries'] += 1
+        else:
+            summary_data[period_key]['pending_amount'] += amount
+            summary_data[period_key]['pending_entries'] += 1
+        
+        if connection_type == 'domestic':
+            summary_data[period_key]['domestic_new'] += 1
+        elif connection_type == 'domestic_refill':
+            summary_data[period_key]['domestic_refill'] += 1
+        elif connection_type == 'commercial':
+            summary_data[period_key]['commercial_new'] += 1
+        elif connection_type == 'commercial_refill':
+            summary_data[period_key]['commercial_refill'] += 1
+    
+    # Create Excel
+    wb = Workbook()
+    ws = wb.active
+    group_label = {'daily': 'Daily', 'weekly': 'Weekly', 'monthly': 'Monthly'}.get(group_by, 'Daily')
+    ws.title = f"{group_label} Summary"
+    
+    # Title row
+    ws.merge_cells('A1:K1')
+    ws['A1'] = f"K3 GAS SERVICE - {group_label} Sales Summary Report"
+    ws['A1'].font = Font(bold=True, size=14, color="16a34a")
+    ws['A1'].alignment = Alignment(horizontal='center')
+    
+    ws.merge_cells('A2:K2')
+    ws['A2'] = f"Warehouse: {warehouse_name.replace('_', ' ')}"
+    ws['A2'].alignment = Alignment(horizontal='center')
+    
+    # Headers
+    headers = ['Period', 'Total Amount (₹)', 'Total Entries', 'Total Refills', 
+               'Cash (₹)', 'Online (₹)', 'Pending (₹)', 
+               'Domestic New', 'Domestic Refill', 'Commercial New', 'Commercial Refill']
+    ws.append([])  # Empty row
+    ws.append(headers)
+    
+    # Style headers
+    header_fill = PatternFill(start_color="16a34a", end_color="16a34a", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF")
+    for cell in ws[4]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center')
+    
+    # Grand totals
+    grand_total = {'amount': 0, 'entries': 0, 'refills': 0, 'cash': 0, 'online': 0, 'pending': 0, 'dn': 0, 'dr': 0, 'cn': 0, 'cr': 0}
+    
+    for period in sorted(summary_data.keys()):
+        s = summary_data[period]
+        ws.append([
+            period,
+            format_inr(s['total_amount']),
+            s['total_entries'],
+            s['total_refills'],
+            format_inr(s['cash_amount']),
+            format_inr(s['online_amount']),
+            format_inr(s['pending_amount']),
+            s['domestic_new'],
+            s['domestic_refill'],
+            s['commercial_new'],
+            s['commercial_refill']
+        ])
+        grand_total['amount'] += s['total_amount']
+        grand_total['entries'] += s['total_entries']
+        grand_total['refills'] += s['total_refills']
+        grand_total['cash'] += s['cash_amount']
+        grand_total['online'] += s['online_amount']
+        grand_total['pending'] += s['pending_amount']
+        grand_total['dn'] += s['domestic_new']
+        grand_total['dr'] += s['domestic_refill']
+        grand_total['cn'] += s['commercial_new']
+        grand_total['cr'] += s['commercial_refill']
+    
+    # Grand total row
+    total_row_num = ws.max_row + 1
+    ws.append([
+        'GRAND TOTAL',
+        format_inr(grand_total['amount']),
+        grand_total['entries'],
+        grand_total['refills'],
+        format_inr(grand_total['cash']),
+        format_inr(grand_total['online']),
+        format_inr(grand_total['pending']),
+        grand_total['dn'],
+        grand_total['dr'],
+        grand_total['cn'],
+        grand_total['cr']
+    ])
+    
+    # Style total row
+    total_fill = PatternFill(start_color="dcfce7", end_color="dcfce7", fill_type="solid")
+    total_font = Font(bold=True)
+    for cell in ws[total_row_num]:
+        cell.fill = total_fill
+        cell.font = total_font
+    
+    # Adjust column widths
+    column_widths = [14, 16, 14, 14, 14, 14, 14, 14, 16, 16, 18]
+    for i, width in enumerate(column_widths, 1):
+        ws.column_dimensions[chr(64 + i)].width = width
+    
+    # Add borders to data area
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    for row in ws.iter_rows(min_row=4, max_row=ws.max_row, min_col=1, max_col=11):
+        for cell in row:
+            cell.border = thin_border
+            cell.alignment = Alignment(horizontal='center')
+    
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    
+    date_str = datetime.now().strftime('%d%m%y')
+    filename = f"Sales_Summary_{group_label}_{warehouse_name}_{date_str}.xlsx"
+    
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
 # ============ ORDER MANAGEMENT ============
@@ -2974,7 +4455,8 @@ class OrderCreate(BaseModel):
     customer_name: str
     mobile_number: str = ""
     address_landmark: str = ""
-    connection_type: str = "domestic"  # domestic or commercial
+    connection_type: str = "domestic"  # domestic, domestic_refill, commercial, commercial_refill
+    cylinder_nos: str = ""  # Required for refill types
     payment_mode: str = "cash"  # cash, online, credit_pending
     remarks: str = ""
 
@@ -2984,6 +4466,7 @@ class OrderUpdate(BaseModel):
     mobile_number: Optional[str] = None
     address_landmark: Optional[str] = None
     connection_type: Optional[str] = None
+    cylinder_nos: Optional[str] = None
     payment_mode: Optional[str] = None
     remarks: Optional[str] = None
     status: Optional[str] = None  # pending, delivered
@@ -2992,7 +4475,20 @@ class OrderStatusUpdate(BaseModel):
     status: str  # pending, delivered
 
 async def get_next_order_number(warehouse_id: str) -> str:
-    """Generate next order number for a warehouse (A1, A2, A3...)"""
+    """Generate next order number for a warehouse with warehouse-specific prefix"""
+    # Get warehouse to determine prefix
+    warehouse = await db.warehouses.find_one({'id': warehouse_id})
+    
+    # Assign different prefixes based on warehouse name
+    prefix_map = {
+        'Jullang': 'J',
+        'Naharlagun': 'N',
+        'Doimukh': 'D',
+    }
+    
+    warehouse_name = warehouse['name'] if warehouse else 'Unknown'
+    prefix = prefix_map.get(warehouse_name, 'A')  # Default to 'A' if not found
+    
     # Find the highest order number for this warehouse
     latest_order = await db.orders.find_one(
         {'warehouse_id': warehouse_id},
@@ -3004,7 +4500,7 @@ async def get_next_order_number(warehouse_id: str) -> str:
     else:
         next_seq = 1
     
-    return f"A{next_seq}", next_seq
+    return f"{prefix}{next_seq}", next_seq
 
 @api_router.get("/orders")
 async def get_orders(
@@ -3076,6 +4572,7 @@ async def get_orders(
             'mobile_number': o.get('mobile_number', ''),
             'address_landmark': o.get('address_landmark', ''),
             'connection_type': o['connection_type'],
+            'cylinder_nos': o.get('cylinder_nos', ''),
             'payment_mode': o['payment_mode'],
             'status': o.get('status', 'pending'),
             'remarks': o.get('remarks', ''),
@@ -3120,6 +4617,7 @@ async def create_order(
         'mobile_number': order.mobile_number,
         'address_landmark': order.address_landmark,
         'connection_type': order.connection_type,
+        'cylinder_nos': order.cylinder_nos,
         'payment_mode': order.payment_mode,
         'status': 'pending',
         'remarks': order.remarks,
@@ -3143,6 +4641,7 @@ async def create_order(
         'mobile_number': order_doc['mobile_number'],
         'address_landmark': order_doc['address_landmark'],
         'connection_type': order_doc['connection_type'],
+        'cylinder_nos': order_doc['cylinder_nos'],
         'payment_mode': order_doc['payment_mode'],
         'status': order_doc['status'],
         'remarks': order_doc['remarks'],
@@ -3184,6 +4683,7 @@ async def create_order_for_warehouse(
         'mobile_number': order.mobile_number,
         'address_landmark': order.address_landmark,
         'connection_type': order.connection_type,
+        'cylinder_nos': order.cylinder_nos,
         'payment_mode': order.payment_mode,
         'status': 'pending',
         'remarks': order.remarks,
@@ -3205,6 +4705,7 @@ async def create_order_for_warehouse(
         'mobile_number': order_doc['mobile_number'],
         'address_landmark': order_doc['address_landmark'],
         'connection_type': order_doc['connection_type'],
+        'cylinder_nos': order_doc['cylinder_nos'],
         'payment_mode': order_doc['payment_mode'],
         'status': order_doc['status'],
         'remarks': order_doc['remarks'],
@@ -3243,6 +4744,7 @@ async def get_order(
         'mobile_number': order.get('mobile_number', ''),
         'address_landmark': order.get('address_landmark', ''),
         'connection_type': order['connection_type'],
+        'cylinder_nos': order.get('cylinder_nos', ''),
         'payment_mode': order['payment_mode'],
         'status': order.get('status', 'pending'),
         'remarks': order.get('remarks', ''),
@@ -3526,7 +5028,7 @@ async def download_order_pdf(
     return Response(
         content=output.getvalue(),
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=order_{order['order_no']}_{order['order_date']}.pdf"}
+        headers={"Content-Disposition": f"attachment; filename=Order_{order['order_no']}_{datetime.now().strftime('%d%m%y')}.pdf"}
     )
 
 @api_router.get("/export/orders-pdf")
@@ -3565,18 +5067,19 @@ async def export_orders_pdf(
         warehouse = await db.warehouses.find_one({'id': user.get('warehouse_id')})
         warehouse_name = warehouse['name'] if warehouse else 'Unknown'
     
-    # Create PDF
+    # Create PDF - A4 landscape fit-to-page
     output = BytesIO()
-    doc = SimpleDocTemplate(output, pagesize=landscape(A4), topMargin=30, bottomMargin=30)
+    doc = SimpleDocTemplate(output, pagesize=landscape(A4), topMargin=15, bottomMargin=15, leftMargin=15, rightMargin=15)
     elements = []
     styles = getSampleStyleSheet()
     
+    # Header 14pt bold
     title_style = ParagraphStyle(
         'CustomTitle',
         parent=styles['Heading1'],
-        fontSize=16,
+        fontSize=14,
         textColor=colors.HexColor('#2d5016'),
-        spaceAfter=20,
+        spaceAfter=5,
         alignment=1
     )
     
@@ -3589,40 +5092,43 @@ async def export_orders_pdf(
         date_range = f" (until {end_date})"
     
     elements.append(Paragraph(f"K3 GAS SERVICE - Orders Report{date_range}", title_style))
-    elements.append(Paragraph(f"Warehouse: {warehouse_name}", styles['Normal']))
-    elements.append(Spacer(1, 20))
+    elements.append(Paragraph(f"Warehouse: {warehouse_name}", ParagraphStyle('Sub', fontSize=10, alignment=1)))
+    elements.append(Spacer(1, 5))
     
-    # Table data
+    # Table data with clear headers
     table_data = [['Date', 'Order No', 'Customer', 'Mobile', 'Address', 'Type', 'Payment', 'Remarks']]
     
     for o in orders:
         table_data.append([
             o.get('order_date', ''),
             o.get('order_no', ''),
-            o.get('customer_name', '')[:20],
+            o.get('customer_name', '')[:18],
             o.get('mobile_number', ''),
-            o.get('address_landmark', '')[:25],
-            o.get('connection_type', '').capitalize(),
-            o.get('payment_mode', '').replace('_', ' ').title(),
-            o.get('remarks', '')[:15]
+            o.get('address_landmark', '')[:20],
+            o.get('connection_type', '').replace('_', ' ').title()[:10],
+            o.get('payment_mode', '').title()[:6],
+            o.get('remarks', '')[:12]
         ])
     
-    table = Table(table_data, repeatRows=1)
+    # Fit to A4 landscape
+    col_widths = [60, 50, 120, 80, 140, 80, 60, 80]
+    table = Table(table_data, colWidths=col_widths, repeatRows=1)
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2d5016')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 9),
-        ('FONTSIZE', (0, 1), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+        ('FONTSIZE', (0, 0), (-1, 0), 8),
+        ('FONTSIZE', (0, 1), (-1, -1), 7),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f0f0f0')])
     ]))
     
     elements.append(table)
-    elements.append(Spacer(1, 20))
-    elements.append(Paragraph(f"Total Orders: {len(orders)}", styles['Normal']))
+    elements.append(Spacer(1, 10))
+    elements.append(Paragraph(f"Total Orders: {len(orders)}", ParagraphStyle('Total', fontSize=10)))
     
     doc.build(elements)
     output.seek(0)
@@ -3630,7 +5136,7 @@ async def export_orders_pdf(
     return Response(
         content=output.getvalue(),
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=orders_report_{datetime.now().strftime('%Y%m%d')}.pdf"}
+        headers={"Content-Disposition": f"attachment; filename=Orders_Report_{datetime.now().strftime('%d%m%y')}.pdf"}
     )
 
 @api_router.get("/export/orders-excel")
@@ -3716,7 +5222,7 @@ async def export_orders_excel(
     return Response(
         content=output.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=orders_report_{datetime.now().strftime('%Y%m%d')}.xlsx"}
+        headers={"Content-Disposition": f"attachment; filename=Orders_Report_{datetime.now().strftime('%d%m%y')}.xlsx"}
     )
 
 # ============ BULK MESSAGING ============
@@ -3846,14 +5352,14 @@ async def get_recipient_count(
     elif recipient_filter == 'category' and category:
         query['connection_type'] = category
     
-    # Get customers and filter to those with valid phone numbers (10+ digits)
+    # Get customers and filter to those with valid phone numbers (exactly 10 digits)
     customers = await db.customers.find(query).to_list(10000)
     
     # Filter to those with phone numbers (matching send endpoint logic)
     valid_recipients = []
     for c in customers:
         phone = c.get('mobile_number') or c.get('phone') or ''
-        if phone and len(phone) >= 10:
+        if phone and len(phone) == 10:
             valid_recipients.append(c)
     
     total_count = len(valid_recipients)
@@ -4011,11 +5517,11 @@ async def send_bulk_message(
     # Get customers with phone numbers
     customers = await db.customers.find(query).to_list(10000)
     
-    # Filter to those with phone numbers
+    # Filter to those with phone numbers (exactly 10 digits)
     recipients = []
     for c in customers:
         phone = c.get('mobile_number') or c.get('phone') or ''
-        if phone and len(phone) >= 10:
+        if phone and len(phone) == 10:
             recipients.append({
                 'id': c['id'],
                 'name': c['customer_name'],

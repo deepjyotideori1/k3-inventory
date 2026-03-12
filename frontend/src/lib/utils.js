@@ -5,6 +5,26 @@ export function cn(...inputs) {
   return twMerge(clsx(inputs))
 }
 
+/**
+ * Format number in Indian Rupee format (₹XX,XX,XXX)
+ * @param {number} amount - The amount to format
+ * @param {boolean} showSymbol - Whether to show ₹ symbol (default: true)
+ * @returns {string} Formatted amount string
+ */
+export function formatINR(amount, showSymbol = true) {
+  if (amount === null || amount === undefined || isNaN(amount)) {
+    return showSymbol ? '₹0' : '0';
+  }
+  
+  const num = Number(amount);
+  const formatted = num.toLocaleString('en-IN', {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 0
+  });
+  
+  return showSymbol ? `₹${formatted}` : formatted;
+}
+
 export function formatDate(dateString) {
   if (!dateString) return '-';
   const date = new Date(dateString);

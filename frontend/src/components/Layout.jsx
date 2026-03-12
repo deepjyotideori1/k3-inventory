@@ -17,13 +17,14 @@ import {
   Boxes,
   UserPlus,
   ShoppingCart,
-  MessageSquare
+  MessageSquare,
+  TrendingUp
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
 
 const Layout = ({ children }) => {
-  const { user, logout, isAdmin, maintenanceMode } = useAuth();
+  const { user, logout, isAdmin, isSalesExecutive, maintenanceMode } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
@@ -37,6 +38,7 @@ const Layout = ({ children }) => {
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/warehouses', label: 'Warehouses', icon: Warehouse },
     { path: '/reports', label: 'Reports', icon: FileText },
+    { path: '/sales-data', label: 'Sales Data', icon: TrendingUp },
     { path: '/customers', label: 'Customers', icon: UserPlus },
     { path: '/orders', label: 'Orders', icon: ShoppingCart },
     { path: '/bulk-messaging', label: 'Bulk Messaging', icon: MessageSquare },
@@ -50,12 +52,28 @@ const Layout = ({ children }) => {
   const managerLinks = [
     { path: '/manager-dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/daily-entry', label: 'Daily Entry', icon: ClipboardList },
+    { path: '/sales-data', label: 'Sales Data', icon: TrendingUp },
     { path: '/customers', label: 'Customers', icon: UserPlus },
     { path: '/orders', label: 'Orders', icon: ShoppingCart },
     { path: '/my-reports', label: 'My Reports', icon: FileText },
   ];
 
-  const links = isAdmin ? adminLinks : managerLinks;
+  const salesExecutiveLinks = [
+    { path: '/sales-data', label: 'Sales Data', icon: TrendingUp },
+    { path: '/customers', label: 'Customers', icon: UserPlus },
+    { path: '/orders', label: 'Orders', icon: ShoppingCart },
+    { path: '/bulk-messaging', label: 'Bulk Messaging', icon: MessageSquare },
+  ];
+
+  // Select links based on role
+  let links;
+  if (isAdmin) {
+    links = adminLinks;
+  } else if (isSalesExecutive) {
+    links = salesExecutiveLinks;
+  } else {
+    links = [...managerLinks]; // Clone to avoid mutation
+  }
 
   // Check if current user is plant manager
   const isPlantManager = user?.warehouse_name === 'Plant Hollongi';
@@ -104,7 +122,7 @@ const Layout = ({ children }) => {
         {/* Sidebar */}
         <aside 
           className={cn(
-            "sidebar fixed lg:static inset-y-0 left-0 z-50 w-64 transform transition-transform duration-200 ease-in-out lg:transform-none",
+            "sidebar fixed inset-y-0 left-0 z-50 w-64 transform transition-transform duration-200 ease-in-out overflow-y-auto",
             sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
           )}
           data-testid="sidebar"
@@ -152,7 +170,7 @@ const Layout = ({ children }) => {
                 <div className="flex-1 min-w-0">
                   <p className="text-white text-sm font-medium truncate">{user?.name}</p>
                   <p className="text-green-200 text-xs truncate">
-                    {isAdmin ? 'Master Admin' : user?.warehouse_name}
+                    {isAdmin ? 'Master Admin' : isSalesExecutive ? 'Sales Executive' : user?.warehouse_name}
                   </p>
                 </div>
               </div>
@@ -178,7 +196,7 @@ const Layout = ({ children }) => {
         )}
 
         {/* Main Content */}
-        <main className="flex-1 min-h-screen lg:ml-0">
+        <main className="flex-1 min-h-screen lg:ml-64">
           <div className="p-6 lg:p-8">
             {children}
           </div>

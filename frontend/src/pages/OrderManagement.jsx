@@ -73,6 +73,7 @@ const OrderManagement = () => {
     mobile_number: '',
     address_landmark: '',
     connection_type: 'domestic',
+    cylinder_nos: '',
     payment_mode: 'cash',
     remarks: ''
   });
@@ -179,13 +180,16 @@ const OrderManagement = () => {
   const handleCustomerSelect = (customerId) => {
     const customer = customers.find(c => c.id === customerId);
     if (customer) {
+      // Auto-fill customer info from bulk uploaded data
+      // Keep the refill connection type since existing customers are for refills
       setFormData({
         ...formData,
         customer_id: customerId,
-        customer_name: customer.customer_name,
-        mobile_number: customer.consumer_no || '',
+        customer_name: customer.customer_name || '',
+        mobile_number: customer.phone || customer.consumer_no || '',
         address_landmark: customer.address || '',
-        connection_type: customer.connection_type
+        // Keep the current connection_type (refill type) - don't override from customer data
+        remarks: customer.remarks || ''
       });
     }
   };
@@ -218,6 +222,7 @@ const OrderManagement = () => {
         mobile_number: '',
         address_landmark: '',
         connection_type: 'domestic',
+        cylinder_nos: '',
         payment_mode: 'cash',
         remarks: ''
       });
@@ -313,6 +318,7 @@ const OrderManagement = () => {
       mobile_number: order.mobile_number,
       address_landmark: order.address_landmark,
       connection_type: order.connection_type,
+      cylinder_nos: order.cylinder_nos || '',
       payment_mode: order.payment_mode,
       remarks: order.remarks
     });
@@ -406,6 +412,21 @@ const OrderManagement = () => {
         return <Badge className="bg-green-100 text-green-800 border-green-300"><CheckCircle2 className="w-3 h-3 mr-1" />Delivered</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
+  const getConnectionTypeBadge = (type) => {
+    switch(type) {
+      case 'domestic':
+        return <Badge className="bg-emerald-100 text-emerald-800"><Home className="w-3 h-3 mr-1" />Domestic</Badge>;
+      case 'domestic_refill':
+        return <Badge className="bg-blue-100 text-blue-800"><Home className="w-3 h-3 mr-1" />Domestic Refill</Badge>;
+      case 'commercial':
+        return <Badge className="bg-purple-100 text-purple-800"><Building2 className="w-3 h-3 mr-1" />Commercial</Badge>;
+      case 'commercial_refill':
+        return <Badge className="bg-indigo-100 text-indigo-800"><Building2 className="w-3 h-3 mr-1" />Commercial Refill</Badge>;
+      default:
+        return <Badge variant="outline">{type}</Badge>;
     }
   };
 
@@ -537,9 +558,9 @@ const OrderManagement = () => {
                     </div>
                   )}
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                     <div>
-                      <Label>Order Date *</Label>
+                      <Label className="text-sm">Order Date *</Label>
                       <Input 
                         type="date" 
                         value={formData.order_date}
@@ -549,7 +570,7 @@ const OrderManagement = () => {
                       />
                     </div>
                     <div>
-                      <Label>Order No</Label>
+                      <Label className="text-sm">Order No</Label>
                       <Input 
                         value="Auto-generated"
                         disabled
@@ -557,36 +578,67 @@ const OrderManagement = () => {
                       />
                     </div>
                     <div>
-                      <Label>Connection Type *</Label>
+                      <Label className="text-sm">Connection Type *</Label>
                       <Select 
                         value={formData.connection_type} 
-                        onValueChange={(v) => setFormData({ ...formData, connection_type: v })}
+                        onValueChange={(v) => setFormData({ ...formData, connection_type: v, cylinder_nos: '' })}
                       >
                         <SelectTrigger className="mt-1" data-testid="connection-type">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="domestic">
-                            <div className="flex items-center gap-2"><Home className="w-4 h-4" /> Domestic</div>
-                          </SelectItem>
-                          <SelectItem value="commercial">
-                            <div className="flex items-center gap-2"><Building2 className="w-4 h-4" /> Commercial</div>
-                          </SelectItem>
+                          {!useExistingCustomer ? (
+                            <>
+                              <SelectItem value="domestic">
+                                <div className="flex items-center gap-2"><Home className="w-4 h-4" /> Domestic</div>
+                              </SelectItem>
+                              <SelectItem value="commercial">
+                                <div className="flex items-center gap-2"><Building2 className="w-4 h-4" /> Commercial</div>
+                              </SelectItem>
+                            </>
+                          ) : (
+                            <>
+                              <SelectItem value="domestic_refill">
+                                <div className="flex items-center gap-2"><Home className="w-4 h-4 text-blue-600" /> Domestic Refill</div>
+                              </SelectItem>
+                              <SelectItem value="commercial_refill">
+                                <div className="flex items-center gap-2"><Building2 className="w-4 h-4 text-blue-600" /> Commercial Refill</div>
+                              </SelectItem>
+                            </>
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
+                    
+                    {/* Cylinder Nos field for New Customer (domestic/commercial) only */}
+                    {!useExistingCustomer && (
+                      <div>
+                        <Label className="text-sm">Cylinder Nos.</Label>
+                        <Input 
+                          value={formData.cylinder_nos}
+                          onChange={(e) => setFormData({ ...formData, cylinder_nos: e.target.value })}
+                          placeholder="Enter cylinder numbers"
+                          className="mt-1"
+                          data-testid="cylinder-nos"
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {/* Customer Selection */}
-                  <div className="p-4 bg-slate-50 border rounded-lg space-y-4">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-lg font-medium">Customer Details</Label>
+                  <div className="p-3 sm:p-4 bg-slate-50 border rounded-lg space-y-3 sm:space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <Label className="text-base sm:text-lg font-medium">Customer Details</Label>
                       <div className="flex gap-2">
                         <Button 
                           type="button"
                           variant={useExistingCustomer ? "default" : "outline"}
                           size="sm"
-                          onClick={() => setUseExistingCustomer(true)}
+                          onClick={() => {
+                            setUseExistingCustomer(true);
+                            setFormData({ ...formData, connection_type: 'domestic_refill', cylinder_nos: '' });
+                          }}
+                          className="flex-1 sm:flex-none text-xs sm:text-sm"
                         >
                           Select Existing
                         </Button>
@@ -596,8 +648,9 @@ const OrderManagement = () => {
                           size="sm"
                           onClick={() => {
                             setUseExistingCustomer(false);
-                            setFormData({ ...formData, customer_id: '', customer_name: '', mobile_number: '', address_landmark: '' });
+                            setFormData({ ...formData, customer_id: '', customer_name: '', mobile_number: '', address_landmark: '', connection_type: 'domestic', cylinder_nos: '' });
                           }}
+                          className="flex-1 sm:flex-none text-xs sm:text-sm"
                         >
                           New Customer
                         </Button>
@@ -605,9 +658,9 @@ const OrderManagement = () => {
                     </div>
 
                     {useExistingCustomer ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                         <div>
-                          <Label>Filter by Category</Label>
+                          <Label className="text-sm">Filter by Category</Label>
                           <Select value={customerCategory} onValueChange={setCustomerCategory}>
                             <SelectTrigger className="mt-1">
                               <SelectValue />
@@ -620,7 +673,7 @@ const OrderManagement = () => {
                           </Select>
                         </div>
                         <div>
-                          <Label>Select Customer *</Label>
+                          <Label className="text-sm">Select Customer *</Label>
                           <Select value={formData.customer_id} onValueChange={handleCustomerSelect}>
                             <SelectTrigger className="mt-1" data-testid="customer-select">
                               <SelectValue placeholder="Choose a customer" />
@@ -628,7 +681,11 @@ const OrderManagement = () => {
                             <SelectContent>
                               {customers.map((c) => (
                                 <SelectItem key={c.id} value={c.id}>
-                                  {c.customer_name} - {c.address?.substring(0, 30)}
+                                  <div className="flex flex-wrap items-center gap-1 sm:gap-2">
+                                    <span className="font-medium text-sm">{c.customer_name}</span>
+                                    <Badge variant="outline" className="text-xs">{c.connection_type}</Badge>
+                                    {c.phone && <span className="text-slate-500 text-xs">({c.phone})</span>}
+                                  </div>
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -636,14 +693,14 @@ const OrderManagement = () => {
                         </div>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <Button 
                           type="button"
                           variant="outline"
                           onClick={() => setShowNewCustomerDialog(true)}
-                          className="border-green-300 text-green-700"
+                          className="border-green-300 text-green-700 text-sm"
                         >
-                          <Plus className="w-4 h-4 mr-2" />
+                          <Plus className="w-4 h-4 mr-1 sm:mr-2" />
                           Add New Customer
                         </Button>
                         {formData.customer_name && (
@@ -653,9 +710,9 @@ const OrderManagement = () => {
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div>
-                      <Label className="flex items-center gap-2"><User className="w-4 h-4" /> Customer Name *</Label>
+                      <Label className="flex items-center gap-2 text-sm"><User className="w-4 h-4" /> Customer Name *</Label>
                       <Input 
                         value={formData.customer_name}
                         onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
@@ -665,19 +722,26 @@ const OrderManagement = () => {
                       />
                     </div>
                     <div>
-                      <Label className="flex items-center gap-2"><Phone className="w-4 h-4" /> Mobile Number</Label>
+                      <Label className="flex items-center gap-2 text-sm"><Phone className="w-4 h-4" /> Mobile Number (10 digits)</Label>
                       <Input 
                         value={formData.mobile_number}
-                        onChange={(e) => setFormData({ ...formData, mobile_number: e.target.value })}
-                        placeholder="Enter mobile number"
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                          setFormData({ ...formData, mobile_number: value });
+                        }}
+                        placeholder="Enter 10 digit mobile number"
                         className="mt-1"
+                        maxLength={10}
                         data-testid="mobile-number"
                       />
+                      {formData.mobile_number && formData.mobile_number.length !== 10 && (
+                        <p className="text-xs text-red-500 mt-1">Must be 10 digits ({formData.mobile_number.length}/10)</p>
+                      )}
                     </div>
                   </div>
 
                   <div>
-                    <Label className="flex items-center gap-2"><MapPin className="w-4 h-4" /> Address / Landmark</Label>
+                    <Label className="flex items-center gap-2 text-sm"><MapPin className="w-4 h-4" /> Address / Landmark</Label>
                     <Textarea 
                       value={formData.address_landmark}
                       onChange={(e) => setFormData({ ...formData, address_landmark: e.target.value })}
@@ -687,9 +751,9 @@ const OrderManagement = () => {
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div>
-                      <Label className="flex items-center gap-2"><CreditCard className="w-4 h-4" /> Payment Mode *</Label>
+                      <Label className="flex items-center gap-2 text-sm"><CreditCard className="w-4 h-4" /> Payment Mode *</Label>
                       <Select 
                         value={formData.payment_mode} 
                         onValueChange={(v) => setFormData({ ...formData, payment_mode: v })}
@@ -711,7 +775,7 @@ const OrderManagement = () => {
                       </Select>
                     </div>
                     <div>
-                      <Label>Remarks</Label>
+                      <Label className="text-sm">Remarks</Label>
                       <Input 
                         value={formData.remarks}
                         onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
@@ -722,11 +786,11 @@ const OrderManagement = () => {
                     </div>
                   </div>
 
-                  <div className="flex justify-end gap-2">
+                  <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2">
                     <Button 
                       type="submit" 
                       disabled={submitting}
-                      className="bg-green-700 hover:bg-green-800"
+                      className="bg-green-700 hover:bg-green-800 w-full sm:w-auto"
                       data-testid="submit-order-btn"
                     >
                       {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <ShoppingCart className="w-4 h-4 mr-2" />}
@@ -794,13 +858,15 @@ const OrderManagement = () => {
                   <div>
                     <Label>Type</Label>
                     <Select value={filterConnection} onValueChange={setFilterConnection}>
-                      <SelectTrigger className="w-36 mt-1">
+                      <SelectTrigger className="w-40 mt-1">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All</SelectItem>
                         <SelectItem value="domestic">Domestic</SelectItem>
+                        <SelectItem value="domestic_refill">Domestic Refill</SelectItem>
                         <SelectItem value="commercial">Commercial</SelectItem>
+                        <SelectItem value="commercial_refill">Commercial Refill</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -899,10 +965,12 @@ const OrderManagement = () => {
                             <td className="font-medium">{o.customer_name}</td>
                             <td>{o.mobile_number || '-'}</td>
                             <td>
-                              <Badge variant={o.connection_type === 'domestic' ? 'default' : 'secondary'}>
-                                {o.connection_type === 'domestic' ? <Home className="w-3 h-3 mr-1" /> : <Building2 className="w-3 h-3 mr-1" />}
-                                {o.connection_type}
-                              </Badge>
+                              {getConnectionTypeBadge(o.connection_type)}
+                              {o.cylinder_nos && (
+                                <div className="text-xs text-slate-500 mt-1">
+                                  <span className="font-medium">Cyl:</span> {o.cylinder_nos}
+                                </div>
+                              )}
                             </td>
                             <td>{getPaymentBadge(o.payment_mode)}</td>
                             <td>
@@ -1074,18 +1142,34 @@ const OrderManagement = () => {
                   <Label>Connection Type</Label>
                   <Select 
                     value={editForm.connection_type || 'domestic'} 
-                    onValueChange={(v) => setEditForm({ ...editForm, connection_type: v })}
+                    onValueChange={(v) => setEditForm({ ...editForm, connection_type: v, cylinder_nos: v.includes('refill') ? editForm.cylinder_nos : '' })}
                   >
                     <SelectTrigger className="mt-1">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="domestic">Domestic</SelectItem>
+                      <SelectItem value="domestic_refill">Domestic Refill</SelectItem>
                       <SelectItem value="commercial">Commercial</SelectItem>
+                      <SelectItem value="commercial_refill">Commercial Refill</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
+              
+              {/* Cylinder Nos for refill types in edit form */}
+              {(editForm.connection_type === 'domestic_refill' || editForm.connection_type === 'commercial_refill') && (
+                <div>
+                  <Label>Cylinder Nos. *</Label>
+                  <Input 
+                    value={editForm.cylinder_nos || ''}
+                    onChange={(e) => setEditForm({ ...editForm, cylinder_nos: e.target.value })}
+                    placeholder="Enter cylinder numbers"
+                    className="mt-1"
+                  />
+                </div>
+              )}
+              
               <div>
                 <Label>Customer Name</Label>
                 <Input 

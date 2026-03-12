@@ -51,8 +51,13 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 ### Plant Hollongi Features
 - [x] Bullet tank tracking (in Kg)
 - [x] Cylinder stock management
-- [x] Delivery to warehouses tracking
-- [x] Empties received from warehouses
+- [x] Delivery to warehouses tracking (manual entry, no auto-sync to warehouses)
+- [x] Empties received from warehouses (auto-synced from warehouse "Refilling at Plant" entries)
+- [x] **Warehouses Recorded Receipt (Reference)** - Notification showing what warehouses recorded as received from Plant
+
+### Warehouse Daily Entry Features
+- [x] **Received from Plant (Manual Entry)** - Warehouses manually enter filled cylinders received
+- [x] **Reference Notification** - Shows what Plant Hollongi recorded as delivered (informational only)
 
 ### Dealer Reports (Plant Hollongi)
 - [x] Add/manage dealers
@@ -76,6 +81,7 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 
 ### Customer Management (Feb 23, 2026)
 - [x] **Warehouse-specific customers** - Each warehouse stores customers separately
+- [x] **Warehouse Filter (Admin)** - Admin can filter customers by warehouse
 - [x] Customer data fields:
   - Date, Connection Type (Domestic/Commercial), Customer Name, Address
   - Consumer No, Cash Memo No, Cylinder Nos
@@ -90,20 +96,49 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] **Excel Export** - Category-wise customer list
 - [x] **Summary Cards** - Total, Domestic, Commercial, Gas Card Issued, KYC Done
 
+### Sales Dashboard (Dec 2025)
+- [x] **Daily Sales Entry** - Log daily sales data for all warehouses
+- [x] **Sales Entry Fields** - Date, Consumer Name, Address, Consumer No, Memo No, Amount, Connection Type, Cylinder Nos, Payment Mode, Refills, Remarks
+- [x] **Connection Types** - Domestic, Domestic Refill, Commercial, Commercial Refill
+- [x] **New Connection Mode** - Shows Domestic/Commercial connection types only (no refill options), with Cylinder Nos field
+- [x] **Existing Customer Mode** - Shows Domestic Refill/Commercial Refill connection types only, with No of Refills field (no cylinder nos)
+- [x] **Customer Auto-Fill** - When selecting existing customer, consumer name, address, consumer no, memo no, and remarks are auto-filled
+- [x] **Fields Disabled After Selection** - Customer fields become read-only after selection to prevent accidental edits
+- [x] **Quick Refill Feature** - One-click refill for top 8 frequent customers with pre-filled data (amount, payment mode)
+- [x] **Payment Mode Support** - Cash, Online, Pending
+- [x] **Summary Cards** - Cash Collection, Online Collection, Pending Collection, Total Collection with entry/refill counts
+- [x] **Filtering** - By warehouse (admin), payment mode, date range (Today/Week/Month/Year/Custom)
+- [x] **Search** - Search by consumer, memo
+- [x] **PDF/Excel Export** - Export sales data with applied filters including connection type filter
+- [x] **Export Connection Type Filter** - Filter exports by: All Types, Domestic New Connection, Commercial New Connection, Domestic Refill, Commercial Refill
+- [x] **Edit Entry** - Update existing sales entries
+- [x] **Delete Entry** - Remove sales entries with confirmation
+- [x] **Role-Based Access** - Admin sees all warehouses; managers/sales executives see their assigned warehouse only
+
+### Sales Executive Role (Dec 2025)
+- [x] **New User Role** - sales_executive with restricted access
+- [x] **Warehouse Assignment** - Each sales executive assigned to a specific warehouse
+- [x] **Limited Sidebar** - Only Customers, Orders, and Sales Data visible
+- [x] **Data Isolation** - Can only view/manage data for their assigned warehouse
+- [x] **Plant Hollongi Excluded** - Sales executives cannot be assigned to Plant Hollongi
+
 ### Order Management (Feb 23, 2026)
 - [x] **Order Generation Dashboard** - All warehouses except Plant Hollongi
-- [x] **Auto Order Sequence** - A1, A2, A3... per warehouse (endless sequence)
+- [x] **Auto Order Sequence** - Warehouse-specific prefixes (J1, J2... for Jullang, N1, N2... for Naharlagun, D1, D2... for Doimukh)
 - [x] Order data fields:
   - Order Date, Order No (Auto-generated), Customer Name, Mobile Number
-  - Address/Landmark, Connection Type (Domestic/Commercial)
+  - Address/Landmark, Connection Type (Domestic/Commercial/Domestic Refill/Commercial Refill)
   - Payment Mode (Cash/Online/Credit-Pending), Remarks
-- [x] **Select Existing Customer** - Select from customer database with category filter
+  - Cylinder Nos (for new customer connection types only)
+- [x] **New Customer Mode** - Shows Domestic/Commercial connection types with Cylinder Nos field
+- [x] **Select Existing Mode** - Shows Domestic Refill/Commercial Refill connection types (no cylinder nos field)
+- [x] **Auto-Fill Customer Data** - When selecting existing customer, fields auto-populate correctly
 - [x] **Add New Customer** - Option to add customer while creating order
 - [x] **Individual Order PDF** - Download single order as PDF
 - [x] **Order Reports View** with filters:
   - Period: Daily, Weekly, Monthly, Yearly, Custom
   - Payment Mode filter
-  - Connection Type filter
+  - Connection Type filter (including refill types)
   - Status filter (Pending/Delivered)
   - Search by name, mobile, order no, address
 - [x] **PDF/Excel Export** - Export order reports
@@ -142,6 +177,22 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] PDF export using ReportLab
 - [x] Excel export using XlsxWriter
 - [x] Exports filtered by user role (managers see only their data)
+- [x] **Indian Rupee Formatting** - All Sales exports display amounts in ₹XX,XX,XXX format
+- [x] **Clear Export Headers** - PDF and Excel exports have descriptive column headers
+- [x] **Export Date Range Filters** - Filter by Daily, Weekly, Monthly, Custom date ranges
+- [x] **Export Connection Type Filters** - Filter by Domestic, Commercial, Refill types
+- [x] **Sales Summary Reports** - Period-based summary exports (Daily/Weekly/Monthly totals) with payment mode and connection type breakdowns
+
+### Reports System Overhaul (March 2026)
+- [x] **Comprehensive Warehouse Reports** - Detailed cards with Opening Stock, Day Activities, Received from Plant, Closing Stock
+- [x] **Comprehensive Plant Reports** - Detailed cards with Bullet Tank, Opening Stock, Day Activities, Empty Received, Closing Stock
+- [x] **Plant Hollongi Manager View Fix** - Plant managers now see their own plant reports on /reports page
+- [x] **Descriptive Export Headers** - Warehouse report exports use clear column names (e.g., "Refill to plant 15kg" instead of "ToPl15")
+- [x] **Standardized PDF Format** - All PDFs use A4 size, fit-to-page, consistent fonts (Header: bold 14pt, Body: 13pt)
+- [x] **Sync Logic Removed** - Warehouse and Plant forms are now pure manual entry (no auto-sync between forms)
+- [x] **Sales Summary Reports** - Period-based exports (Daily/Weekly/Monthly) with payment mode and connection type breakdowns
+- [x] **Warehouse-Specific Order Numbers** - Orders get warehouse prefixes (J-1 for Jullang, N-1 for Naharlagun, D-1 for Doimukh)
+- [x] **Customer Warehouse Filter** - Admin can filter customers by specific warehouse
 
 ### UI/UX
 - [x] Professional green theme matching gas/energy industry
@@ -227,18 +278,21 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - `GET /api/export/dealer-excel` - Export dealer reports Excel
 - `GET /api/export/customers-pdf` - Export customers PDF
 - `GET /api/export/customers-excel` - Export customers Excel
+- `GET /api/export/sales-summary-pdf` - Export sales summary PDF (group_by: daily/weekly/monthly)
+- `GET /api/export/sales-summary-excel` - Export sales summary Excel (group_by: daily/weekly/monthly)
 
 ---
 
 ## DEFAULT CREDENTIALS
 
-| Role | Email | Password |
-|------|-------|----------|
-| Master Admin | admin@k3gas.com | Admin@123 |
-| Jullang Manager | jullang@k3gas.com | Jullang@123 |
-| Naharlagun Manager | naharlagun@k3gas.com | Naharlagun@123 |
-| Doimukh Manager | doimukh@k3gas.com | Doimukh@123 |
-| Plant Hollongi | hollongi@k3gas.com | Hollongi@123 |
+| Role | Email | Password | Warehouse |
+|------|-------|----------|-----------|
+| Master Admin | admin@k3gas.com | Admin@123 | All |
+| Sales Executive | sales@k3gas.com | Sales@123 | Jullang |
+| Jullang Manager | jullang@k3gas.com | Jullang@123 | Jullang |
+| Naharlagun Manager | naharlagun@k3gas.com | Naharlagun@123 | Naharlagun |
+| Doimukh Manager | doimukh@k3gas.com | Doimukh@123 | Doimukh |
+| Plant Hollongi | hollongi@k3gas.com | Hollongi@123 | Plant Hollongi |
 
 ---
 
@@ -312,4 +366,4 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 
 ---
 
-*Last Updated: February 23, 2026*
+*Last Updated: March 1, 2026*

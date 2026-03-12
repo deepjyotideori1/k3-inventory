@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
-import { getLatestPlantClosing, createPlantReport, getWarehouses, getPlantReceivedFromWarehouses } from '../lib/api';
+import { getLatestPlantClosing, createPlantReport, getWarehouses } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -20,9 +20,7 @@ import {
   ArrowDownToLine,
   Plus,
   Trash2,
-  RefreshCw,
-  AlertCircle,
-  CheckCircle
+  AlertCircle
 } from 'lucide-react';
 import { getTodayDate, formatDate } from '../lib/utils';
 import { toast } from 'sonner';
@@ -33,8 +31,6 @@ const PlantEntry = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [warehouses, setWarehouses] = useState([]);
-  const [warehouseReceived, setWarehouseReceived] = useState(null);
-  const [loadingReceived, setLoadingReceived] = useState(false);
   
   const [formData, setFormData] = useState({
     date: getTodayDate(),
@@ -43,6 +39,7 @@ const PlantEntry = () => {
     opening_21kg_filled: 0,
     opening_15kg_empty: 0,
     opening_21kg_empty: 0,
+    day_reloading_kg: 0,
     day_refilled_15kg: 0,
     day_refilled_21kg: 0,
     delivery_15kg: [],
@@ -60,12 +57,6 @@ const PlantEntry = () => {
   useEffect(() => {
     fetchData();
   }, []);
-
-  useEffect(() => {
-    if (formData.date) {
-      fetchWarehouseReceived(formData.date);
-    }
-  }, [formData.date]);
 
   const fetchData = async () => {
     try {
@@ -89,35 +80,6 @@ const PlantEntry = () => {
       console.error('Failed to fetch data:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchWarehouseReceived = async (date) => {
-    setLoadingReceived(true);
-    try {
-      const response = await getPlantReceivedFromWarehouses(date);
-      setWarehouseReceived(response.data);
-      
-      // Auto-populate received empties from warehouse reports
-      if (response.data) {
-        setFormData(prev => ({
-          ...prev,
-          received_empty_15kg: response.data.received_15kg.map(r => ({
-            warehouse_id: r.warehouse_id,
-            warehouse_name: r.warehouse_name,
-            quantity: r.quantity
-          })),
-          received_empty_21kg: response.data.received_21kg.map(r => ({
-            warehouse_id: r.warehouse_id,
-            warehouse_name: r.warehouse_name,
-            quantity: r.quantity
-          }))
-        }));
-      }
-    } catch (error) {
-      console.error('Failed to fetch warehouse received:', error);
-    } finally {
-      setLoadingReceived(false);
     }
   };
 
@@ -337,75 +299,84 @@ const PlantEntry = () => {
             </CardContent>
           </Card>
 
-          {/* Empty Received from Warehouses - AUTO SYNCED */}
+          {/* Day Reloading */}
+          <Card className="mb-6 border-2 border-cyan-200 bg-cyan-50" data-testid="day-reloading-section">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Factory className="w-5 h-5 text-cyan-700" />
+                Day Reloading
+              </CardTitle>
+              <CardDescription className="text-cyan-700">
+                Enter the amount of gas reloaded into the bullet tank
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="max-w-xs">
+                <Label className="text-slate-600">Reloading Quantity (kg)</Label>
+                <Input 
+                  type="number" 
+                  step="0.01"
+                  value={formData.day_reloading_kg}
+                  onChange={(e) => handleChange('day_reloading_kg', e.target.value)}
+                  className="mt-1"
+                  placeholder="Enter kg"
+                  data-testid="day-reloading-kg"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Empty Received from Warehouses */}
           <Card className="mb-6 border-2 border-amber-200 bg-amber-50" data-testid="received-section">
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <ArrowDownToLine className="w-5 h-5 text-amber-700" />
-                    Empty Received from Warehouses
-                  </CardTitle>
-                  <CardDescription className="text-amber-700">
-                    Auto-synced from warehouse "Refilling at Plant Hollongi" entries
-                  </CardDescription>
-                </div>
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => fetchWarehouseReceived(formData.date)}
-                  disabled={loadingReceived}
-                  className="border-amber-300 text-amber-700"
-                >
-                  {loadingReceived ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                  <span className="ml-1">Refresh</span>
-                </Button>
-              </div>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <ArrowDownToLine className="w-5 h-5 text-amber-700" />
+                Empty Received from Warehouses
+              </CardTitle>
+              <CardDescription className="text-amber-700">
+                Enter empty cylinders received from warehouses
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Warehouse Received Summary */}
-              {warehouseReceived && (warehouseReceived.total_15kg > 0 || warehouseReceived.total_21kg > 0) && (
-                <div className="p-4 bg-white rounded-lg border border-amber-200">
-                  <div className="flex items-center gap-2 mb-3">
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                    <span className="font-medium text-slate-700">Synced from Warehouse Reports</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="p-3 bg-amber-50 rounded-lg text-center">
-                      <p className="text-xs text-amber-700">Total 15kg Empty Received</p>
-                      <p className="text-2xl font-bold text-amber-800">{warehouseReceived.total_15kg}</p>
-                    </div>
-                    <div className="p-3 bg-amber-50 rounded-lg text-center">
-                      <p className="text-xs text-amber-700">Total 21kg Empty Received</p>
-                      <p className="text-2xl font-bold text-amber-800">{warehouseReceived.total_21kg}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {/* 15kg Received Details */}
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="font-medium text-slate-700">15kg Empty Received</h4>
                   <Button type="button" variant="outline" size="sm" onClick={() => addReceived('15kg')}>
-                    <Plus className="w-4 h-4 mr-1" /> Add Manual Entry
+                    <Plus className="w-4 h-4 mr-1" /> Add Entry
                   </Button>
                 </div>
                 {formData.received_empty_15kg.length === 0 ? (
                   <div className="p-4 bg-slate-50 rounded-lg text-center">
                     <AlertCircle className="w-6 h-6 text-slate-400 mx-auto mb-2" />
-                    <p className="text-slate-500 text-sm">No 15kg empties received from warehouses today</p>
-                    <p className="text-slate-400 text-xs mt-1">Warehouses need to submit their daily reports with "Refilling at Plant" entries</p>
+                    <p className="text-slate-500 text-sm">No 15kg empties added</p>
+                    <p className="text-slate-400 text-xs mt-1">Click "Add Entry" to add received empties</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
                     {formData.received_empty_15kg.map((item, idx) => (
                       <div key={idx} className="flex items-center gap-2 p-2 bg-white rounded-lg border border-amber-200">
-                        <div className="flex-1">
-                          <span className="font-medium text-slate-700">{item.warehouse_name || 'Unknown'}</span>
-                        </div>
-                        <Badge className="bg-amber-100 text-amber-700">{item.quantity} units</Badge>
+                        <Select 
+                          value={item.warehouse_id} 
+                          onValueChange={(val) => updateReceived('15kg', idx, 'warehouse_id', val)}
+                        >
+                          <SelectTrigger className="w-40">
+                            <SelectValue placeholder="Select warehouse" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {warehouses.map(w => (
+                              <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input 
+                          type="number" 
+                          placeholder="Qty"
+                          value={item.quantity}
+                          onChange={(e) => updateReceived('15kg', idx, 'quantity', e.target.value)}
+                          className="w-24"
+                        />
+                        <span className="text-sm text-slate-500">units</span>
                         <Button type="button" variant="ghost" size="icon" onClick={() => removeReceived('15kg', idx)}>
                           <Trash2 className="w-4 h-4 text-red-500" />
                         </Button>
@@ -425,23 +396,40 @@ const PlantEntry = () => {
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="font-medium text-slate-700">21kg Empty Received</h4>
                   <Button type="button" variant="outline" size="sm" onClick={() => addReceived('21kg')}>
-                    <Plus className="w-4 h-4 mr-1" /> Add Manual Entry
+                    <Plus className="w-4 h-4 mr-1" /> Add Entry
                   </Button>
                 </div>
                 {formData.received_empty_21kg.length === 0 ? (
                   <div className="p-4 bg-slate-50 rounded-lg text-center">
                     <AlertCircle className="w-6 h-6 text-slate-400 mx-auto mb-2" />
-                    <p className="text-slate-500 text-sm">No 21kg empties received from warehouses today</p>
-                    <p className="text-slate-400 text-xs mt-1">Warehouses need to submit their daily reports with "Refilling at Plant" entries</p>
+                    <p className="text-slate-500 text-sm">No 21kg empties added</p>
+                    <p className="text-slate-400 text-xs mt-1">Click "Add Entry" to add received empties</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
                     {formData.received_empty_21kg.map((item, idx) => (
                       <div key={idx} className="flex items-center gap-2 p-2 bg-white rounded-lg border border-amber-200">
-                        <div className="flex-1">
-                          <span className="font-medium text-slate-700">{item.warehouse_name || 'Unknown'}</span>
-                        </div>
-                        <Badge className="bg-amber-100 text-amber-700">{item.quantity} units</Badge>
+                        <Select 
+                          value={item.warehouse_id} 
+                          onValueChange={(val) => updateReceived('21kg', idx, 'warehouse_id', val)}
+                        >
+                          <SelectTrigger className="w-40">
+                            <SelectValue placeholder="Select warehouse" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {warehouses.map(w => (
+                              <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input 
+                          type="number" 
+                          placeholder="Qty"
+                          value={item.quantity}
+                          onChange={(e) => updateReceived('21kg', idx, 'quantity', e.target.value)}
+                          className="w-24"
+                        />
+                        <span className="text-sm text-slate-500">units</span>
                         <Button type="button" variant="ghost" size="icon" onClick={() => removeReceived('21kg', idx)}>
                           <Trash2 className="w-4 h-4 text-red-500" />
                         </Button>

@@ -170,8 +170,8 @@ const Login = () => {
       </div>
 
       {/* Right Panel - Image */}
-      <div className="hidden lg:block lg:w-1/2 login-bg-image">
-        <div className="relative z-10 h-full flex items-end p-12">
+      <div className="hidden lg:flex lg:w-1/2 login-bg-image min-h-screen">
+        <div className="relative z-10 h-full w-full flex items-end p-12">
           <div className="text-white">
             <h2 className="text-4xl font-bold mb-4 drop-shadow-lg">
               Inventory Management

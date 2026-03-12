@@ -81,6 +81,7 @@ const CustomerManagement = () => {
   
   // Filters
   const [filterCategory, setFilterCategory] = useState('all');
+  const [filterWarehouse, setFilterWarehouse] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -93,7 +94,7 @@ const CustomerManagement = () => {
 
   useEffect(() => {
     fetchData();
-  }, [filterCategory, searchQuery, startDate, endDate]);
+  }, [filterCategory, filterWarehouse, searchQuery, startDate, endDate]);
 
   useEffect(() => {
     if (isAdmin) {
@@ -115,13 +116,14 @@ const CustomerManagement = () => {
     try {
       const params = {};
       if (filterCategory !== 'all') params.category = filterCategory;
+      if (filterWarehouse !== 'all') params.warehouse_id = filterWarehouse;
       if (searchQuery) params.search = searchQuery;
       if (startDate) params.start_date = startDate;
       if (endDate) params.end_date = endDate;
       
       const [customersRes, summaryRes] = await Promise.all([
         getCustomers(params),
-        getCustomerSummary()
+        getCustomerSummary(filterWarehouse !== 'all' ? { warehouse_id: filterWarehouse } : {})
       ]);
       
       setCustomers(customersRes.data);
@@ -248,14 +250,31 @@ const CustomerManagement = () => {
         const worksheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         
+        // Function to parse DD-MM-YYYY date format
+        const parseDate = (dateStr) => {
+          if (!dateStr) return getTodayDate();
+          const str = dateStr.toString().trim();
+          // Check if it's DD-MM-YYYY format
+          const ddmmyyyy = str.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+          if (ddmmyyyy) {
+            return `${ddmmyyyy[3]}-${ddmmyyyy[2]}-${ddmmyyyy[1]}`; // Convert to YYYY-MM-DD
+          }
+          // Check if it's already YYYY-MM-DD format
+          const yyyymmdd = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+          if (yyyymmdd) {
+            return str;
+          }
+          return getTodayDate();
+        };
+        
         // Skip header row - new format with phone column
         const customers = jsonData.slice(1).filter(row => row.length > 0 && row[2]).map(row => ({
-          date: row[0] || getTodayDate(),
+          date: parseDate(row[0]),
           connection_type: (row[1] || 'domestic').toLowerCase(),
           customer_name: row[2] || '',
           address: row[3] || '',
-          phone: row[4]?.toString() || '',
-          consumer_no: row[5]?.toString() || '',
+          phone: row[4]?.toString().replace(/\D/g, '').slice(0, 10) || '',
+          consumer_no: row[5]?.toString().replace(/\D/g, '').slice(0, 10) || '',
           cash_memo_no: row[6]?.toString() || '',
           cylinder_nos: row[7]?.toString() || '',
           gas_card_issued: (row[8] || '').toLowerCase() === 'yes',
@@ -308,7 +327,9 @@ const CustomerManagement = () => {
   const handleExportPDF = async () => {
     setExporting(true);
     try {
-      await exportCustomersPDF({ category: filterCategory, start_date: startDate, end_date: endDate });
+      const params = { category: filterCategory, start_date: startDate, end_date: endDate };
+      if (filterWarehouse !== 'all') params.warehouse_id = filterWarehouse;
+      await exportCustomersPDF(params);
       toast.success('PDF exported successfully');
     } catch (error) {
       toast.error('Failed to export PDF');
@@ -320,7 +341,9 @@ const CustomerManagement = () => {
   const handleExportExcel = async () => {
     setExporting(true);
     try {
-      await exportCustomersExcel({ category: filterCategory, start_date: startDate, end_date: endDate });
+      const params = { category: filterCategory, start_date: startDate, end_date: endDate };
+      if (filterWarehouse !== 'all') params.warehouse_id = filterWarehouse;
+      await exportCustomersExcel(params);
       toast.success('Excel exported successfully');
     } catch (error) {
       toast.error('Failed to export Excel');
@@ -451,6 +474,22 @@ const CustomerManagement = () => {
                       </SelectContent>
                     </Select>
                   </div>
+                  {isAdmin && (
+                    <div>
+                      <Label>Warehouse</Label>
+                      <Select value={filterWarehouse} onValueChange={setFilterWarehouse}>
+                        <SelectTrigger className="w-44 mt-1" data-testid="warehouse-filter">
+                          <SelectValue placeholder="All Warehouses" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Warehouses</SelectItem>
+                          {warehouses.filter(w => w.name !== 'Plant Hollongi').map(w => (
+                            <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   <div>
                     <Label>Start Date</Label>
                     <Input 
@@ -663,14 +702,21 @@ const CustomerManagement = () => {
                       />
                     </div>
                     <div>
-                      <Label>Phone (for SMS/WhatsApp)</Label>
+                      <Label>Phone (10 digits for SMS/WhatsApp)</Label>
                       <Input 
                         value={formData.phone}
-                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                        placeholder="e.g., 9876543210"
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                          setFormData({ ...formData, phone: value });
+                        }}
+                        placeholder="Enter 10 digit number"
                         className="mt-1"
+                        maxLength={10}
                         data-testid="customer-phone"
                       />
+                      {formData.phone && formData.phone.length !== 10 && (
+                        <p className="text-xs text-red-500 mt-1">Must be 10 digits ({formData.phone.length}/10)</p>
+                      )}
                     </div>
                   </div>
 
@@ -688,14 +734,21 @@ const CustomerManagement = () => {
                     <div className="space-y-4">
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <Label>Consumer No</Label>
+                          <Label>Consumer No (10 digits)</Label>
                           <Input 
                             value={formData.consumer_no}
-                            onChange={(e) => setFormData({ ...formData, consumer_no: e.target.value })}
-                            placeholder="e.g., CON001"
+                            onChange={(e) => {
+                              const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                              setFormData({ ...formData, consumer_no: value });
+                            }}
+                            placeholder="Enter 10 digit number"
                             className="mt-1"
+                            maxLength={10}
                             data-testid="consumer-no"
                           />
+                          {formData.consumer_no && formData.consumer_no.length !== 10 && (
+                            <p className="text-xs text-red-500 mt-1">Must be 10 digits ({formData.consumer_no.length}/10)</p>
+                          )}
                         </div>
                         <div>
                           <Label>Cash Memo No</Label>
@@ -942,21 +995,36 @@ const CustomerManagement = () => {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>Phone (for SMS/WhatsApp)</Label>
+                  <Label>Phone (10 digits)</Label>
                   <Input 
                     value={editForm.phone || ''}
-                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                    placeholder="e.g., 9876543210"
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      setEditForm({ ...editForm, phone: value });
+                    }}
+                    placeholder="Enter 10 digit number"
+                    maxLength={10}
                     className="mt-1"
                   />
+                  {editForm.phone && editForm.phone.length !== 10 && (
+                    <p className="text-xs text-red-500 mt-1">Must be 10 digits ({editForm.phone.length}/10)</p>
+                  )}
                 </div>
                 <div>
-                  <Label>Consumer No</Label>
+                  <Label>Consumer No (10 digits)</Label>
                   <Input 
                     value={editForm.consumer_no || ''}
-                    onChange={(e) => setEditForm({ ...editForm, consumer_no: e.target.value })}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      setEditForm({ ...editForm, consumer_no: value });
+                    }}
+                    placeholder="Enter 10 digit number"
+                    maxLength={10}
                     className="mt-1"
                   />
+                  {editForm.consumer_no && editForm.consumer_no.length !== 10 && (
+                    <p className="text-xs text-red-500 mt-1">Must be 10 digits ({editForm.consumer_no.length}/10)</p>
+                  )}
                 </div>
               </div>
               <div>

@@ -9,6 +9,44 @@ body {
     font-family: 'Public Sans', -apple-system, BlinkMacSystemFont, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+}
+
+/* Prevent horizontal scrolling */
+html, body {
+    max-width: 100vw;
+    overflow-x: hidden;
+}
+
+/* Main content area - prevent overflow */
+main {
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+/* Responsive form styles */
+@layer components {
+    .form-responsive {
+        @apply w-full max-w-full;
+    }
+    
+    .form-grid {
+        @apply grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4;
+    }
+    
+    .form-buttons {
+        @apply flex flex-col-reverse sm:flex-row justify-end gap-2 pt-2;
+    }
+    
+    .form-button {
+        @apply w-full sm:w-auto;
+    }
+}
+
+/* Smooth scrolling for dialogs */
+[role="dialog"] {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
 }
 
 h1, h2, h3, h4, h5, h6 {

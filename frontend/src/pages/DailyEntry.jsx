@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
-import { getLatestClosing, createDailyReport, getWarehouseReceivedFromPlant, getTodayReport, updateDailyReport } from '../lib/api';
+import { getLatestClosing, createDailyReport, getTodayReport, updateDailyReport } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -18,8 +18,6 @@ import {
   ArrowRight,
   Calculator,
   Truck,
-  RefreshCw,
-  CheckCircle,
   FileEdit,
   Send,
   FileText
@@ -33,8 +31,6 @@ const DailyEntry = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
-  const [loadingPlantDelivery, setLoadingPlantDelivery] = useState(false);
-  const [plantDeliverySync, setPlantDeliverySync] = useState({ synced: false, date: null });
   const [existingReport, setExistingReport] = useState(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [formData, setFormData] = useState({
@@ -76,12 +72,6 @@ const DailyEntry = () => {
   useEffect(() => {
     fetchInitialData();
   }, [user]);
-
-  useEffect(() => {
-    if (user?.warehouse_id && formData.date) {
-      fetchPlantDeliveries(formData.date);
-    }
-  }, [user, formData.date]);
 
   useEffect(() => {
     calculateDiscrepancies();
@@ -151,34 +141,6 @@ const DailyEntry = () => {
       }
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchPlantDeliveries = async (date) => {
-    if (!user?.warehouse_id) return;
-    
-    setLoadingPlantDelivery(true);
-    try {
-      const response = await getWarehouseReceivedFromPlant(user.warehouse_id, date);
-      const data = response.data;
-      
-      // Only update if not editing existing report's plant delivery data
-      if (!existingReport || existingReport.received_from_plant_15kg === 0) {
-        setFormData(prev => ({
-          ...prev,
-          received_from_plant_15kg: data.received_15kg_filled || 0,
-          received_from_plant_21kg: data.received_21kg_filled || 0
-        }));
-      }
-      
-      setPlantDeliverySync({
-        synced: data.synced_from_plant,
-        date: date
-      });
-    } catch (error) {
-      console.error('Failed to fetch plant deliveries:', error);
-    } finally {
-      setLoadingPlantDelivery(false);
     }
   };
 
@@ -496,47 +458,26 @@ const DailyEntry = () => {
             </CardContent>
           </Card>
 
-          {/* Delivery Received from Plant */}
+          {/* Received from Plant */}
           <Card className="mb-6 border-2 border-green-200 bg-green-50" data-testid="delivery-received-section">
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Truck className="w-5 h-5 text-green-700" />
-                    Delivery Received from Plant (Filled Cylinders)
-                  </CardTitle>
-                  <CardDescription className="text-green-700">
-                    Auto-synced from Plant Hollongi's "Delivery to Warehouses" entries
-                  </CardDescription>
-                </div>
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => fetchPlantDeliveries(formData.date)}
-                  disabled={loadingPlantDelivery}
-                  className="border-green-300 text-green-700"
-                >
-                  {loadingPlantDelivery ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                  <span className="ml-1">Refresh</span>
-                </Button>
-              </div>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Truck className="w-5 h-5 text-green-700" />
+                Received from Plant (Filled Cylinders)
+              </CardTitle>
+              <CardDescription className="text-green-700">
+                Enter the filled cylinders received from Plant Hollongi
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              {plantDeliverySync.synced && (formData.received_from_plant_15kg > 0 || formData.received_from_plant_21kg > 0) && (
-                <div className="flex items-center gap-2 mb-4 p-2 bg-white rounded-lg border border-green-200">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
-                  <span className="text-sm text-green-700">Synced from Plant Hollongi Report</span>
-                </div>
-              )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-slate-600">15kg Filled Received</Label>
                   <Input 
                     type="number" 
                     value={formData.received_from_plant_15kg}
-                    readOnly
-                    className="mt-1 bg-green-100 font-semibold text-green-900"
+                    onChange={(e) => handleChange('received_from_plant_15kg', e.target.value)}
+                    className="mt-1"
                     data-testid="received-from-plant-15kg"
                   />
                 </div>
@@ -545,17 +486,12 @@ const DailyEntry = () => {
                   <Input 
                     type="number" 
                     value={formData.received_from_plant_21kg}
-                    readOnly
-                    className="mt-1 bg-green-100 font-semibold text-green-900"
+                    onChange={(e) => handleChange('received_from_plant_21kg', e.target.value)}
+                    className="mt-1"
                     data-testid="received-from-plant-21kg"
                   />
                 </div>
               </div>
-              {!plantDeliverySync.synced && (
-                <p className="text-xs text-slate-500 mt-3 italic">
-                  No delivery data found. Plant Hollongi needs to submit their daily report with deliveries to this warehouse.
-                </p>
-              )}
             </CardContent>
           </Card>
 

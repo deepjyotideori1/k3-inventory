@@ -45,6 +45,8 @@ export const updateSettings = (data) => api.put('/settings', data);
 export const getUsers = () => api.get('/users');
 export const createUser = (data) => api.post('/users', data);
 export const deleteUser = (userId) => api.delete(`/users/${userId}`);
+export const resetUserPassword = (userId, newPassword = null) => 
+  api.post(`/users/${userId}/reset-password`, newPassword ? { new_password: newPassword } : {});
 
 // Warehouses
 export const getWarehouses = () => api.get('/warehouses');
@@ -69,6 +71,7 @@ export const getPlantReports = (params) => api.get('/reports/plant', { params })
 export const getLatestPlantClosing = () => api.get('/reports/plant/latest');
 export const getPlantReceivedFromWarehouses = (date) => api.get(`/reports/plant-received/${date}`);
 export const getWarehouseReceivedFromPlant = (warehouseId, date) => api.get(`/reports/warehouse-received-from-plant/${warehouseId}/${date}`);
+export const getWarehousesReceivedSummary = (date) => api.get(`/reports/warehouses-received-summary/${date}`);
 
 // Stock Update
 export const updateStock = (data) => api.post('/stock/update', data);
@@ -123,6 +126,122 @@ export const getDealers = () => api.get('/dealers');
 export const createDealer = (data) => api.post('/dealers', data);
 export const updateDealer = (dealerId, data) => api.put(`/dealers/${dealerId}`, data);
 export const deleteDealer = (dealerId) => api.delete(`/dealers/${dealerId}`);
+
+// Sales Entries
+export const getSalesEntries = (params) => api.get('/sales-entries', { params });
+export const createSalesEntry = (data) => api.post('/sales-entries', data);
+export const createSalesEntryForWarehouse = (warehouseId, data) => api.post(`/sales-entries/warehouse/${warehouseId}`, data);
+export const updateSalesEntry = (entryId, data) => api.put(`/sales-entries/${entryId}`, data);
+export const deleteSalesEntry = (entryId) => api.delete(`/sales-entries/${entryId}`);
+export const getSalesSummary = (params) => api.get('/sales-entries/summary', { params });
+export const getFrequentCustomers = (limit = 10) => api.get('/sales-entries/frequent-customers', { params: { limit } });
+
+export const exportSalesPdf = async (params) => {
+  try {
+    const response = await api.get('/export/sales-pdf', { 
+      params,
+      responseType: 'blob'
+    });
+    const contentDisposition = response.headers['content-disposition'];
+    let filename = `Sales_Report_${new Date().toISOString().split('T')[0]}.pdf`;
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename=(.+)/);
+      if (match) filename = match[1];
+    }
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Sales PDF export failed:', error);
+    throw error;
+  }
+};
+
+export const exportSalesExcel = async (params) => {
+  try {
+    const response = await api.get('/export/sales-excel', { 
+      params,
+      responseType: 'blob'
+    });
+    const contentDisposition = response.headers['content-disposition'];
+    let filename = `Sales_Report_${new Date().toISOString().split('T')[0]}.xlsx`;
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename=(.+)/);
+      if (match) filename = match[1];
+    }
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Sales Excel export failed:', error);
+    throw error;
+  }
+};
+
+// Sales Summary Report Exports
+export const exportSalesSummaryPdf = async (params) => {
+  try {
+    const response = await api.get('/export/sales-summary-pdf', { 
+      params,
+      responseType: 'blob'
+    });
+    const contentDisposition = response.headers['content-disposition'];
+    const groupBy = params.group_by || 'daily';
+    let filename = `Sales_Summary_${groupBy}_${new Date().toISOString().split('T')[0]}.pdf`;
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename=(.+)/);
+      if (match) filename = match[1];
+    }
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Sales Summary PDF export failed:', error);
+    throw error;
+  }
+};
+
+export const exportSalesSummaryExcel = async (params) => {
+  try {
+    const response = await api.get('/export/sales-summary-excel', { 
+      params,
+      responseType: 'blob'
+    });
+    const contentDisposition = response.headers['content-disposition'];
+    const groupBy = params.group_by || 'daily';
+    let filename = `Sales_Summary_${groupBy}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename=(.+)/);
+      if (match) filename = match[1];
+    }
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Sales Summary Excel export failed:', error);
+    throw error;
+  }
+};
 
 // Dealer Entries
 export const createDealerEntry = (data) => api.post('/dealer-entries', data);
