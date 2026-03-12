@@ -1013,17 +1013,16 @@ const OrderManagement = () => {
                                 >
                                   <Download className="w-4 h-4" />
                                 </Button>
-                                {(isAdmin || o.order_date === getTodayDate()) && (
-                                  <Button 
-                                    variant="ghost" 
-                                    size="sm"
-                                    onClick={() => handleEdit(o)}
-                                    className="text-blue-600 hover:text-blue-800"
-                                    title="Edit"
-                                  >
-                                    <Edit className="w-4 h-4" />
-                                  </Button>
-                                )}
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  onClick={() => handleEdit(o)}
+                                  className="text-blue-600 hover:text-blue-800"
+                                  title="Edit"
+                                  data-testid={`edit-order-${o.id}`}
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </Button>
                                 {isAdmin && (
                                   <Button 
                                     variant="ghost" 
