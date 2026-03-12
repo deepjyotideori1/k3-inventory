@@ -22,6 +22,7 @@ import AccessoryReports from "./pages/AccessoryReports";
 import CustomerManagement from "./pages/CustomerManagement";
 import OrderManagement from "./pages/OrderManagement";
 import BulkMessaging from "./pages/BulkMessaging";
+import AccessorySales from "./pages/AccessorySales";
 
 // Protected Route Component
 const ProtectedRoute = ({ children, adminOnly = false, allowSalesExecutive = false }) => {
@@ -223,6 +224,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <SalesDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/accessory-sales"
+        element={
+          <ProtectedRoute>
+            <AccessorySales />
           </ProtectedRoute>
         }
       />

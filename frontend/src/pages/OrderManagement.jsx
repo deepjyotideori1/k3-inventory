@@ -885,15 +885,27 @@ const OrderManagement = () => {
                   </div>
                   <div className="flex-1 min-w-[200px]">
                     <Label>Search</Label>
-                    <div className="relative mt-1">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <Input 
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search by name, mobile, order no..."
-                        className="pl-10"
-                      />
+                    <div className="flex gap-2 mt-1">
+                      <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <Input 
+                          type="text"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && fetchOrders()}
+                          placeholder="Search by name, mobile, order no..."
+                          className="pl-10"
+                          data-testid="search-input"
+                        />
+                      </div>
+                      <Button 
+                        onClick={() => fetchOrders()}
+                        className="bg-green-700 hover:bg-green-800"
+                        data-testid="search-btn"
+                      >
+                        <Search className="w-4 h-4 mr-2" />
+                        Search
+                      </Button>
                     </div>
                   </div>
                   <Button variant="outline" onClick={() => { fetchOrders(); fetchSummary(); }}>

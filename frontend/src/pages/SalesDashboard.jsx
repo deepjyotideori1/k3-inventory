@@ -1569,7 +1569,7 @@ const SalesDashboard = () => {
                   <Label className="text-sm">Connection Type</Label>
                   <Select 
                     value={editForm.connection_type || 'domestic'} 
-                    onValueChange={(v) => setEditForm({ ...editForm, connection_type: v, cylinder_nos: v.includes('refill') ? editForm.cylinder_nos : '' })}
+                    onValueChange={(v) => setEditForm({ ...editForm, connection_type: v })}
                   >
                     <SelectTrigger className="mt-1">
                       <SelectValue />
@@ -1582,29 +1582,33 @@ const SalesDashboard = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
-                  <Label className="text-sm">No of Refills</Label>
-                  <Input 
-                    type="number"
-                    value={editForm.no_of_refills || ''}
-                    onChange={(e) => setEditForm({ ...editForm, no_of_refills: e.target.value })}
-                    className="mt-1"
-                  />
-                </div>
+                
+                {/* Cylinder Nos for New Connection types (domestic/commercial) */}
+                {(editForm.connection_type === 'domestic' || editForm.connection_type === 'commercial') && (
+                  <div>
+                    <Label className="text-sm">Cylinder Nos.</Label>
+                    <Input 
+                      value={editForm.cylinder_nos || ''}
+                      onChange={(e) => setEditForm({ ...editForm, cylinder_nos: e.target.value })}
+                      placeholder="Enter cylinder numbers"
+                      className="mt-1"
+                    />
+                  </div>
+                )}
+                
+                {/* No of Refills for Refill types */}
+                {(editForm.connection_type === 'domestic_refill' || editForm.connection_type === 'commercial_refill') && (
+                  <div>
+                    <Label className="text-sm">No of Refills</Label>
+                    <Input 
+                      type="number"
+                      value={editForm.no_of_refills || ''}
+                      onChange={(e) => setEditForm({ ...editForm, no_of_refills: e.target.value })}
+                      className="mt-1"
+                    />
+                  </div>
+                )}
               </div>
-
-              {/* Cylinder Nos for refill types */}
-              {(editForm.connection_type === 'domestic_refill' || editForm.connection_type === 'commercial_refill') && (
-                <div>
-                  <Label className="text-sm">Cylinder Nos. *</Label>
-                  <Input 
-                    value={editForm.cylinder_nos || ''}
-                    onChange={(e) => setEditForm({ ...editForm, cylinder_nos: e.target.value })}
-                    placeholder="Enter cylinder numbers"
-                    className="mt-1"
-                  />
-                </div>
-              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>

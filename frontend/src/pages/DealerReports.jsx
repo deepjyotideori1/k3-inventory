@@ -619,16 +619,18 @@ const DealerReports = () => {
                 <div className="flex flex-wrap gap-4 mb-6">
                   <div className="flex-1 min-w-[200px]">
                     <Label>Search by Dealer Name</Label>
-                    <div className="relative mt-1">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <Input 
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Type dealer name..."
-                        className="pl-10"
-                        data-testid="search-dealer-input"
-                      />
+                    <div className="flex gap-2 mt-1">
+                      <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <Input 
+                          type="text"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          placeholder="Type dealer name..."
+                          className="pl-10"
+                          data-testid="search-dealer-input"
+                        />
+                      </div>
                     </div>
                   </div>
                   <div className="w-48">
@@ -641,7 +643,15 @@ const DealerReports = () => {
                       data-testid="search-date-input"
                     />
                   </div>
-                  <div className="flex items-end">
+                  <div className="flex items-end gap-2">
+                    <Button 
+                      className="bg-green-700 hover:bg-green-800"
+                      onClick={() => fetchEntries()}
+                      data-testid="search-btn"
+                    >
+                      <Search className="w-4 h-4 mr-2" />
+                      Search
+                    </Button>
                     <Button 
                       variant="outline"
                       onClick={() => { setSearchQuery(''); setSearchDate(''); }}
