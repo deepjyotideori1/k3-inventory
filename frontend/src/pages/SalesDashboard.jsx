@@ -1447,7 +1447,7 @@ const SalesDashboard = () => {
                     <th>Memo</th>
                     <th>Amount</th>
                     <th>Payment</th>
-                    <th>Refills</th>
+                    <th>Cylinder/Refills</th>
                     <th>Remarks</th>
                     {isAdmin && <th>Warehouse</th>}
                     <th>Actions</th>
@@ -1462,55 +1462,65 @@ const SalesDashboard = () => {
                     </tr>
                   ) : (
                     <>
-                      {entries.map((entry, index) => (
-                        <tr key={entry.id}>
-                          <td className="text-center font-medium">{index + 1}</td>
-                          <td>{entry.date}</td>
-                          <td className="font-medium">{entry.consumer_name}</td>
-                          <td className="max-w-[150px] truncate">{entry.address || '-'}</td>
-                          <td>{entry.consumer_no || '-'}</td>
-                          <td>
-                            {getConnectionTypeBadge(entry.connection_type)}
-                            {entry.cylinder_nos && (
-                              <div className="text-xs text-slate-500 mt-1">
-                                <span className="font-medium">Cyl:</span> {entry.cylinder_nos}
+                      {entries.map((entry, index) => {
+                        const isNewConnection = entry.connection_type === 'domestic' || entry.connection_type === 'commercial';
+                        return (
+                          <tr key={entry.id}>
+                            <td className="text-center font-medium">{index + 1}</td>
+                            <td>{entry.date}</td>
+                            <td className="font-medium">{entry.consumer_name}</td>
+                            <td className="max-w-[150px] truncate">{entry.address || '-'}</td>
+                            <td>{entry.consumer_no || '-'}</td>
+                            <td>
+                              {getConnectionTypeBadge(entry.connection_type)}
+                            </td>
+                            <td>{entry.memo_no || '-'}</td>
+                            <td className="font-semibold text-green-700">{formatINR(entry.amount)}</td>
+                            <td>{getPaymentBadge(entry.payment_mode)}</td>
+                            <td className="text-center">
+                              {isNewConnection ? (
+                                <div>
+                                  <span className="text-xs text-purple-600 font-medium">Cyl:</span>
+                                  <span className="ml-1">{entry.cylinder_nos || '-'}</span>
+                                </div>
+                              ) : (
+                                <div>
+                                  <span className="text-xs text-blue-600 font-medium">Refills:</span>
+                                  <span className="ml-1">{entry.no_of_refills || 0}</span>
+                                </div>
+                              )}
+                            </td>
+                            <td className="max-w-[120px] truncate">{entry.remarks || '-'}</td>
+                            {isAdmin && <td><Badge variant="outline">{entry.warehouse_name}</Badge></td>}
+                            <td>
+                              <div className="flex items-center gap-1">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => handleEditEntry(entry)}
+                                  title="Edit"
+                                >
+                                  <Edit2 className="w-4 h-4 text-blue-600" />
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => handleDeleteEntry(entry.id)}
+                                  title="Delete"
+                                >
+                                  <Trash2 className="w-4 h-4 text-red-500" />
+                                </Button>
                               </div>
-                            )}
-                          </td>
-                          <td>{entry.memo_no || '-'}</td>
-                          <td className="font-semibold text-green-700">{formatINR(entry.amount)}</td>
-                          <td>{getPaymentBadge(entry.payment_mode)}</td>
-                          <td className="text-center">{entry.no_of_refills || 0}</td>
-                          <td className="max-w-[120px] truncate">{entry.remarks || '-'}</td>
-                          {isAdmin && <td><Badge variant="outline">{entry.warehouse_name}</Badge></td>}
-                          <td>
-                            <div className="flex items-center gap-1">
-                              <Button 
-                                variant="ghost" 
-                                size="icon"
-                                onClick={() => handleEditEntry(entry)}
-                                title="Edit"
-                              >
-                                <Edit2 className="w-4 h-4 text-blue-600" />
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="icon"
-                                onClick={() => handleDeleteEntry(entry.id)}
-                                title="Delete"
-                              >
-                                <Trash2 className="w-4 h-4 text-red-500" />
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                          </tr>
+                        );
+                      })}
                       {/* Total Row */}
                       <tr className="bg-green-50 font-bold">
                         <td colSpan={7} className="text-right">TOTAL:</td>
                         <td className="text-green-800">{formatINR(filteredTotals.amount)}</td>
                         <td></td>
-                        <td className="text-center">{filteredTotals.refills}</td>
+                        <td className="text-center">{filteredTotals.refills} refills</td>
                         <td colSpan={isAdmin ? 3 : 2}></td>
                       </tr>
                     </>
