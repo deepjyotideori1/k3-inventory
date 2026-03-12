@@ -14,6 +14,7 @@ import {
   exportAccessoryPDF,
   exportAccessoryExcel
 } from '../lib/api';
+import api from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -36,7 +37,9 @@ import {
   Save,
   Users,
   Boxes,
-  ShoppingCart
+  ShoppingCart,
+  Edit,
+  Search
 } from 'lucide-react';
 import { getTodayDate, formatDate, getDateRange } from '../lib/utils';
 import { toast } from 'sonner';
@@ -60,9 +63,19 @@ const AccessoryReports = () => {
     remarks: ''
   });
   const [submitting, setSubmitting] = useState(false);
+  const [previousDayRemaining, setPreviousDayRemaining] = useState(0);
   
-  // System calculated remaining
-  const calculatedRemaining = entryForm.total_issued - entryForm.total_sold;
+  // Edit entry state
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingEntry, setEditingEntry] = useState(null);
+  const [editForm, setEditForm] = useState({
+    total_issued: 0,
+    total_sold: 0,
+    remarks: ''
+  });
+  
+  // System calculated remaining: Opening (previous day remaining) + Issued - Sold
+  const calculatedRemaining = previousDayRemaining + entryForm.total_issued - entryForm.total_sold;
   
   // New accessory form
   const [newAccessory, setNewAccessory] = useState({ name: '', description: '', unit: 'pcs' });
@@ -96,6 +109,44 @@ const AccessoryReports = () => {
       fetchSummary();
     }
   }, [startDate, endDate, filterAccessory, filterDealer]);
+
+  // Fetch previous day's remaining when accessory and dealer are selected
+  useEffect(() => {
+    const fetchPreviousDayRemaining = async () => {
+      if (selectedAccessory && selectedDealer) {
+        try {
+          // Get all entries for this accessory-dealer combination
+          const response = await getAccessoryEntries({
+            accessory_id: selectedAccessory,
+            dealer_id: selectedDealer
+          });
+          
+          // Sort entries by date descending and find the latest entry before current date
+          const sortedEntries = response.data.sort((a, b) => b.date.localeCompare(a.date));
+          const previousEntry = sortedEntries.find(e => e.date < entryDate);
+          
+          if (previousEntry) {
+            setPreviousDayRemaining(previousEntry.total_remaining || 0);
+          } else {
+            // No previous entry, check if there's an entry for current date
+            const currentDateEntry = sortedEntries.find(e => e.date === entryDate);
+            if (currentDateEntry) {
+              // Entry exists for today, show 0 as opening (will be editing)
+              setPreviousDayRemaining(0);
+            } else {
+              setPreviousDayRemaining(0);
+            }
+          }
+        } catch (error) {
+          console.error('Failed to fetch previous day remaining:', error);
+          setPreviousDayRemaining(0);
+        }
+      } else {
+        setPreviousDayRemaining(0);
+      }
+    };
+    fetchPreviousDayRemaining();
+  }, [selectedAccessory, selectedDealer, entryDate]);
 
   const fetchAccessories = async () => {
     try {
@@ -277,6 +328,36 @@ const AccessoryReports = () => {
       toast.error('Failed to export Excel');
     } finally {
       setExporting(false);
+    }
+  };
+
+  // Edit entry handlers
+  const handleEditEntry = (entry) => {
+    setEditingEntry(entry);
+    setEditForm({
+      total_issued: entry.total_issued,
+      total_sold: entry.total_sold,
+      remarks: entry.remarks || ''
+    });
+    setEditDialogOpen(true);
+  };
+
+  const handleEditSubmit = async () => {
+    if (!editingEntry) return;
+    
+    setSubmitting(true);
+    try {
+      await api.put(`/accessory-entries/${editingEntry.id}`, editForm);
+      toast.success('Entry updated successfully');
+      setEditDialogOpen(false);
+      setEditingEntry(null);
+      fetchEntries();
+      fetchSummary();
+    } catch (error) {
+      console.error('Failed to update entry:', error);
+      toast.error(error.response?.data?.detail || 'Failed to update entry');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -498,7 +579,20 @@ const AccessoryReports = () => {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-4 gap-4">
+                    <div>
+                      <Label className="text-blue-700 flex items-center gap-1">
+                        Opening Balance
+                        <span className="text-xs text-slate-500">(Prev. day remaining)</span>
+                      </Label>
+                      <Input 
+                        type="number" 
+                        value={previousDayRemaining}
+                        readOnly
+                        className="mt-1 bg-blue-50 font-semibold text-blue-900"
+                        data-testid="acc-opening-balance"
+                      />
+                    </div>
                     <div>
                       <Label className="text-purple-700">Total Issued</Label>
                       <Input 
@@ -531,7 +625,7 @@ const AccessoryReports = () => {
                         className="mt-1 bg-green-50 font-semibold text-green-900"
                         data-testid="acc-total-remaining"
                       />
-                      <p className="text-xs text-slate-500 mt-1">Formula: Issued - Sold</p>
+                      <p className="text-xs text-slate-500 mt-1">Opening + Issued - Sold</p>
                     </div>
                   </div>
 
@@ -848,6 +942,7 @@ const AccessoryReports = () => {
                           <th>Sold</th>
                           <th>Remaining</th>
                           <th>Remarks</th>
+                          <th>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -860,6 +955,17 @@ const AccessoryReports = () => {
                             <td>{e.total_sold}</td>
                             <td>{e.total_remaining}</td>
                             <td className="text-sm text-slate-600">{e.remarks || '-'}</td>
+                            <td>
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => handleEditEntry(e)}
+                                className="text-blue-600 hover:text-blue-800"
+                                data-testid={`edit-acc-entry-${e.id}`}
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -875,6 +981,94 @@ const AccessoryReports = () => {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Edit Entry Dialog */}
+        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Accessory Entry</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Accessory</Label>
+                  <Input 
+                    value={editingEntry?.accessory_name || ''}
+                    readOnly
+                    className="mt-1 bg-slate-100"
+                  />
+                </div>
+                <div>
+                  <Label>Dealer</Label>
+                  <Input 
+                    value={editingEntry?.dealer_name || ''}
+                    readOnly
+                    className="mt-1 bg-slate-100"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label>Date</Label>
+                <Input 
+                  value={editingEntry?.date || ''}
+                  readOnly
+                  className="mt-1 bg-slate-100"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-purple-700">Total Issued</Label>
+                  <Input 
+                    type="number"
+                    value={editForm.total_issued}
+                    onChange={(e) => setEditForm({ ...editForm, total_issued: parseInt(e.target.value) || 0 })}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label className="text-orange-700">Total Sold</Label>
+                  <Input 
+                    type="number"
+                    value={editForm.total_sold}
+                    onChange={(e) => setEditForm({ ...editForm, total_sold: parseInt(e.target.value) || 0 })}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label className="text-green-700">Calculated Remaining</Label>
+                <Input 
+                  type="number"
+                  value={editForm.total_issued - editForm.total_sold}
+                  readOnly
+                  className="mt-1 bg-green-50 font-semibold text-green-900"
+                />
+              </div>
+              <div>
+                <Label>Remarks</Label>
+                <Input 
+                  value={editForm.remarks || ''}
+                  onChange={(e) => setEditForm({ ...editForm, remarks: e.target.value })}
+                  className="mt-1"
+                  placeholder="Optional remarks"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button variant="outline">Cancel</Button>
+              </DialogClose>
+              <Button 
+                onClick={handleEditSubmit} 
+                disabled={submitting}
+                className="bg-purple-700 hover:bg-purple-800"
+              >
+                {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );

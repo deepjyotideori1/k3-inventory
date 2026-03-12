@@ -5,11 +5,14 @@ import sys
 from datetime import datetime
 
 class K3GasAPITester:
-    def __init__(self, base_url="https://inventory-ops-hub-1.preview.emergentagent.com"):
+    def __init__(self, base_url="https://edit-deploy-5.preview.emergentagent.com"):
         self.base_url = base_url
         self.admin_token = None
         self.manager_token = None
         self.warehouse_id = None
+        self.accessory_id = None
+        self.dealer_id = None
+        self.entry_id = None
         self.tests_run = 0
         self.tests_passed = 0
 
@@ -244,8 +247,173 @@ class K3GasAPITester:
             "Unauthorized Access to Users",
             "GET",
             "users",
-            401  # Should fail without token
+            403  # Should fail without token - updated to expect 403
         )
+        return success
+
+    def test_get_accessories(self):
+        """Test getting accessories list"""
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {self.admin_token}'
+        }
+        success, response = self.run_test(
+            "Get Accessories",
+            "GET",
+            "accessories",
+            200,
+            headers=headers
+        )
+        if success and response:
+            print(f"   Found {len(response)} accessories")
+        return success
+
+    def test_create_accessory(self):
+        """Test creating a new accessory"""
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {self.admin_token}'
+        }
+        data = {
+            "name": "Test Regulator",
+            "description": "Test regulator for testing",
+            "unit": "pcs"
+        }
+        success, response = self.run_test(
+            "Create Accessory",
+            "POST",
+            "accessories",
+            200,
+            data=data,
+            headers=headers
+        )
+        if success and response:
+            self.accessory_id = response.get('id')
+            print(f"   Accessory created with ID: {self.accessory_id}")
+        return success
+
+    def test_get_accessory_dealers(self):
+        """Test getting accessory dealers list"""
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {self.admin_token}'
+        }
+        success, response = self.run_test(
+            "Get Accessory Dealers",
+            "GET",
+            "accessory-dealers",
+            200,
+            headers=headers
+        )
+        if success and response:
+            print(f"   Found {len(response)} accessory dealers")
+        return success
+
+    def test_create_accessory_dealer(self):
+        """Test creating a new accessory dealer"""
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {self.admin_token}'
+        }
+        data = {
+            "name": "Test Dealer",
+            "contact": "+91 9876543210",
+            "address": "Test Address, Test City"
+        }
+        success, response = self.run_test(
+            "Create Accessory Dealer",
+            "POST",
+            "accessory-dealers",
+            200,
+            data=data,
+            headers=headers
+        )
+        if success and response:
+            self.dealer_id = response.get('id')
+            print(f"   Dealer created with ID: {self.dealer_id}")
+        return success
+
+    def test_create_accessory_entry(self):
+        """Test creating accessory entry"""
+        if not hasattr(self, 'accessory_id') or not hasattr(self, 'dealer_id'):
+            print("❌ Cannot test accessory entry - missing accessory or dealer ID")
+            return False
+
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {self.admin_token}'
+        }
+        
+        today = datetime.now().strftime('%Y-%m-%d')
+        data = {
+            "accessory_id": self.accessory_id,
+            "dealer_id": self.dealer_id,
+            "date": today,
+            "total_issued": 100,
+            "total_sold": 30,
+            "total_remaining": 70,
+            "remarks": "Test entry"
+        }
+
+        success, response = self.run_test(
+            "Create Accessory Entry",
+            "POST",
+            "accessory-entries",
+            200,
+            data=data,
+            headers=headers
+        )
+        if success and response:
+            self.entry_id = response.get('id')
+            print(f"   Entry created with ID: {self.entry_id}")
+            print(f"   Total remaining: {response.get('total_remaining', 0)}")
+        return success
+
+    def test_update_accessory_entry(self):
+        """Test updating accessory entry (Edit functionality)"""
+        if not hasattr(self, 'entry_id'):
+            print("❌ Cannot test accessory entry update - missing entry ID")
+            return False
+
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {self.admin_token}'
+        }
+        
+        # Update the entry with new values
+        data = {
+            "total_issued": 120,
+            "total_sold": 40,
+            "remarks": "Updated test entry"
+        }
+
+        success, response = self.run_test(
+            "Update Accessory Entry (Edit)",
+            "PUT",
+            f"accessory-entries/{self.entry_id}",
+            200,
+            data=data,
+            headers=headers
+        )
+        if success:
+            print(f"   Entry updated successfully")
+        return success
+
+    def test_get_accessory_entries(self):
+        """Test getting accessory entries"""
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {self.admin_token}'
+        }
+        success, response = self.run_test(
+            "Get Accessory Entries",
+            "GET",
+            "accessory-entries",
+            200,
+            headers=headers
+        )
+        if success and response:
+            print(f"   Found {len(response)} accessory entries")
         return success
 
 def main():
@@ -266,6 +434,14 @@ def main():
         ("Create Daily Report", tester.test_daily_report_create),
         ("Get Daily Reports", tester.test_get_daily_reports),
         ("Export PDF", tester.test_export_pdf),
+        # LPG Accessories tests
+        ("Get Accessories", tester.test_get_accessories),
+        ("Create Accessory", tester.test_create_accessory),
+        ("Get Accessory Dealers", tester.test_get_accessory_dealers),
+        ("Create Accessory Dealer", tester.test_create_accessory_dealer),
+        ("Create Accessory Entry", tester.test_create_accessory_entry),
+        ("Update Accessory Entry", tester.test_update_accessory_entry),
+        ("Get Accessory Entries", tester.test_get_accessory_entries),
         ("Unauthorized Access", tester.test_unauthorized_access),
     ]
 

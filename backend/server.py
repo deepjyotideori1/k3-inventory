@@ -2230,6 +2230,34 @@ async def get_accessory_entries(
     entries = await db.accessory_entries.find(query, {'_id': 0}).sort('date', -1).to_list(1000)
     return entries
 
+class AccessoryEntryUpdate(BaseModel):
+    total_issued: int
+    total_sold: int
+    remarks: str = ""
+
+@api_router.put("/accessory-entries/{entry_id}")
+async def update_accessory_entry(entry_id: str, data: AccessoryEntryUpdate, user: dict = Depends(require_admin)):
+    """Update an accessory entry - Admin only"""
+    existing = await db.accessory_entries.find_one({'id': entry_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    
+    # Calculate new remaining based on updated values
+    total_remaining = data.total_issued - data.total_sold
+    
+    update_data = {
+        'total_issued': data.total_issued,
+        'total_sold': data.total_sold,
+        'total_remaining': total_remaining,
+        'remarks': data.remarks[:500] if data.remarks else "",
+        'updated_by': user['name'],
+        'updated_at': datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.accessory_entries.update_one({'id': entry_id}, {'$set': update_data})
+    updated = await db.accessory_entries.find_one({'id': entry_id}, {'_id': 0})
+    return updated
+
 @api_router.get("/accessory-entries/summary")
 async def get_accessory_summary(
     accessory_id: Optional[str] = None,
