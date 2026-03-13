@@ -2230,6 +2230,63 @@ async def get_accessory_entries(
     entries = await db.accessory_entries.find(query, {'_id': 0}).sort('date', -1).to_list(1000)
     return entries
 
+@api_router.get("/accessory-entries/latest-remaining")
+async def get_latest_accessory_remaining(
+    accessory_id: str,
+    dealer_id: str,
+    before_date: str,
+    user: dict = Depends(get_current_user)
+):
+    """Get the latest remaining quantity for an accessory and dealer before a specific date"""
+    # Find the most recent entry before the given date
+    entry = await db.accessory_entries.find_one(
+        {
+            'accessory_id': accessory_id,
+            'dealer_id': dealer_id,
+            'date': {'$lt': before_date}
+        },
+        {'_id': 0},
+        sort=[('date', -1)]
+    )
+    
+    if entry:
+        return {'opening_stock': entry.get('total_remaining', 0), 'last_date': entry.get('date')}
+    return {'opening_stock': 0, 'last_date': None}
+
+@api_router.put("/accessory-entries/{entry_id}")
+async def update_accessory_entry(entry_id: str, data: AccessoryEntryCreate, user: dict = Depends(require_admin)):
+    """Update an accessory entry - Admin only"""
+    existing = await db.accessory_entries.find_one({'id': entry_id}, {'_id': 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    
+    accessory = await db.accessories.find_one({'id': data.accessory_id, 'is_active': True}, {'_id': 0})
+    if not accessory:
+        raise HTTPException(status_code=404, detail="Accessory not found")
+    
+    dealer = await db.accessory_dealers.find_one({'id': data.dealer_id, 'is_active': True}, {'_id': 0})
+    if not dealer:
+        raise HTTPException(status_code=404, detail="Dealer not found")
+    
+    update_data = {
+        'accessory_id': data.accessory_id,
+        'accessory_name': accessory['name'],
+        'dealer_id': data.dealer_id,
+        'dealer_name': dealer['name'],
+        'date': data.date,
+        'total_issued': data.total_issued,
+        'total_sold': data.total_sold,
+        'total_remaining': data.total_remaining,
+        'remarks': data.remarks[:500] if data.remarks else "",
+        'submitted_by': user['name'],
+        'submitted_at': datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.accessory_entries.update_one({'id': entry_id}, {'$set': update_data})
+    
+    updated = await db.accessory_entries.find_one({'id': entry_id}, {'_id': 0})
+    return updated
+
 @api_router.get("/accessory-entries/summary")
 async def get_accessory_summary(
     accessory_id: Optional[str] = None,
