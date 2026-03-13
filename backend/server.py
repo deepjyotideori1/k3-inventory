@@ -3926,10 +3926,18 @@ async def export_sales_pdf(
     
     total_amount = 0
     total_refills = 0
+    total_cylinders = 0  # Count total cylinders for new connections
     
     for i, e in enumerate(entries, 1):
         conn_type = e.get('connection_type', 'domestic')
         is_refill = 'refill' in conn_type.lower()
+        cylinder_nos = e.get('cylinder_nos', '')
+        
+        # Count cylinders for new connections (count comma-separated values or single entry)
+        if not is_refill and cylinder_nos:
+            # Count number of cylinder entries (comma-separated or single)
+            cyl_count = len([c.strip() for c in cylinder_nos.split(',') if c.strip()])
+            total_cylinders += cyl_count
         
         data.append([
             str(i),
@@ -3940,15 +3948,15 @@ async def export_sales_pdf(
             conn_type[:8].replace('_', ' ').title(),
             format_inr(e.get('amount', 0)),
             e.get('payment_mode', 'cash')[:4].title(),
-            e.get('cylinder_nos', '') if not is_refill else '-',  # Show cylinder nos for new connections
+            cylinder_nos if not is_refill else '-',  # Show cylinder nos for new connections
             str(e.get('no_of_refills', 0)) if is_refill else '-'  # Show refills for refill types
         ])
         total_amount += e.get('amount', 0)
         if is_refill:
             total_refills += e.get('no_of_refills', 0)
     
-    # Add total row
-    data.append(['', '', '', '', '', 'TOTAL:', format_inr(total_amount), '', '', str(total_refills)])
+    # Add total row with cylinder count and refills
+    data.append(['', '', '', '', '', 'TOTAL:', format_inr(total_amount), '', str(total_cylinders), str(total_refills)])
     
     # Create table - fit A4 landscape
     col_widths = [22, 52, 95, 80, 60, 55, 60, 40, 50, 40]
@@ -4041,10 +4049,17 @@ async def export_sales_excel(
     
     total_amount = 0
     total_refills = 0
+    total_cylinders = 0  # Count total cylinders for new connections
     
     for i, e in enumerate(entries, 1):
         conn_type = e.get('connection_type', 'domestic')
         is_refill = 'refill' in conn_type.lower()
+        cylinder_nos = e.get('cylinder_nos', '')
+        
+        # Count cylinders for new connections (count comma-separated values or single entry)
+        if not is_refill and cylinder_nos:
+            cyl_count = len([c.strip() for c in cylinder_nos.split(',') if c.strip()])
+            total_cylinders += cyl_count
         
         ws.append([
             i,
@@ -4055,7 +4070,7 @@ async def export_sales_excel(
             conn_type.replace('_', ' ').title(),
             format_inr(e.get('amount', 0)),
             e.get('payment_mode', 'cash').capitalize(),
-            e.get('cylinder_nos', '') if not is_refill else '-',  # Show cylinder nos for new connections
+            cylinder_nos if not is_refill else '-',  # Show cylinder nos for new connections
             e.get('no_of_refills', 0) if is_refill else '-',  # Show refills for refill types
             e.get('remarks', '')
         ])
@@ -4063,9 +4078,9 @@ async def export_sales_excel(
         if is_refill:
             total_refills += e.get('no_of_refills', 0)
     
-    # Add total row with Indian formatting
+    # Add total row with cylinder count and refills
     total_row = len(entries) + 2
-    ws.append(['', '', '', '', '', 'TOTAL:', format_inr(total_amount), '', '', total_refills, ''])
+    ws.append(['', '', '', '', '', 'TOTAL:', format_inr(total_amount), '', total_cylinders, total_refills, ''])
     
     # Style total row
     total_fill = PatternFill(start_color="f0fdf4", end_color="f0fdf4", fill_type="solid")
