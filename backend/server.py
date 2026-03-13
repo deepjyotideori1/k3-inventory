@@ -27,15 +27,16 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 # Helper function for Indian Rupee formatting
-def format_inr(amount):
-    """Format number in Indian Rupee format (₹XX,XX,XXX)"""
+def format_inr(amount, use_symbol=True):
+    """Format number in Indian Rupee format (Rs.XX,XX,XXX or ₹XX,XX,XXX)"""
     if amount is None or amount == '':
-        return '₹0'
+        return 'Rs.0' if use_symbol else '0'
     try:
         num = float(amount)
+        prefix = 'Rs.' if use_symbol else ''
         # Indian numbering: last 3 digits, then groups of 2
         if num < 0:
-            return '-₹' + format_inr(-num)[1:]
+            return '-' + prefix + format_inr(-num, False)
         
         s = str(int(num))
         if len(s) <= 3:
@@ -52,9 +53,9 @@ def format_inr(amount):
         if decimal_part > 0:
             result += f'.{int(decimal_part * 100):02d}'
         
-        return '₹' + result
+        return prefix + result
     except (ValueError, TypeError):
-        return '₹0'
+        return 'Rs.0' if use_symbol else '0'
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
