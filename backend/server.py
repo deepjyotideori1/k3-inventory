@@ -3921,32 +3921,37 @@ async def export_sales_pdf(
     
     elements.append(Spacer(1, 5))
     
-    # Table data
-    data = [['SL', 'Date', 'Consumer', 'Address', 'Cons.No', 'Memo', 'Amount', 'Mode', 'Refills']]
+    # Table data - include both Cylinder Nos and Refills
+    data = [['SL', 'Date', 'Consumer', 'Address', 'Cons.No', 'Type', 'Amount', 'Mode', 'Cyl Nos', 'Refills']]
     
     total_amount = 0
     total_refills = 0
     
     for i, e in enumerate(entries, 1):
+        conn_type = e.get('connection_type', 'domestic')
+        is_refill = 'refill' in conn_type.lower()
+        
         data.append([
             str(i),
             e['date'],
-            e['consumer_name'][:18] if len(e.get('consumer_name', '')) > 18 else e.get('consumer_name', ''),
-            e.get('address', '')[:15] if len(e.get('address', '')) > 15 else e.get('address', ''),
+            e['consumer_name'][:16] if len(e.get('consumer_name', '')) > 16 else e.get('consumer_name', ''),
+            e.get('address', '')[:14] if len(e.get('address', '')) > 14 else e.get('address', ''),
             e.get('consumer_no', ''),
-            e.get('memo_no', ''),
+            conn_type[:8].replace('_', ' ').title(),
             format_inr(e.get('amount', 0)),
             e.get('payment_mode', 'cash')[:4].title(),
-            str(e.get('no_of_refills', 0))
+            e.get('cylinder_nos', '') if not is_refill else '-',  # Show cylinder nos for new connections
+            str(e.get('no_of_refills', 0)) if is_refill else '-'  # Show refills for refill types
         ])
         total_amount += e.get('amount', 0)
-        total_refills += e.get('no_of_refills', 0)
+        if is_refill:
+            total_refills += e.get('no_of_refills', 0)
     
     # Add total row
-    data.append(['', '', '', '', '', 'TOTAL:', format_inr(total_amount), '', str(total_refills)])
+    data.append(['', '', '', '', '', 'TOTAL:', format_inr(total_amount), '', '', str(total_refills)])
     
     # Create table - fit A4 landscape
-    col_widths = [25, 55, 110, 95, 70, 50, 70, 45, 40]
+    col_widths = [22, 52, 95, 80, 60, 55, 60, 40, 50, 40]
     table = Table(data, colWidths=col_widths, repeatRows=1)
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#16a34a')),
@@ -4022,8 +4027,8 @@ async def export_sales_excel(
     ws = wb.active
     ws.title = "Sales Data"
     
-    # Headers with clear form heads
-    headers = ['SL No.', 'Date', 'Consumer Name', 'Address', 'Consumer No.', 'Memo No.', 'Amount (₹)', 'Payment Mode', 'No. of Refills', 'Remarks']
+    # Headers with clear form heads - include both Cylinder Nos and Refills
+    headers = ['SL No.', 'Date', 'Consumer Name', 'Address', 'Consumer No.', 'Type', 'Amount (₹)', 'Payment Mode', 'Cylinder Nos', 'No. of Refills', 'Remarks']
     ws.append(headers)
     
     # Style headers
@@ -4038,24 +4043,29 @@ async def export_sales_excel(
     total_refills = 0
     
     for i, e in enumerate(entries, 1):
+        conn_type = e.get('connection_type', 'domestic')
+        is_refill = 'refill' in conn_type.lower()
+        
         ws.append([
             i,
             e['date'],
             e.get('consumer_name', ''),
             e.get('address', ''),
             e.get('consumer_no', ''),
-            e.get('memo_no', ''),
+            conn_type.replace('_', ' ').title(),
             format_inr(e.get('amount', 0)),
             e.get('payment_mode', 'cash').capitalize(),
-            e.get('no_of_refills', 0),
+            e.get('cylinder_nos', '') if not is_refill else '-',  # Show cylinder nos for new connections
+            e.get('no_of_refills', 0) if is_refill else '-',  # Show refills for refill types
             e.get('remarks', '')
         ])
         total_amount += e.get('amount', 0)
-        total_refills += e.get('no_of_refills', 0)
+        if is_refill:
+            total_refills += e.get('no_of_refills', 0)
     
     # Add total row with Indian formatting
     total_row = len(entries) + 2
-    ws.append(['', '', '', '', '', 'TOTAL:', format_inr(total_amount), '', total_refills, ''])
+    ws.append(['', '', '', '', '', 'TOTAL:', format_inr(total_amount), '', '', total_refills, ''])
     
     # Style total row
     total_fill = PatternFill(start_color="f0fdf4", end_color="f0fdf4", fill_type="solid")
@@ -4065,7 +4075,7 @@ async def export_sales_excel(
         cell.font = total_font
     
     # Adjust column widths
-    column_widths = [8, 12, 25, 20, 15, 12, 12, 15, 12, 20]
+    column_widths = [8, 12, 25, 18, 14, 14, 12, 14, 12, 12, 18]
     for i, width in enumerate(column_widths, 1):
         ws.column_dimensions[chr(64 + i)].width = width
     
