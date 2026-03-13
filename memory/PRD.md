@@ -205,6 +205,15 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] **Warehouse-Specific Order Numbers** - Orders get warehouse prefixes (J-1 for Jullang, N-1 for Naharlagun, D-1 for Doimukh)
 - [x] **Customer Warehouse Filter** - Admin can filter customers by specific warehouse
 
+### Dashboard Cylinder Stock Summary (March 2026)
+- [x] **Redesigned Top Stats Cards** - Total Warehouses, Total Filled Cylinders (green, 15kg/21kg shown separately), Total Empty Cylinders (orange, 15kg/21kg separately), Stock Discrepancies
+- [x] **Cylinder Stock Summary Widget** - Large visual counters for Filled (green) vs Empty (orange) with percentage progress bars
+- [x] **Auto-Refresh** - Dashboard auto-refreshes every 30 seconds with countdown badge and toggle button
+- [x] **Cylinder Type Filter** - Filter by All Types, 15kg Only, or 21kg Only
+- [x] **Warehouse Filter** - Filter by specific warehouse or view all
+- [x] **Expandable Warehouse Breakdown** - Table showing per-warehouse stock with Plant Hollongi row and TOTAL row
+- [x] **Role-Based Access** - Only admin sees full warehouse-level details; managers see their own dashboard
+
 ### UI/UX
 - [x] Professional green theme matching gas/energy industry
 - [x] K3 Gas Service logo integration
