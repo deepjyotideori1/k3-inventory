@@ -374,6 +374,49 @@ class AccessoryEntryResponse(BaseModel):
     submitted_by: str
     submitted_at: str
 
+# Accessory Sales Models
+class AccessorySaleItemCreate(BaseModel):
+    accessory_id: str
+    quantity: int
+    unit_price: float
+
+class AccessorySaleCreate(BaseModel):
+    customer_id: str = ""
+    customer_name: str
+    customer_phone: str = ""
+    customer_address: str = ""
+    is_new_customer: bool = False
+    date: str
+    items: List[AccessorySaleItemCreate]
+    payment_mode: str = "cash"  # cash, pending, online
+    remarks: str = ""
+    warehouse_id: str = ""
+
+class AccessorySaleItemResponse(BaseModel):
+    accessory_id: str
+    accessory_name: str
+    quantity: int
+    unit_price: float
+    total_amount: float
+
+class AccessorySaleResponse(BaseModel):
+    id: str
+    customer_id: str
+    customer_name: str
+    customer_phone: str
+    customer_address: str
+    date: str
+    items: List[AccessorySaleItemResponse]
+    subtotal: float
+    grand_total: float
+    payment_mode: str
+    remarks: str
+    warehouse_id: str
+    warehouse_name: str
+    created_by: str
+    created_by_name: str
+    created_at: str
+
 
 # ============ HELPER FUNCTIONS ============
 
@@ -2501,6 +2544,372 @@ async def export_accessory_excel(
         content=buffer.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename=LPG_Accessories_Report_{datetime.now().strftime('%d%m%y')}.xlsx"}
+    )
+
+# ============ ACCESSORY SALES ENDPOINTS ============
+
+@api_router.post("/accessory-sales")
+async def create_accessory_sale(data: AccessorySaleCreate, user: dict = Depends(get_current_user)):
+    """Create a new accessory sale with multiple items"""
+    
+    # Handle customer
+    customer_id = data.customer_id
+    if data.is_new_customer or not customer_id:
+        # Create new customer
+        new_customer = {
+            'id': str(uuid.uuid4()),
+            'date': data.date,
+            'customer_name': data.customer_name,
+            'phone': data.customer_phone,
+            'address': data.customer_address,
+            'consumer_no': '',
+            'connection_type': 'domestic',
+            'warehouse_id': data.warehouse_id or user.get('warehouse_id', ''),
+            'warehouse_name': '',
+            'gas_card_issued': False,
+            'kyc_done': False,
+            'remarks': 'Created from accessory sale',
+            'created_by': user['id'],
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+        # Get warehouse name
+        if new_customer['warehouse_id']:
+            warehouse = await db.warehouses.find_one({'id': new_customer['warehouse_id']}, {'_id': 0})
+            if warehouse:
+                new_customer['warehouse_name'] = warehouse['name']
+        await db.customers.insert_one(new_customer)
+        customer_id = new_customer['id']
+    
+    # Process items
+    sale_items = []
+    subtotal = 0
+    
+    for item in data.items:
+        accessory = await db.accessories.find_one({'id': item.accessory_id, 'is_active': True}, {'_id': 0})
+        if not accessory:
+            raise HTTPException(status_code=404, detail=f"Accessory not found: {item.accessory_id}")
+        
+        item_total = item.quantity * item.unit_price
+        sale_items.append({
+            'accessory_id': item.accessory_id,
+            'accessory_name': accessory['name'],
+            'quantity': item.quantity,
+            'unit_price': item.unit_price,
+            'total_amount': item_total
+        })
+        subtotal += item_total
+    
+    # Determine warehouse
+    warehouse_id = data.warehouse_id or user.get('warehouse_id', '')
+    warehouse_name = ''
+    if warehouse_id:
+        warehouse = await db.warehouses.find_one({'id': warehouse_id}, {'_id': 0})
+        if warehouse:
+            warehouse_name = warehouse['name']
+    
+    # Create sale record
+    sale = {
+        'id': str(uuid.uuid4()),
+        'customer_id': customer_id,
+        'customer_name': data.customer_name,
+        'customer_phone': data.customer_phone,
+        'customer_address': data.customer_address,
+        'date': data.date,
+        'items': sale_items,
+        'subtotal': subtotal,
+        'grand_total': subtotal,
+        'payment_mode': data.payment_mode,
+        'remarks': data.remarks,
+        'warehouse_id': warehouse_id,
+        'warehouse_name': warehouse_name,
+        'created_by': user['id'],
+        'created_by_name': user['name'],
+        'created_at': datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.accessory_sales.insert_one(sale)
+    
+    # Update inventory (deduct from accessory entries)
+    for item in data.items:
+        # Find the latest entry for this accessory and update or create
+        latest_entry = await db.accessory_entries.find_one(
+            {'accessory_id': item.accessory_id},
+            {'_id': 0},
+            sort=[('date', -1)]
+        )
+        
+        if latest_entry:
+            # Update the entry's total_sold and total_remaining
+            new_sold = latest_entry['total_sold'] + item.quantity
+            new_remaining = latest_entry['total_issued'] - new_sold
+            await db.accessory_entries.update_one(
+                {'id': latest_entry['id']},
+                {'$set': {'total_sold': new_sold, 'total_remaining': new_remaining}}
+            )
+    
+    # Remove _id if present
+    sale.pop('_id', None)
+    return sale
+
+@api_router.get("/accessory-sales")
+async def get_accessory_sales(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    customer_name: Optional[str] = None,
+    warehouse_id: Optional[str] = None,
+    user: dict = Depends(get_current_user)
+):
+    """Get all accessory sales with optional filters"""
+    query = {}
+    
+    if start_date:
+        query['date'] = {'$gte': start_date}
+    if end_date:
+        if 'date' in query:
+            query['date']['$lte'] = end_date
+        else:
+            query['date'] = {'$lte': end_date}
+    
+    if customer_name:
+        query['customer_name'] = {'$regex': customer_name, '$options': 'i'}
+    
+    # Filter by warehouse for non-admin
+    if user['role'] != 'admin':
+        query['warehouse_id'] = user.get('warehouse_id', '')
+    elif warehouse_id and warehouse_id != 'all':
+        query['warehouse_id'] = warehouse_id
+    
+    sales = await db.accessory_sales.find(query, {'_id': 0}).sort('date', -1).to_list(1000)
+    return sales
+
+@api_router.get("/accessory-sales/{sale_id}")
+async def get_accessory_sale(sale_id: str, user: dict = Depends(get_current_user)):
+    """Get a specific accessory sale by ID"""
+    sale = await db.accessory_sales.find_one({'id': sale_id}, {'_id': 0})
+    if not sale:
+        raise HTTPException(status_code=404, detail="Sale not found")
+    return sale
+
+@api_router.delete("/accessory-sales/{sale_id}")
+async def delete_accessory_sale(sale_id: str, user: dict = Depends(require_admin)):
+    """Delete an accessory sale - Admin only"""
+    sale = await db.accessory_sales.find_one({'id': sale_id}, {'_id': 0})
+    if not sale:
+        raise HTTPException(status_code=404, detail="Sale not found")
+    
+    await db.accessory_sales.delete_one({'id': sale_id})
+    return {"message": "Sale deleted successfully"}
+
+@api_router.get("/accessory-sales-summary")
+async def get_accessory_sales_summary(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    user: dict = Depends(get_current_user)
+):
+    """Get summary of accessory sales"""
+    query = {}
+    
+    if start_date:
+        query['date'] = {'$gte': start_date}
+    if end_date:
+        if 'date' in query:
+            query['date']['$lte'] = end_date
+        else:
+            query['date'] = {'$lte': end_date}
+    
+    if user['role'] != 'admin':
+        query['warehouse_id'] = user.get('warehouse_id', '')
+    
+    sales = await db.accessory_sales.find(query, {'_id': 0}).to_list(1000)
+    
+    total_sales = len(sales)
+    total_amount = sum(s.get('grand_total', 0) for s in sales)
+    cash_amount = sum(s.get('grand_total', 0) for s in sales if s.get('payment_mode') == 'cash')
+    pending_amount = sum(s.get('grand_total', 0) for s in sales if s.get('payment_mode') == 'pending')
+    online_amount = sum(s.get('grand_total', 0) for s in sales if s.get('payment_mode') == 'online')
+    
+    # Items sold count
+    total_items = sum(len(s.get('items', [])) for s in sales)
+    total_qty = sum(sum(i.get('quantity', 0) for i in s.get('items', [])) for s in sales)
+    
+    return {
+        'total_sales': total_sales,
+        'total_amount': total_amount,
+        'cash_amount': cash_amount,
+        'pending_amount': pending_amount,
+        'online_amount': online_amount,
+        'total_items': total_items,
+        'total_quantity': total_qty
+    }
+
+@api_router.get("/export/accessory-sales-pdf")
+async def export_accessory_sales_pdf(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    warehouse_id: Optional[str] = None,
+    user: dict = Depends(get_current_user)
+):
+    """Export accessory sales as PDF"""
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    # Title
+    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=14, fontName='Helvetica-Bold', textColor=colors.HexColor('#7c3aed'), alignment=1)
+    subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=13, alignment=1)
+    
+    elements.append(Paragraph("K3 GAS SERVICE - LPG Accessories Sales Report", title_style))
+    elements.append(Paragraph("Khayal Hamesha", subtitle_style))
+    if start_date and end_date:
+        elements.append(Paragraph(f"Period: {start_date} to {end_date}", ParagraphStyle('Period', fontSize=10, alignment=1)))
+    elements.append(Spacer(1, 10))
+    
+    # Query
+    query = {}
+    if start_date:
+        query['date'] = {'$gte': start_date}
+    if end_date:
+        if 'date' in query:
+            query['date']['$lte'] = end_date
+        else:
+            query['date'] = {'$lte': end_date}
+    
+    if user['role'] != 'admin':
+        query['warehouse_id'] = user.get('warehouse_id', '')
+    elif warehouse_id and warehouse_id != 'all':
+        query['warehouse_id'] = warehouse_id
+    
+    sales = await db.accessory_sales.find(query, {'_id': 0}).sort('date', -1).to_list(1000)
+    
+    # Flatten items for table
+    data = [['SL', 'Date', 'Customer', 'Phone', 'Accessory', 'Qty', 'Unit Price', 'Total', 'Payment', 'Warehouse', 'Created By']]
+    
+    sl = 1
+    grand_total = 0
+    for sale in sales:
+        for item in sale.get('items', []):
+            data.append([
+                str(sl),
+                sale.get('date', '')[-5:],
+                sale.get('customer_name', '')[:15],
+                sale.get('customer_phone', '')[:10],
+                item.get('accessory_name', '')[:15],
+                str(item.get('quantity', 0)),
+                format_inr(item.get('unit_price', 0)),
+                format_inr(item.get('total_amount', 0)),
+                sale.get('payment_mode', 'cash')[:6].title(),
+                sale.get('warehouse_name', '')[:10],
+                sale.get('created_by_name', '')[:10]
+            ])
+            grand_total += item.get('total_amount', 0)
+            sl += 1
+    
+    data.append(['', '', '', '', '', 'GRAND TOTAL:', '', format_inr(grand_total), '', '', ''])
+    
+    col_widths = [25, 45, 90, 65, 90, 35, 60, 60, 50, 70, 70]
+    table = Table(data, colWidths=col_widths, repeatRows=1)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#7c3aed')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e9d5ff')),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+    ]))
+    elements.append(table)
+    
+    doc.build(elements)
+    buffer.seek(0)
+    
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=Accessory_Sales_{datetime.now().strftime('%d%m%y')}.pdf"}
+    )
+
+@api_router.get("/export/accessory-sales-excel")
+async def export_accessory_sales_excel(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    warehouse_id: Optional[str] = None,
+    user: dict = Depends(get_current_user)
+):
+    """Export accessory sales as Excel"""
+    buffer = BytesIO()
+    workbook = xlsxwriter.Workbook(buffer)
+    
+    # Formats
+    title_format = workbook.add_format({'bold': True, 'font_size': 14, 'align': 'center', 'bg_color': '#7c3aed', 'font_color': 'white'})
+    header_format = workbook.add_format({'bold': True, 'bg_color': '#7c3aed', 'font_color': 'white', 'border': 1, 'align': 'center'})
+    cell_format = workbook.add_format({'border': 1, 'align': 'center'})
+    total_format = workbook.add_format({'bold': True, 'bg_color': '#e9d5ff', 'border': 1, 'align': 'center'})
+    money_format = workbook.add_format({'border': 1, 'align': 'right', 'num_format': '#,##0.00'})
+    
+    # Query
+    query = {}
+    if start_date:
+        query['date'] = {'$gte': start_date}
+    if end_date:
+        if 'date' in query:
+            query['date']['$lte'] = end_date
+        else:
+            query['date'] = {'$lte': end_date}
+    
+    if user['role'] != 'admin':
+        query['warehouse_id'] = user.get('warehouse_id', '')
+    elif warehouse_id and warehouse_id != 'all':
+        query['warehouse_id'] = warehouse_id
+    
+    sales = await db.accessory_sales.find(query, {'_id': 0}).sort('date', -1).to_list(1000)
+    
+    # Worksheet
+    ws = workbook.add_worksheet('Accessory Sales')
+    ws.merge_range('A1:K1', 'K3 GAS SERVICE - LPG Accessories Sales Report', title_format)
+    if start_date and end_date:
+        ws.merge_range('A2:K2', f'Period: {start_date} to {end_date}', workbook.add_format({'align': 'center'}))
+    
+    headers = ['SL No.', 'Date', 'Customer Name', 'Phone', 'Accessory', 'Qty', 'Unit Price (Rs.)', 'Total (Rs.)', 'Payment', 'Warehouse', 'Created By']
+    for col, header in enumerate(headers):
+        ws.write(3, col, header, header_format)
+        ws.set_column(col, col, 15)
+    
+    row = 4
+    sl = 1
+    grand_total = 0
+    
+    for sale in sales:
+        for item in sale.get('items', []):
+            ws.write(row, 0, sl, cell_format)
+            ws.write(row, 1, sale.get('date', ''), cell_format)
+            ws.write(row, 2, sale.get('customer_name', ''), cell_format)
+            ws.write(row, 3, sale.get('customer_phone', ''), cell_format)
+            ws.write(row, 4, item.get('accessory_name', ''), cell_format)
+            ws.write(row, 5, item.get('quantity', 0), cell_format)
+            ws.write(row, 6, item.get('unit_price', 0), money_format)
+            ws.write(row, 7, item.get('total_amount', 0), money_format)
+            ws.write(row, 8, sale.get('payment_mode', 'cash').title(), cell_format)
+            ws.write(row, 9, sale.get('warehouse_name', ''), cell_format)
+            ws.write(row, 10, sale.get('created_by_name', ''), cell_format)
+            grand_total += item.get('total_amount', 0)
+            sl += 1
+            row += 1
+    
+    # Total row
+    ws.write(row, 5, 'GRAND TOTAL:', total_format)
+    ws.write(row, 6, '', total_format)
+    ws.write(row, 7, grand_total, total_format)
+    
+    workbook.close()
+    buffer.seek(0)
+    
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=Accessory_Sales_{datetime.now().strftime('%d%m%y')}.xlsx"}
     )
 
 # ============ DEALER REPORT EXPORTS ============

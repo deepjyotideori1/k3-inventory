@@ -19,6 +19,7 @@ import PlantHollongi from "./pages/PlantHollongi";
 import AdminEditReport from "./pages/AdminEditReport";
 import DealerReports from "./pages/DealerReports";
 import AccessoryReports from "./pages/AccessoryReports";
+import AccessorySales from "./pages/AccessorySales";
 import CustomerManagement from "./pages/CustomerManagement";
 import OrderManagement from "./pages/OrderManagement";
 import BulkMessaging from "./pages/BulkMessaging";
@@ -191,6 +192,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute adminOnly>
             <AccessoryReports />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/accessory-sales"
+        element={
+          <ProtectedRoute>
+            <AccessorySales />
           </ProtectedRoute>
         }
       />

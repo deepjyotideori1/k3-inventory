@@ -351,6 +351,53 @@ export const exportAccessoryExcel = async (params) => {
   }
 };
 
+// Accessory Sales
+export const createAccessorySale = (data) => api.post('/accessory-sales', data);
+export const getAccessorySales = (params) => api.get('/accessory-sales', { params });
+export const getAccessorySale = (saleId) => api.get(`/accessory-sales/${saleId}`);
+export const deleteAccessorySale = (saleId) => api.delete(`/accessory-sales/${saleId}`);
+export const getAccessorySalesSummary = (params) => api.get('/accessory-sales-summary', { params });
+
+export const exportAccessorySalesPDF = async (params) => {
+  try {
+    const response = await api.get('/export/accessory-sales-pdf', { 
+      params,
+      responseType: 'blob'
+    });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `accessory_sales_${new Date().toISOString().split('T')[0]}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Accessory Sales PDF export failed:', error);
+    throw error;
+  }
+};
+
+export const exportAccessorySalesExcel = async (params) => {
+  try {
+    const response = await api.get('/export/accessory-sales-excel', { 
+      params,
+      responseType: 'blob'
+    });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `accessory_sales_${new Date().toISOString().split('T')[0]}.xlsx`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Accessory Sales Excel export failed:', error);
+    throw error;
+  }
+};
+
 // ============ CUSTOMER MANAGEMENT ============
 
 // Customers

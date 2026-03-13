@@ -18,7 +18,8 @@ import {
   UserPlus,
   ShoppingCart,
   MessageSquare,
-  TrendingUp
+  TrendingUp,
+  ShoppingBag
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
@@ -45,6 +46,7 @@ const Layout = ({ children }) => {
     { path: '/plant-hollongi', label: 'Plant Hollongi', icon: Factory },
     { path: '/dealer-reports', label: 'Dealer Reports', icon: UserCheck },
     { path: '/accessory-reports', label: 'LPG Accessories', icon: Boxes },
+    { path: '/accessory-sales', label: 'Accessory Sales', icon: ShoppingBag },
     { path: '/users', label: 'Users', icon: Users },
     { path: '/settings', label: 'Settings', icon: Settings },
   ];
@@ -55,6 +57,7 @@ const Layout = ({ children }) => {
     { path: '/sales-data', label: 'Sales Data', icon: TrendingUp },
     { path: '/customers', label: 'Customers', icon: UserPlus },
     { path: '/orders', label: 'Orders', icon: ShoppingCart },
+    { path: '/accessory-sales', label: 'Accessory Sales', icon: ShoppingBag },
     { path: '/my-reports', label: 'My Reports', icon: FileText },
   ];
 
@@ -62,6 +65,7 @@ const Layout = ({ children }) => {
     { path: '/sales-data', label: 'Sales Data', icon: TrendingUp },
     { path: '/customers', label: 'Customers', icon: UserPlus },
     { path: '/orders', label: 'Orders', icon: ShoppingCart },
+    { path: '/accessory-sales', label: 'Accessory Sales', icon: ShoppingBag },
     { path: '/bulk-messaging', label: 'Bulk Messaging', icon: MessageSquare },
   ];
 
