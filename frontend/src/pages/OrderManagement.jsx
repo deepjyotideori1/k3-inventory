@@ -320,7 +320,8 @@ const OrderManagement = () => {
       connection_type: order.connection_type,
       cylinder_nos: order.cylinder_nos || '',
       payment_mode: order.payment_mode,
-      remarks: order.remarks
+      remarks: order.remarks,
+      status: order.status || 'pending'
     });
     setEditDialogOpen(true);
   };
@@ -1013,17 +1014,16 @@ const OrderManagement = () => {
                                 >
                                   <Download className="w-4 h-4" />
                                 </Button>
-                                {(isAdmin || o.order_date === getTodayDate()) && (
-                                  <Button 
-                                    variant="ghost" 
-                                    size="sm"
-                                    onClick={() => handleEdit(o)}
-                                    className="text-blue-600 hover:text-blue-800"
-                                    title="Edit"
-                                  >
-                                    <Edit className="w-4 h-4" />
-                                  </Button>
-                                )}
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  onClick={() => handleEdit(o)}
+                                  className="text-blue-600 hover:text-blue-800"
+                                  title="Edit"
+                                  data-testid={`edit-order-${o.id}`}
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </Button>
                                 {isAdmin && (
                                   <Button 
                                     variant="ghost" 
@@ -1212,13 +1212,30 @@ const OrderManagement = () => {
                   className="mt-1"
                 />
               </div>
-              <div>
-                <Label>Remarks</Label>
-                <Input 
-                  value={editForm.remarks || ''}
-                  onChange={(e) => setEditForm({ ...editForm, remarks: e.target.value })}
-                  className="mt-1"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Remarks</Label>
+                  <Input 
+                    value={editForm.remarks || ''}
+                    onChange={(e) => setEditForm({ ...editForm, remarks: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>Status</Label>
+                  <Select 
+                    value={editForm.status || 'pending'} 
+                    onValueChange={(v) => setEditForm({ ...editForm, status: v })}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="delivered">Delivered</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
             <DialogFooter>

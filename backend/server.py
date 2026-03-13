@@ -4816,20 +4816,12 @@ async def update_order(
     order: OrderUpdate,
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
-    """Update an order (admin only or same day by creator)"""
+    """Update an order - all users can edit all fields"""
     user = await get_current_user(credentials)
     
     existing = await db.orders.find_one({'id': order_id})
     if not existing:
         raise HTTPException(status_code=404, detail="Order not found")
-    
-    # Check access - admin can edit any, others can edit same-day orders they created
-    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
-    if user['role'] != 'admin':
-        if existing.get('created_by') != user['id']:
-            raise HTTPException(status_code=403, detail="You can only edit your own orders")
-        if existing.get('order_date') != today:
-            raise HTTPException(status_code=403, detail="You can only edit today's orders")
     
     update_data = {}
     if order.order_date is not None:
