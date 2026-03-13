@@ -387,6 +387,7 @@ class AccessorySaleCreate(BaseModel):
     customer_address: str = ""
     is_new_customer: bool = False
     date: str
+    memo_no: str = ""
     items: List[AccessorySaleItemCreate]
     payment_mode: str = "cash"  # cash, pending, online
     remarks: str = ""
@@ -406,6 +407,7 @@ class AccessorySaleResponse(BaseModel):
     customer_phone: str
     customer_address: str
     date: str
+    memo_no: str = ""
     items: List[AccessorySaleItemResponse]
     subtotal: float
     grand_total: float
@@ -2615,6 +2617,7 @@ async def create_accessory_sale(data: AccessorySaleCreate, user: dict = Depends(
         'customer_phone': data.customer_phone,
         'customer_address': data.customer_address,
         'date': data.date,
+        'memo_no': data.memo_no,
         'items': sale_items,
         'subtotal': subtotal,
         'grand_total': subtotal,
@@ -2629,9 +2632,9 @@ async def create_accessory_sale(data: AccessorySaleCreate, user: dict = Depends(
     
     await db.accessory_sales.insert_one(sale)
     
-    # Update inventory (deduct from accessory entries)
+    # Update inventory - deduct from the LATEST accessory entry for each item
     for item in data.items:
-        # Find the latest entry for this accessory and update or create
+        # Find the latest entry for this accessory (across all dealers)
         latest_entry = await db.accessory_entries.find_one(
             {'accessory_id': item.accessory_id},
             {'_id': 0},
@@ -2640,11 +2643,17 @@ async def create_accessory_sale(data: AccessorySaleCreate, user: dict = Depends(
         
         if latest_entry:
             # Update the entry's total_sold and total_remaining
-            new_sold = latest_entry['total_sold'] + item.quantity
-            new_remaining = latest_entry['total_issued'] - new_sold
+            current_sold = latest_entry.get('total_sold', 0)
+            current_issued = latest_entry.get('total_issued', 0)
+            new_sold = current_sold + item.quantity
+            new_remaining = current_issued - new_sold
+            
             await db.accessory_entries.update_one(
                 {'id': latest_entry['id']},
-                {'$set': {'total_sold': new_sold, 'total_remaining': new_remaining}}
+                {'$set': {
+                    'total_sold': new_sold, 
+                    'total_remaining': max(0, new_remaining)  # Prevent negative values
+                }}
             )
     
     # Remove _id if present
@@ -2782,8 +2791,8 @@ async def export_accessory_sales_pdf(
     
     sales = await db.accessory_sales.find(query, {'_id': 0}).sort('date', -1).to_list(1000)
     
-    # Flatten items for table
-    data = [['SL', 'Date', 'Customer', 'Phone', 'Accessory', 'Qty', 'Unit Price', 'Total', 'Payment', 'Warehouse', 'Created By']]
+    # Flatten items for table - include Memo No
+    data = [['SL', 'Date', 'Memo No', 'Customer', 'Phone', 'Accessory', 'Qty', 'Unit Price', 'Total', 'Payment', 'Warehouse', 'Created By']]
     
     sl = 1
     grand_total = 0
@@ -2792,22 +2801,23 @@ async def export_accessory_sales_pdf(
             data.append([
                 str(sl),
                 sale.get('date', '')[-5:],
-                sale.get('customer_name', '')[:15],
+                sale.get('memo_no', '')[:10],
+                sale.get('customer_name', '')[:12],
                 sale.get('customer_phone', '')[:10],
-                item.get('accessory_name', '')[:15],
+                item.get('accessory_name', '')[:12],
                 str(item.get('quantity', 0)),
                 format_inr(item.get('unit_price', 0)),
                 format_inr(item.get('total_amount', 0)),
                 sale.get('payment_mode', 'cash')[:6].title(),
-                sale.get('warehouse_name', '')[:10],
-                sale.get('created_by_name', '')[:10]
+                sale.get('warehouse_name', '')[:8],
+                sale.get('created_by_name', '')[:8]
             ])
             grand_total += item.get('total_amount', 0)
             sl += 1
     
-    data.append(['', '', '', '', '', 'GRAND TOTAL:', '', format_inr(grand_total), '', '', ''])
+    data.append(['', '', '', '', '', '', 'GRAND TOTAL:', '', format_inr(grand_total), '', '', ''])
     
-    col_widths = [25, 45, 90, 65, 90, 35, 60, 60, 50, 70, 70]
+    col_widths = [22, 42, 50, 70, 60, 70, 30, 55, 55, 45, 55, 55]
     table = Table(data, colWidths=col_widths, repeatRows=1)
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#7c3aed')),
@@ -2866,16 +2876,16 @@ async def export_accessory_sales_excel(
     
     sales = await db.accessory_sales.find(query, {'_id': 0}).sort('date', -1).to_list(1000)
     
-    # Worksheet
+    # Worksheet - include Memo No
     ws = workbook.add_worksheet('Accessory Sales')
-    ws.merge_range('A1:K1', 'K3 GAS SERVICE - LPG Accessories Sales Report', title_format)
+    ws.merge_range('A1:L1', 'K3 GAS SERVICE - LPG Accessories Sales Report', title_format)
     if start_date and end_date:
-        ws.merge_range('A2:K2', f'Period: {start_date} to {end_date}', workbook.add_format({'align': 'center'}))
+        ws.merge_range('A2:L2', f'Period: {start_date} to {end_date}', workbook.add_format({'align': 'center'}))
     
-    headers = ['SL No.', 'Date', 'Customer Name', 'Phone', 'Accessory', 'Qty', 'Unit Price (Rs.)', 'Total (Rs.)', 'Payment', 'Warehouse', 'Created By']
+    headers = ['SL No.', 'Date', 'Memo No', 'Customer Name', 'Phone', 'Accessory', 'Qty', 'Unit Price (Rs.)', 'Total (Rs.)', 'Payment', 'Warehouse', 'Created By']
     for col, header in enumerate(headers):
         ws.write(3, col, header, header_format)
-        ws.set_column(col, col, 15)
+        ws.set_column(col, col, 14)
     
     row = 4
     sl = 1
@@ -2885,23 +2895,24 @@ async def export_accessory_sales_excel(
         for item in sale.get('items', []):
             ws.write(row, 0, sl, cell_format)
             ws.write(row, 1, sale.get('date', ''), cell_format)
-            ws.write(row, 2, sale.get('customer_name', ''), cell_format)
-            ws.write(row, 3, sale.get('customer_phone', ''), cell_format)
-            ws.write(row, 4, item.get('accessory_name', ''), cell_format)
-            ws.write(row, 5, item.get('quantity', 0), cell_format)
-            ws.write(row, 6, item.get('unit_price', 0), money_format)
-            ws.write(row, 7, item.get('total_amount', 0), money_format)
-            ws.write(row, 8, sale.get('payment_mode', 'cash').title(), cell_format)
-            ws.write(row, 9, sale.get('warehouse_name', ''), cell_format)
-            ws.write(row, 10, sale.get('created_by_name', ''), cell_format)
+            ws.write(row, 2, sale.get('memo_no', ''), cell_format)
+            ws.write(row, 3, sale.get('customer_name', ''), cell_format)
+            ws.write(row, 4, sale.get('customer_phone', ''), cell_format)
+            ws.write(row, 5, item.get('accessory_name', ''), cell_format)
+            ws.write(row, 6, item.get('quantity', 0), cell_format)
+            ws.write(row, 7, item.get('unit_price', 0), money_format)
+            ws.write(row, 8, item.get('total_amount', 0), money_format)
+            ws.write(row, 9, sale.get('payment_mode', 'cash').title(), cell_format)
+            ws.write(row, 10, sale.get('warehouse_name', ''), cell_format)
+            ws.write(row, 11, sale.get('created_by_name', ''), cell_format)
             grand_total += item.get('total_amount', 0)
             sl += 1
             row += 1
     
     # Total row
-    ws.write(row, 5, 'GRAND TOTAL:', total_format)
-    ws.write(row, 6, '', total_format)
-    ws.write(row, 7, grand_total, total_format)
+    ws.write(row, 6, 'GRAND TOTAL:', total_format)
+    ws.write(row, 7, '', total_format)
+    ws.write(row, 8, grand_total, total_format)
     
     workbook.close()
     buffer.seek(0)

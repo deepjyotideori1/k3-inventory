@@ -72,6 +72,7 @@ const AccessorySales = () => {
   const [saleItems, setSaleItems] = useState([{ accessory_id: '', quantity: 1, unit_price: 0 }]);
   const [paymentMode, setPaymentMode] = useState('cash');
   const [saleDate, setSaleDate] = useState(getTodayDate());
+  const [memoNo, setMemoNo] = useState('');
   const [remarks, setRemarks] = useState('');
   const [selectedWarehouse, setSelectedWarehouse] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -194,6 +195,7 @@ const AccessorySales = () => {
         customer_address: customerMode === 'existing' ? selectedCustomer?.address : newCustomer.address,
         is_new_customer: customerMode === 'new',
         date: saleDate,
+        memo_no: memoNo,
         items: saleItems.map(item => ({
           accessory_id: item.accessory_id,
           quantity: parseInt(item.quantity),
@@ -214,6 +216,7 @@ const AccessorySales = () => {
       setNewCustomer({ name: '', phone: '', address: '' });
       setSaleItems([{ accessory_id: '', quantity: 1, unit_price: 0 }]);
       setPaymentMode('cash');
+      setMemoNo('');
       setRemarks('');
       
       // Refresh data
@@ -458,9 +461,9 @@ const AccessorySales = () => {
                 <Label className="text-purple-800 font-medium mb-2 block">Quick Search</Label>
                 <SearchBar
                   data={sales}
-                  searchFields={['customer_name', 'customer_phone', 'warehouse_name', 'payment_mode']}
+                  searchFields={['customer_name', 'customer_phone', 'memo_no', 'warehouse_name', 'payment_mode']}
                   onFilter={setFilteredSales}
-                  placeholder="Search by customer name, phone, warehouse..."
+                  placeholder="Search by customer name, phone, memo no, warehouse..."
                   showSuggestions={true}
                   maxSuggestions={6}
                   suggestionLabelField="customer_name"
@@ -486,6 +489,7 @@ const AccessorySales = () => {
                       <thead>
                         <tr>
                           <th>Date</th>
+                          <th>Memo No</th>
                           <th>Customer</th>
                           <th>Phone</th>
                           <th>Items</th>
@@ -500,6 +504,7 @@ const AccessorySales = () => {
                         {filteredSales.map((sale) => (
                           <tr key={sale.id}>
                             <td>{formatDate(sale.date)}</td>
+                            <td className="font-medium text-purple-700">{sale.memo_no || '-'}</td>
                             <td className="font-medium">{sale.customer_name}</td>
                             <td>{sale.customer_phone || '-'}</td>
                             <td>
@@ -719,13 +724,23 @@ const AccessorySales = () => {
               </div>
 
               {/* Sale Details */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
                   <Label>Date</Label>
                   <Input 
                     type="date"
                     value={saleDate}
                     onChange={(e) => setSaleDate(e.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>Memo No</Label>
+                  <Input 
+                    type="text"
+                    value={memoNo}
+                    onChange={(e) => setMemoNo(e.target.value)}
+                    placeholder="Enter memo number"
                     className="mt-1"
                   />
                 </div>
