@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -25,6 +25,7 @@ import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter, DialogClose } from '../components/ui/dialog';
 import { Checkbox } from '../components/ui/checkbox';
+import SearchBar, { HighlightMatch } from '../components/SearchBar';
 import { 
   Users,
   Plus,
@@ -86,6 +87,7 @@ const CustomerManagement = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [filteredCustomers, setFilteredCustomers] = useState([]);
   
   // Bulk upload
   const [bulkUploading, setBulkUploading] = useState(false);
@@ -127,6 +129,7 @@ const CustomerManagement = () => {
       ]);
       
       setCustomers(customersRes.data);
+      setFilteredCustomers(customersRes.data);
       setSummary(summaryRes.data);
     } catch (error) {
       console.error('Failed to fetch data:', error);
@@ -443,24 +446,29 @@ const CustomerManagement = () => {
 
           {/* Customer List Tab */}
           <TabsContent value="list" className="mt-4 space-y-4">
+            {/* Enhanced Search Bar */}
+            <Card className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-200">
+              <CardContent className="p-4">
+                <div className="mb-4">
+                  <Label className="text-green-800 font-medium mb-2 block">Quick Search</Label>
+                  <SearchBar
+                    data={customers}
+                    searchFields={['customer_name', 'phone', 'consumer_no', 'address', 'warehouse_name']}
+                    onFilter={setFilteredCustomers}
+                    placeholder="Search by name, phone, consumer no, address..."
+                    showSuggestions={true}
+                    maxSuggestions={6}
+                    suggestionLabelField="customer_name"
+                    className="max-w-2xl"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Filters */}
             <Card>
               <CardContent className="p-4">
                 <div className="flex flex-wrap items-end gap-4">
-                  <div className="flex-1 min-w-[200px]">
-                    <Label>Search</Label>
-                    <div className="relative mt-1">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <Input 
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search by name, consumer no, address..."
-                        className="pl-10"
-                        data-testid="search-input"
-                      />
-                    </div>
-                  </div>
                   <div>
                     <Label>Category</Label>
                     <Select value={filterCategory} onValueChange={setFilterCategory}>
@@ -540,8 +548,16 @@ const CustomerManagement = () => {
 
             {/* Customer Table */}
             <Card>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">Customer List</CardTitle>
+                  <Badge variant="outline" className="text-green-700">
+                    {filteredCustomers.length} of {customers.length} customers
+                  </Badge>
+                </div>
+              </CardHeader>
               <CardContent className="p-0">
-                {customers.length > 0 ? (
+                {filteredCustomers.length > 0 ? (
                   <div className="overflow-x-auto">
                     <table className="data-table">
                       <thead>
@@ -559,7 +575,7 @@ const CustomerManagement = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {customers.map((c) => (
+                        {filteredCustomers.map((c) => (
                           <tr key={c.id} data-testid={`customer-row-${c.id}`}>
                             <td>{formatDate(c.date)}</td>
                             <td>

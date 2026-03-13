@@ -26,6 +26,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../components/ui/dialog';
+import SearchBar from '../components/SearchBar';
+import SearchableSelect from '../components/SearchableSelect';
 import { 
   ShoppingCart,
   Plus,
@@ -106,6 +108,7 @@ const OrderManagement = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [exporting, setExporting] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(null);
+  const [filteredOrders, setFilteredOrders] = useState([]);
 
   useEffect(() => {
     fetchCustomers();
@@ -152,6 +155,7 @@ const OrderManagement = () => {
       
       const response = await getOrders(params);
       setOrders(response.data);
+      setFilteredOrders(response.data);
     } catch (error) {
       console.error('Failed to fetch orders:', error);
       toast.error('Failed to load orders');
@@ -884,19 +888,6 @@ const OrderManagement = () => {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="flex-1 min-w-[200px]">
-                    <Label>Search</Label>
-                    <div className="relative mt-1">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <Input 
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search by name, mobile, order no..."
-                        className="pl-10"
-                      />
-                    </div>
-                  </div>
                   <Button variant="outline" onClick={() => { fetchOrders(); fetchSummary(); }}>
                     <RefreshCw className="w-4 h-4 mr-2" />
                     Refresh
@@ -927,17 +918,39 @@ const OrderManagement = () => {
               </CardContent>
             </Card>
 
+            {/* Enhanced Search Bar */}
+            <Card className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-200">
+              <CardContent className="p-4">
+                <Label className="text-green-800 font-medium mb-2 block">Quick Search</Label>
+                <SearchBar
+                  data={orders}
+                  searchFields={['customer_name', 'mobile_number', 'order_no', 'address_landmark', 'warehouse_name']}
+                  onFilter={setFilteredOrders}
+                  placeholder="Search by customer name, mobile, order no, address..."
+                  showSuggestions={true}
+                  maxSuggestions={6}
+                  suggestionLabelField="customer_name"
+                  className="max-w-2xl"
+                />
+              </CardContent>
+            </Card>
+
             {/* Orders Table */}
             <Card>
-              <CardHeader>
-                <CardTitle>Orders ({orders.length})</CardTitle>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle>Orders</CardTitle>
+                  <Badge variant="outline" className="text-green-700">
+                    {filteredOrders.length} of {orders.length} orders
+                  </Badge>
+                </div>
               </CardHeader>
               <CardContent className="p-0">
                 {loading ? (
                   <div className="flex items-center justify-center py-12">
                     <Loader2 className="w-8 h-8 animate-spin text-green-700" />
                   </div>
-                ) : orders.length > 0 ? (
+                ) : filteredOrders.length > 0 ? (
                   <div className="overflow-x-auto">
                     <table className="data-table">
                       <thead>
@@ -954,7 +967,7 @@ const OrderManagement = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {orders.map((o) => (
+                        {filteredOrders.map((o) => (
                           <tr key={o.id} data-testid={`order-row-${o.id}`}>
                             <td>{formatDate(o.order_date)}</td>
                             <td>
