@@ -25,6 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import SearchBar from '../components/SearchBar';
+import SearchableSelect from '../components/SearchableSelect';
 import {
   DollarSign,
   Plus,
@@ -937,22 +938,21 @@ const SalesDashboard = () => {
                   {customerMode === 'existing' && (
                     <div>
                       <Label className="text-sm">Select Customer *</Label>
-                      <Select value={formData.customer_id} onValueChange={handleCustomerSelect}>
-                        <SelectTrigger className="mt-1">
-                          <SelectValue placeholder="Search and select customer" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {customers.map(c => (
-                            <SelectItem key={c.id} value={c.id}>
-                              <div className="flex flex-wrap items-center gap-1 sm:gap-2">
-                                <span className="font-medium text-sm">{c.customer_name || c.name}</span>
-                                <Badge variant="outline" className="text-xs">{c.connection_type || c.category}</Badge>
-                                {(c.phone || c.consumer_no) && <span className="text-slate-500 text-xs">({c.phone || c.consumer_no})</span>}
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <SearchableSelect
+                        options={customers.map(c => ({
+                          ...c,
+                          display_name: c.customer_name || c.name,
+                          display_info: `${c.connection_type || c.category} • ${c.phone || c.consumer_no || ''}`
+                        }))}
+                        value={formData.customer_id}
+                        onChange={handleCustomerSelect}
+                        placeholder="Type to search customer..."
+                        labelField="display_name"
+                        valueField="id"
+                        searchFields={['display_name', 'phone', 'consumer_no', 'address']}
+                        className="mt-1"
+                        emptyMessage="No customers found"
+                      />
                     </div>
                   )}
 
