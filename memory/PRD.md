@@ -106,14 +106,25 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] **Fields Disabled After Selection** - Customer fields become read-only after selection to prevent accidental edits
 - [x] **Quick Refill Feature** - One-click refill for top 8 frequent customers with pre-filled data (amount, payment mode)
 - [x] **Payment Mode Support** - Cash, Online, Pending
-- [x] **Summary Cards** - Cash Collection, Online Collection, Pending Collection, Total Collection with entry/refill counts
+- [x] **Summary Cards** - Cash Collection, Online Collection, Pending Collection, Accessory Sales, Grand Total (combined cylinder + accessory)
+- [x] **Accessory Sales Integration** - Accessory sales shown in summary card and merged into main sales table with "Accessory" badge
+- [x] **Combined Sales Table** - Unified view of cylinder and accessory sales sorted by date, with type badges
+- [x] **Grand Total Card** - Shows combined total (Cylinder + Accessory amounts) with breakdown
 - [x] **Filtering** - By warehouse (admin), payment mode, date range (Today/Week/Month/Year/Custom)
 - [x] **Search** - Search by consumer, memo
-- [x] **PDF/Excel Export** - Export sales data with applied filters including connection type filter
+- [x] **PDF/Excel Export** - Export consolidated sales data (cylinder + accessory) with section subtotals and grand total
 - [x] **Export Connection Type Filter** - Filter exports by: All Types, Domestic New Connection, Commercial New Connection, Domestic Refill, Commercial Refill
 - [x] **Edit Entry** - Update existing sales entries
 - [x] **Delete Entry** - Remove sales entries with confirmation
 - [x] **Role-Based Access** - Admin sees all warehouses; managers/sales executives see their assigned warehouse only
+
+### LPG Accessories Sales Module (March 2026)
+- [x] **Accessory Sales Page** - Dedicated page for creating/viewing accessory sales
+- [x] **Multi-Item Sales** - Sales entries with multiple accessory items, quantities, and unit prices
+- [x] **Memo No Field** - Memo number tracking for accessory sales
+- [x] **Automatic Inventory Deduction** - Stock auto-deducted when accessory sale is created
+- [x] **Dedicated Exports** - PDF and Excel exports for accessory-only reports
+- [x] **Integrated in Main Dashboard** - Accessory sales data shown in main Sales Dashboard summary cards and table
 
 ### Sales Executive Role (Dec 2025)
 - [x] **New User Role** - sales_executive with restricted access
@@ -298,12 +309,18 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 
 ## PENDING/FUTURE TASKS
 
+### P0 (Complete)
+- [x] Integrate Accessory Sales into Main Sales Dashboard (March 13, 2026)
+
 ### P1 (Important)
+- [ ] Complete Dynamic Search Integration - Add SearchBar.jsx to SalesDashboard, Reports, and all remaining data tables
 - [ ] Admin UI to add new warehouses with credentials
 - [ ] Admin UI to add new inventory stock items
 - [ ] Sync warehouse 'refilling at plant' to Plant Hollongi's received empties
 
 ### P2 (Nice to Have)
+- [ ] Refactor backend/server.py into smaller modules using FastAPI APIRouter
+- [ ] Migrate client-side search to server-side for scalability
 - [ ] Integrate real SMS/WhatsApp provider (Twilio, MSG91, Meta) with Bulk Messaging
 - [ ] Weekly, Monthly, Yearly aggregated reports for dashboard
 - [ ] Dashboard charts/graphs using Recharts
@@ -366,4 +383,4 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 
 ---
 
-*Last Updated: March 1, 2026*
+*Last Updated: March 13, 2026*
