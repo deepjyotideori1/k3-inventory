@@ -1,0 +1,75 @@
+{
+  "summary": "Sales Dashboard Accessory Integration - ALL TESTS PASSED. All requested features are working correctly. Backend APIs return correct data. Frontend displays 5 summary cards with Grand Total combining cylinder + accessory sales. Export PDF/Excel include accessory sales sections.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "SalesDashboard table",
+        "issues": ["Minor React hydration warnings in console (span inside table elements) - does not affect functionality"]
+      }
+    ]
+  },
+  "passed_tests": [
+    "Backend: /api/accessory-sales-summary returns total_sales, total_amount, cash/online/pending amounts",
+    "Backend: /api/accessory-sales-summary supports date filtering",
+    "Backend: /api/accessory-sales returns list of accessory sales entries",
+    "Backend: /api/sales-entries returns cylinder sales entries",
+    "Backend: /api/sales-entries/summary returns cash, online, pending, total breakdowns",
+    "Backend: /api/export/sales-pdf returns valid PDF with accessory section",
+    "Backend: /api/export/sales-pdf supports date and payment mode filtering",
+    "Backend: /api/export/sales-excel returns valid Excel with accessory section",
+    "Backend: /api/export/sales-excel supports date and connection type filtering",
+    "Backend: Sales exec can access accessory summary for their warehouse",
+    "Backend: Sales exec can export PDF with accessory data",
+    "Frontend: Sales Dashboard shows 5 summary cards (Cash, Online, Pending, Accessory, Grand Total)",
+    "Frontend: Grand Total card shows ₹1,12,180 = Cylinder ₹97,235 + Accessory ₹14,945",
+    "Frontend: Accessory Sales card shows 2 sales · 61 items",
+    "Frontend: Table header shows '21 cylinder' and '2 accessory' badges",
+    "Frontend: Accessory rows have orange 'Accessory' badge in Type column",
+    "Frontend: Accessory rows show '-' in Refills column",
+    "Frontend: Accessory rows show '-' in Actions column (no edit/delete buttons)",
+    "Frontend: Cylinder rows have edit/delete buttons in Actions column",
+    "Frontend: Table TOTAL row shows combined grand total ₹1,12,180",
+    "Frontend: Export dialog has Date Range and Connection Type filters",
+    "Frontend: Export dialog has Download PDF and Download Excel buttons"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_sales_accessory_integration.py",
+    "/app/test_reports/pytest/pytest_sales_accessory.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Minor: React hydration warnings due to span elements wrapping table rows/cells in dev mode - this is a development tooling artifact and does not affect production builds"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_sales_accessory_integration.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "100%"
+  },
+  "test_credentials": {
+    "admin": "admin@k3gas.com / Admin@123",
+    "sales_exec": "sales@k3gas.com / Sales@123"
+  },
+  "seed_data_creation": "No new data created - used existing sales and accessory sales data",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Sales Dashboard accessory integration is COMPLETE. All 5 summary cards display correctly. Grand Total combines cylinder (₹97,235) + accessory (₹14,945) = ₹1,12,180. Combined table shows both entry types with proper badges and action handling. Export APIs include accessory sections with CYL TOTAL, ACC TOTAL, and GRAND TOTAL rows.",
+  "tested_features_summary": {
+    "summary_cards_count": "5 cards - Cash Collection, Online Collection, Pending Collection, Accessory Sales, Grand Total",
+    "grand_total_calculation": "CORRECT - ₹1,12,180 = ₹97,235 (cylinder) + ₹14,945 (accessory)",
+    "accessory_sales_card": "CORRECT - Shows 2 sales, 61 items, ₹14,945",
+    "combined_table": "CORRECT - Shows 21 cylinder + 2 accessory entries sorted by date",
+    "accessory_row_styling": "CORRECT - Orange Accessory badge, '-' for refills, '-' for actions",
+    "table_header_badges": "CORRECT - Shows '21 cylinder' and '2 accessory' badges",
+    "table_total_row": "CORRECT - Shows combined ₹1,12,180 and 38 refills",
+    "export_pdf": "WORKING - Includes accessory section with CYL TOTAL, ACC TOTAL, GRAND TOTAL",
+    "export_excel": "WORKING - Includes accessory section with CYL TOTAL, ACC TOTAL, GRAND TOTAL"
+  }
+}

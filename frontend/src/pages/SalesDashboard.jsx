@@ -14,7 +14,9 @@ import {
   exportSalesSummaryExcel,
   getWarehouses,
   getCustomers,
-  getFrequentCustomers
+  getFrequentCustomers,
+  getAccessorySales,
+  getAccessorySalesSummary
 } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -50,7 +52,9 @@ import {
   Zap,
   Repeat,
   Star,
-  BarChart3
+  BarChart3,
+  ShoppingBag,
+  Package
 } from 'lucide-react';
 import { formatDate, formatINR } from '../lib/utils';
 import { toast } from 'sonner';
@@ -80,6 +84,16 @@ const SalesDashboard = () => {
     amount: '',
     payment_mode: 'cash',
     remarks: ''
+  });
+  
+  // Accessory Sales State
+  const [accessorySales, setAccessorySales] = useState([]);
+  const [accessorySummary, setAccessorySummary] = useState({
+    total_sales: 0,
+    total_amount: 0,
+    cash_amount: 0,
+    pending_amount: 0,
+    online_amount: 0
   });
 
   // Filters
@@ -181,17 +195,21 @@ const SalesDashboard = () => {
       if (endDate) params.end_date = endDate;
       if (searchQuery) params.search = searchQuery;
 
-      const [entriesRes, summaryRes, customersRes, frequentRes] = await Promise.all([
+      const [entriesRes, summaryRes, customersRes, frequentRes, accSalesRes, accSummaryRes] = await Promise.all([
         getSalesEntries(params),
         getSalesSummary(params),
         getCustomers(),
-        getFrequentCustomers(8)
+        getFrequentCustomers(8),
+        getAccessorySales({ start_date: startDate, end_date: endDate, warehouse_id: isAdmin && filterWarehouse !== 'all' ? filterWarehouse : undefined }),
+        getAccessorySalesSummary({ start_date: startDate, end_date: endDate })
       ]);
       
       setEntries(entriesRes.data);
       setSummary(summaryRes.data);
       setCustomers(customersRes.data);
       setFrequentCustomers(frequentRes.data);
+      setAccessorySales(accSalesRes.data || []);
+      setAccessorySummary(accSummaryRes.data || { total_sales: 0, total_amount: 0, cash_amount: 0, pending_amount: 0, online_amount: 0 });
 
       if (isAdmin && warehouses.length === 0) {
         const warehousesRes = await getWarehouses();
@@ -549,6 +567,8 @@ const SalesDashboard = () => {
         return <Badge className="bg-purple-100 text-purple-800"><Building2 className="w-3 h-3 mr-1" />Commercial</Badge>;
       case 'commercial_refill':
         return <Badge className="bg-indigo-100 text-indigo-800"><Building2 className="w-3 h-3 mr-1" />Commercial Refill</Badge>;
+      case 'accessory':
+        return <Badge className="bg-orange-100 text-orange-800"><ShoppingBag className="w-3 h-3 mr-1" />Accessory</Badge>;
       default:
         return <Badge variant="outline">{type}</Badge>;
     }
@@ -579,6 +599,36 @@ const SalesDashboard = () => {
       refills: acc.refills + (e.no_of_refills || 0)
     }), { amount: 0, refills: 0 });
   }, [entries]);
+
+  // Combined entries: merge cylinder + accessory sales for unified table
+  const combinedEntries = useMemo(() => {
+    const cylinderRows = entries.map(e => ({ ...e, sale_type: 'cylinder' }));
+    const accessoryRows = accessorySales.map(s => ({
+      id: s.id,
+      date: s.date,
+      consumer_name: s.customer_name || '',
+      address: s.customer_address || '',
+      consumer_no: s.customer_phone || '',
+      connection_type: 'accessory',
+      memo_no: s.memo_no || '',
+      amount: s.grand_total || 0,
+      payment_mode: s.payment_mode || '',
+      no_of_refills: 0,
+      cylinder_nos: '',
+      remarks: (s.items || []).map(i => `${i.accessory_name} x${i.quantity}`).join(', '),
+      warehouse_name: s.warehouse_name || '',
+      sale_type: 'accessory'
+    }));
+    // Sort combined by date descending
+    return [...cylinderRows, ...accessoryRows].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  }, [entries, accessorySales]);
+
+  const combinedTotals = useMemo(() => {
+    return combinedEntries.reduce((acc, e) => ({
+      amount: acc.amount + (e.amount || 0),
+      refills: acc.refills + (e.no_of_refills || 0)
+    }), { amount: 0, refills: 0 });
+  }, [combinedEntries]);
 
   if (loading) {
     return (
@@ -1115,59 +1165,63 @@ const SalesDashboard = () => {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200" data-testid="cash-collection-card">
             <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-green-600 font-medium flex items-center gap-1">
-                    <Banknote className="w-4 h-4" /> Cash Collection
-                  </p>
-                  <p className="text-2xl font-bold text-green-800">{formatINR(summary.cash.amount)}</p>
-                  <p className="text-xs text-green-600">{summary.cash.count} entries · {summary.cash.refills} refills</p>
-                </div>
+              <div>
+                <p className="text-sm text-green-600 font-medium flex items-center gap-1">
+                  <Banknote className="w-4 h-4" /> Cash Collection
+                </p>
+                <p className="text-2xl font-bold text-green-800">{formatINR(summary.cash.amount)}</p>
+                <p className="text-xs text-green-600">{summary.cash.count} entries · {summary.cash.refills} refills</p>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+          <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200" data-testid="online-collection-card">
             <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-blue-600 font-medium flex items-center gap-1">
-                    <CreditCard className="w-4 h-4" /> Online Collection
-                  </p>
-                  <p className="text-2xl font-bold text-blue-800">{formatINR(summary.online.amount)}</p>
-                  <p className="text-xs text-blue-600">{summary.online.count} entries · {summary.online.refills} refills</p>
-                </div>
+              <div>
+                <p className="text-sm text-blue-600 font-medium flex items-center gap-1">
+                  <CreditCard className="w-4 h-4" /> Online Collection
+                </p>
+                <p className="text-2xl font-bold text-blue-800">{formatINR(summary.online.amount)}</p>
+                <p className="text-xs text-blue-600">{summary.online.count} entries · {summary.online.refills} refills</p>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-amber-50 to-amber-100 border-amber-200">
+          <Card className="bg-gradient-to-br from-amber-50 to-amber-100 border-amber-200" data-testid="pending-collection-card">
             <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-amber-600 font-medium flex items-center gap-1">
-                    <Clock className="w-4 h-4" /> Pending Collection
-                  </p>
-                  <p className="text-2xl font-bold text-amber-800">{formatINR(summary.pending.amount)}</p>
-                  <p className="text-xs text-amber-600">{summary.pending.count} entries · {summary.pending.refills} refills</p>
-                </div>
+              <div>
+                <p className="text-sm text-amber-600 font-medium flex items-center gap-1">
+                  <Clock className="w-4 h-4" /> Pending Collection
+                </p>
+                <p className="text-2xl font-bold text-amber-800">{formatINR(summary.pending.amount)}</p>
+                <p className="text-xs text-amber-600">{summary.pending.count} entries · {summary.pending.refills} refills</p>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
+          <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200" data-testid="accessory-collection-card">
             <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-purple-600 font-medium flex items-center gap-1">
-                    <TrendingUp className="w-4 h-4" /> Total Collection
-                  </p>
-                  <p className="text-2xl font-bold text-purple-800">{formatINR(summary.total.amount)}</p>
-                  <p className="text-xs text-purple-600">{summary.total.count} entries · {summary.total.refills} refills</p>
-                </div>
+              <div>
+                <p className="text-sm text-orange-600 font-medium flex items-center gap-1">
+                  <ShoppingBag className="w-4 h-4" /> Accessory Sales
+                </p>
+                <p className="text-2xl font-bold text-orange-800">{formatINR(accessorySummary.total_amount)}</p>
+                <p className="text-xs text-orange-600">{accessorySummary.total_sales} sales · {accessorySummary.total_quantity || 0} items</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200" data-testid="total-collection-card">
+            <CardContent className="p-4">
+              <div>
+                <p className="text-sm text-purple-600 font-medium flex items-center gap-1">
+                  <TrendingUp className="w-4 h-4" /> Grand Total
+                </p>
+                <p className="text-2xl font-bold text-purple-800">{formatINR(summary.total.amount + accessorySummary.total_amount)}</p>
+                <p className="text-xs text-purple-600">Cylinder: {formatINR(summary.total.amount)} · Accessory: {formatINR(accessorySummary.total_amount)}</p>
               </div>
             </CardContent>
           </Card>
@@ -1429,9 +1483,16 @@ const SalesDashboard = () => {
                 <TableIcon className="w-5 h-5 text-green-700" />
                 Sales Entries
               </span>
-              <Badge variant="outline" className="text-green-700 border-green-700">
-                {entries.length} entries
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="text-green-700 border-green-700">
+                  {entries.length} cylinder
+                </Badge>
+                {accessorySales.length > 0 && (
+                  <Badge variant="outline" className="text-orange-700 border-orange-700">
+                    {accessorySales.length} accessory
+                  </Badge>
+                )}
+              </div>
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
@@ -1455,7 +1516,7 @@ const SalesDashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {entries.length === 0 ? (
+                  {combinedEntries.length === 0 ? (
                     <tr>
                       <td colSpan={isAdmin ? 13 : 12} className="text-center py-8 text-slate-500">
                         No sales entries found
@@ -1463,8 +1524,8 @@ const SalesDashboard = () => {
                     </tr>
                   ) : (
                     <>
-                      {entries.map((entry, index) => (
-                        <tr key={entry.id}>
+                      {combinedEntries.map((entry, index) => (
+                        <tr key={entry.id} className={entry.sale_type === 'accessory' ? 'bg-orange-50/40' : ''}>
                           <td className="text-center font-medium">{index + 1}</td>
                           <td>{entry.date}</td>
                           <td className="font-medium">{entry.consumer_name}</td>
@@ -1481,37 +1542,41 @@ const SalesDashboard = () => {
                           <td>{entry.memo_no || '-'}</td>
                           <td className="font-semibold text-green-700">{formatINR(entry.amount)}</td>
                           <td>{getPaymentBadge(entry.payment_mode)}</td>
-                          <td className="text-center">{entry.no_of_refills || 0}</td>
+                          <td className="text-center">{entry.sale_type === 'accessory' ? '-' : (entry.no_of_refills || 0)}</td>
                           <td className="max-w-[120px] truncate">{entry.remarks || '-'}</td>
                           {isAdmin && <td><Badge variant="outline">{entry.warehouse_name}</Badge></td>}
                           <td>
-                            <div className="flex items-center gap-1">
-                              <Button 
-                                variant="ghost" 
-                                size="icon"
-                                onClick={() => handleEditEntry(entry)}
-                                title="Edit"
-                              >
-                                <Edit2 className="w-4 h-4 text-blue-600" />
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="icon"
-                                onClick={() => handleDeleteEntry(entry.id)}
-                                title="Delete"
-                              >
-                                <Trash2 className="w-4 h-4 text-red-500" />
-                              </Button>
-                            </div>
+                            {entry.sale_type === 'cylinder' ? (
+                              <div className="flex items-center gap-1">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => handleEditEntry(entry)}
+                                  title="Edit"
+                                >
+                                  <Edit2 className="w-4 h-4 text-blue-600" />
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => handleDeleteEntry(entry.id)}
+                                  title="Delete"
+                                >
+                                  <Trash2 className="w-4 h-4 text-red-500" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-slate-400">-</span>
+                            )}
                           </td>
                         </tr>
                       ))}
                       {/* Total Row */}
                       <tr className="bg-green-50 font-bold">
                         <td colSpan={7} className="text-right">TOTAL:</td>
-                        <td className="text-green-800">{formatINR(filteredTotals.amount)}</td>
+                        <td className="text-green-800">{formatINR(combinedTotals.amount)}</td>
                         <td></td>
-                        <td className="text-center">{filteredTotals.refills}</td>
+                        <td className="text-center">{combinedTotals.refills}</td>
                         <td colSpan={isAdmin ? 3 : 2}></td>
                       </tr>
                     </>
