@@ -1635,7 +1635,7 @@ const SalesDashboard = () => {
                   <Label className="text-sm">Connection Type</Label>
                   <Select 
                     value={editForm.connection_type || 'domestic'} 
-                    onValueChange={(v) => setEditForm({ ...editForm, connection_type: v, cylinder_nos: v.includes('refill') ? editForm.cylinder_nos : '' })}
+                    onValueChange={(v) => setEditForm({ ...editForm, connection_type: v, cylinder_nos: v.includes('refill') ? '' : editForm.cylinder_nos, no_of_refills: v.includes('refill') ? editForm.no_of_refills : '' })}
                   >
                     <SelectTrigger className="mt-1">
                       <SelectValue />
@@ -1659,10 +1659,10 @@ const SalesDashboard = () => {
                 </div>
               </div>
 
-              {/* Cylinder Nos for refill types */}
-              {(editForm.connection_type === 'domestic_refill' || editForm.connection_type === 'commercial_refill') && (
+              {/* Cylinder Nos for new connection types */}
+              {(editForm.connection_type === 'domestic' || editForm.connection_type === 'commercial') && (
                 <div>
-                  <Label className="text-sm">Cylinder Nos. *</Label>
+                  <Label className="text-sm">Cylinder Nos.</Label>
                   <Input 
                     value={editForm.cylinder_nos || ''}
                     onChange={(e) => setEditForm({ ...editForm, cylinder_nos: e.target.value })}
