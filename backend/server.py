@@ -4360,8 +4360,8 @@ async def export_sales_pdf(
     
     elements.append(Spacer(1, 5))
     
-    # Table data - include both Cylinder Nos and Refills
-    data = [['SL', 'Date', 'Consumer', 'Address', 'Cons.No', 'Type', 'Amount', 'Mode', 'Cyl Nos', 'Refills']]
+    # Table data - include Memo No, Cylinder Nos and Refills
+    data = [['SL', 'Date', 'Consumer', 'Address', 'Cons.No', 'Memo No', 'Type', 'Amount', 'Mode', 'Cyl Nos', 'Refills']]
     
     total_amount = 0
     total_refills = 0
@@ -4384,6 +4384,7 @@ async def export_sales_pdf(
             e['consumer_name'][:16] if len(e.get('consumer_name', '')) > 16 else e.get('consumer_name', ''),
             e.get('address', '')[:14] if len(e.get('address', '')) > 14 else e.get('address', ''),
             e.get('consumer_no', ''),
+            e.get('memo_no', ''),
             conn_type[:8].replace('_', ' ').title(),
             format_inr(e.get('amount', 0)),
             e.get('payment_mode', 'cash')[:4].title(),
@@ -4395,12 +4396,12 @@ async def export_sales_pdf(
             total_refills += e.get('no_of_refills', 0)
     
     # Add total row with cylinder count and refills
-    data.append(['', '', '', '', '', 'CYL TOTAL:', format_inr(total_amount), '', str(total_cylinders), str(total_refills)])
+    data.append(['', '', '', '', '', '', 'CYL TOTAL:', format_inr(total_amount), '', str(total_cylinders), str(total_refills)])
     
     # Add accessory sales section
     acc_total_amount = 0
     if acc_sales:
-        data.append(['', '', '', '', '', '--- ACCESSORY SALES ---', '', '', '', ''])
+        data.append(['', '', '', '', '', '', '--- ACCESSORY SALES ---', '', '', '', ''])
         for j, s in enumerate(acc_sales, 1):
             items_desc = ', '.join([f"{i.get('accessory_name', '')} x{i.get('quantity', 0)}" for i in s.get('items', [])])
             amt = s.get('grand_total', 0)
@@ -4410,21 +4411,22 @@ async def export_sales_pdf(
                 (s.get('customer_name', '')[:16] if len(s.get('customer_name', '')) > 16 else s.get('customer_name', '')),
                 (s.get('customer_address', '')[:14] if len(s.get('customer_address', '')) > 14 else s.get('customer_address', '')),
                 s.get('customer_phone', ''),
+                s.get('memo_no', ''),
                 'Accessory',
                 format_inr(amt),
                 (s.get('payment_mode', 'cash')[:4].title()),
-                s.get('memo_no', '-'),
+                '-',
                 '-'
             ])
             acc_total_amount += amt
-        data.append(['', '', '', '', '', 'ACC TOTAL:', format_inr(acc_total_amount), '', '', ''])
+        data.append(['', '', '', '', '', '', 'ACC TOTAL:', format_inr(acc_total_amount), '', '', ''])
     
     # Grand total row
     grand_total = total_amount + acc_total_amount
-    data.append(['', '', '', '', '', 'GRAND TOTAL:', format_inr(grand_total), '', str(total_cylinders), str(total_refills)])
+    data.append(['', '', '', '', '', '', 'GRAND TOTAL:', format_inr(grand_total), '', str(total_cylinders), str(total_refills)])
     
-    # Create table - fit A4 landscape
-    col_widths = [22, 52, 95, 80, 60, 55, 60, 40, 50, 40]
+    # Create table - fit A4 landscape (11 columns now with Memo No)
+    col_widths = [22, 50, 80, 65, 52, 42, 48, 52, 36, 42, 36]
     table = Table(data, colWidths=col_widths, repeatRows=1)
     
     # Determine style rows
@@ -4536,8 +4538,8 @@ async def export_sales_excel(
     ws = wb.active
     ws.title = "Sales Data"
     
-    # Headers with clear form heads - include both Cylinder Nos and Refills
-    headers = ['SL No.', 'Date', 'Consumer Name', 'Address', 'Consumer No.', 'Type', 'Amount (₹)', 'Payment Mode', 'Cylinder Nos', 'No. of Refills', 'Remarks']
+    # Headers with clear form heads - include Memo No, Cylinder Nos and Refills
+    headers = ['SL No.', 'Date', 'Consumer Name', 'Address', 'Consumer No.', 'Memo No.', 'Type', 'Amount (Rs.)', 'Payment Mode', 'Cylinder Nos', 'No. of Refills', 'Remarks']
     ws.append(headers)
     
     # Style headers
@@ -4568,6 +4570,7 @@ async def export_sales_excel(
             e.get('consumer_name', ''),
             e.get('address', ''),
             e.get('consumer_no', ''),
+            e.get('memo_no', ''),
             conn_type.replace('_', ' ').title(),
             format_inr(e.get('amount', 0)),
             e.get('payment_mode', 'cash').capitalize(),
@@ -4581,7 +4584,7 @@ async def export_sales_excel(
     
     # Add cylinder total row
     cyl_total_row = len(entries) + 2
-    ws.append(['', '', '', '', '', 'CYL TOTAL:', format_inr(total_amount), '', total_cylinders, total_refills, ''])
+    ws.append(['', '', '', '', '', '', 'CYL TOTAL:', format_inr(total_amount), '', total_cylinders, total_refills, ''])
     
     # Style cylinder total row
     total_fill = PatternFill(start_color="f0fdf4", end_color="f0fdf4", fill_type="solid")
@@ -4595,7 +4598,7 @@ async def export_sales_excel(
     if acc_sales_excel:
         # Section header
         acc_header_row_num = cyl_total_row + 1
-        ws.append(['', '', '', '', '', '--- ACCESSORY SALES ---', '', '', '', '', ''])
+        ws.append(['', '', '', '', '', '', '--- ACCESSORY SALES ---', '', '', '', '', ''])
         acc_header_fill = PatternFill(start_color="fff7ed", end_color="fff7ed", fill_type="solid")
         for cell in ws[acc_header_row_num]:
             cell.fill = acc_header_fill
@@ -4610,10 +4613,11 @@ async def export_sales_excel(
                 s.get('customer_name', ''),
                 s.get('customer_address', ''),
                 s.get('customer_phone', ''),
+                s.get('memo_no', ''),
                 'Accessory',
                 format_inr(amt),
                 s.get('payment_mode', 'cash').capitalize(),
-                s.get('memo_no', '-'),
+                '-',
                 '-',
                 items_desc
             ])
@@ -4621,7 +4625,7 @@ async def export_sales_excel(
         
         # Accessory total row
         acc_total_row_num = acc_header_row_num + len(acc_sales_excel) + 1
-        ws.append(['', '', '', '', '', 'ACC TOTAL:', format_inr(acc_total_amount_excel), '', '', '', ''])
+        ws.append(['', '', '', '', '', '', 'ACC TOTAL:', format_inr(acc_total_amount_excel), '', '', '', ''])
         for cell in ws[acc_total_row_num]:
             cell.fill = acc_header_fill
             cell.font = Font(bold=True)
@@ -4629,14 +4633,14 @@ async def export_sales_excel(
     # Grand total row
     grand_total_row_num = ws.max_row + 1
     grand_total_excel = total_amount + acc_total_amount_excel
-    ws.append(['', '', '', '', '', 'GRAND TOTAL:', format_inr(grand_total_excel), '', total_cylinders, total_refills, ''])
+    ws.append(['', '', '', '', '', '', 'GRAND TOTAL:', format_inr(grand_total_excel), '', total_cylinders, total_refills, ''])
     grand_fill = PatternFill(start_color="ede9fe", end_color="ede9fe", fill_type="solid")
     for cell in ws[grand_total_row_num]:
         cell.fill = grand_fill
         cell.font = Font(bold=True)
     
     # Adjust column widths
-    column_widths = [8, 12, 25, 18, 14, 14, 12, 14, 12, 12, 18]
+    column_widths = [8, 12, 25, 18, 14, 12, 14, 12, 14, 12, 12, 18]
     for i, width in enumerate(column_widths, 1):
         ws.column_dimensions[chr(64 + i)].width = width
     
