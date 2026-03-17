@@ -236,6 +236,19 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] **Refill Status Export** - PDF and Excel reports with color-coded days, summary stats (total, recent, moderate, overdue, no history)
 - [x] **Export Buttons** - "Refill PDF" and "Refill Excel" on Customer Dashboard
 
+### Dashboard Analytics - Connections & Refills (March 2026)
+- [x] **Analytics Tab** on Dashboard with chart icon
+- [x] **Time Period Filters**: Daily, Monthly, Quarterly, Yearly, Custom Range
+- [x] **Warehouse Filter**: All Warehouses or individual warehouse selection
+- [x] **New Connections Summary Cards**: Total New, Domestic New, Commercial New with cylinder counts
+- [x] **Refill Activity Summary Cards**: Total Refills, Domestic Refills, Commercial Refills with cylinder counts
+- [x] **Warehouse Breakdown Table**: Per-warehouse metrics with totals
+- [x] **Date-wise Breakdown Table**: Per-date metrics with TOTAL row
+- [x] **PDF Export**: Full report with summary and date-wise breakdown
+- [x] **Excel Export**: 3-sheet workbook (Summary, Date-wise, Warehouse Breakdown)
+- [x] **Role-based Access**: Non-admin users auto-filtered to their warehouse
+- [x] **Data Integrity**: Uses sales_entries (completed transactions), excludes pending/cancelled orders
+
 ### Order Cancellation Feature (March 2026)
 - [x] **Cancel Order Status** - New "Cancelled" status alongside Pending and Delivered
 - [x] **Confirmation Dialog** - Modal with optional cancellation reason textarea before cancelling
