@@ -3603,8 +3603,7 @@ async def get_customers_refill_status(
     # Get last refill for each customer from sales_entries (only refill types)
     pipeline = [
         {'$match': {
-            'customer_id': {'$in': customer_ids},
-            'connection_type': {'$regex': 'refill', '$options': 'i'}
+            'customer_id': {'$in': customer_ids}
         }},
         {'$sort': {'date': -1}},
         {'$group': {
@@ -3685,7 +3684,7 @@ async def get_customer_last_refill(
     
     # Find the last refill entry
     last_refill = await db.sales_entries.find_one(
-        {'customer_id': customer_id, 'connection_type': {'$regex': 'refill', '$options': 'i'}},
+        {'customer_id': customer_id},
         {'_id': 0},
         sort=[('date', -1)]
     )
@@ -3731,7 +3730,7 @@ async def export_customer_refill_pdf(
     customer_ids = [c['id'] for c in customers_list]
     
     pipeline = [
-        {'$match': {'customer_id': {'$in': customer_ids}, 'connection_type': {'$regex': 'refill', '$options': 'i'}}},
+        {'$match': {'customer_id': {'$in': customer_ids}}},
         {'$sort': {'date': -1}},
         {'$group': {'_id': '$customer_id', 'last_refill_date': {'$first': '$date'}, 'total_refills': {'$sum': '$no_of_refills'}}}
     ]
@@ -3857,7 +3856,7 @@ async def export_customer_refill_excel(
     customer_ids = [c['id'] for c in customers_list]
     
     pipeline = [
-        {'$match': {'customer_id': {'$in': customer_ids}, 'connection_type': {'$regex': 'refill', '$options': 'i'}}},
+        {'$match': {'customer_id': {'$in': customer_ids}}},
         {'$sort': {'date': -1}},
         {'$group': {'_id': '$customer_id', 'last_refill_date': {'$first': '$date'}, 'total_refills': {'$sum': '$no_of_refills'}}}
     ]
