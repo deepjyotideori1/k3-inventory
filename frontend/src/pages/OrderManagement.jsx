@@ -15,7 +15,8 @@ import {
   getCustomers,
   createCustomer,
   createCustomerForWarehouse,
-  getWarehouses
+  getWarehouses,
+  getCustomerLastRefill
 } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -53,7 +54,9 @@ import {
   Hash,
   CheckCircle2,
   Package,
-  Truck
+  Truck,
+  AlertTriangle,
+  Flame
 } from 'lucide-react';
 import { getTodayDate, formatDate, getDateRange } from '../lib/utils';
 import { toast } from 'sonner';
@@ -97,6 +100,10 @@ const OrderManagement = () => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState(null);
   const [editForm, setEditForm] = useState({});
+  
+  // Last refill info
+  const [lastRefill, setLastRefill] = useState(null);
+  const [loadingRefill, setLoadingRefill] = useState(false);
   
   // Filters
   const [dateRange, setDateRange] = useState('daily');
@@ -181,21 +188,35 @@ const OrderManagement = () => {
     setEndDate(range.end);
   };
 
-  const handleCustomerSelect = (customerId) => {
+  const handleCustomerSelect = async (customerId) => {
     const customer = customers.find(c => c.id === customerId);
     if (customer) {
-      // Auto-fill customer info from bulk uploaded data
-      // Keep the refill connection type since existing customers are for refills
       setFormData({
         ...formData,
         customer_id: customerId,
         customer_name: customer.customer_name || '',
         mobile_number: customer.phone || customer.consumer_no || '',
         address_landmark: customer.address || '',
-        // Keep the current connection_type (refill type) - don't override from customer data
         remarks: customer.remarks || ''
       });
+      // Fetch last refill info
+      setLoadingRefill(true);
+      try {
+        const res = await getCustomerLastRefill(customerId);
+        setLastRefill(res.data);
+      } catch {
+        setLastRefill(null);
+      } finally {
+        setLoadingRefill(false);
+      }
     }
+  };
+
+  const getRefillBadge = (days) => {
+    if (days === null || days === undefined) return null;
+    if (days <= 15) return <Badge className="bg-green-100 text-green-800 text-xs">Recently Refilled</Badge>;
+    if (days <= 30) return <Badge className="bg-yellow-100 text-yellow-800 text-xs">Moderate Gap</Badge>;
+    return <Badge className="bg-red-100 text-red-800 text-xs"><AlertTriangle className="w-3 h-3 mr-1" />Overdue</Badge>;
   };
 
   const handleSubmit = async (e) => {
@@ -663,6 +684,7 @@ const OrderManagement = () => {
                     </div>
 
                     {useExistingCustomer ? (
+                      <>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                         <div>
                           <Label className="text-sm">Filter by Category</Label>
@@ -697,6 +719,47 @@ const OrderManagement = () => {
                           </Select>
                         </div>
                       </div>
+
+                      {/* Last Refill Info Panel */}
+                      {formData.customer_id && (
+                        <div className="mt-3 p-3 rounded-lg border" data-testid="last-refill-panel"
+                          style={{ 
+                            backgroundColor: loadingRefill ? '#f8fafc' : 
+                              !lastRefill?.has_refill ? '#f1f5f9' :
+                              lastRefill.days_since_refill <= 15 ? '#f0fdf4' :
+                              lastRefill.days_since_refill <= 30 ? '#fefce8' : '#fef2f2',
+                            borderColor: loadingRefill ? '#e2e8f0' :
+                              !lastRefill?.has_refill ? '#cbd5e1' :
+                              lastRefill.days_since_refill <= 15 ? '#bbf7d0' :
+                              lastRefill.days_since_refill <= 30 ? '#fef08a' : '#fecaca'
+                          }}
+                        >
+                          <div className="flex items-center gap-2 text-sm">
+                            <Flame className="w-4 h-4 text-orange-500" />
+                            <span className="font-medium text-slate-700">Last LPG Refill:</span>
+                            {loadingRefill ? (
+                              <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
+                            ) : !lastRefill?.has_refill ? (
+                              <span className="text-slate-500 italic">No refill history available</span>
+                            ) : (
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-semibold">
+                                  {(() => { try { return new Date(lastRefill.last_refill_date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }); } catch { return lastRefill.last_refill_date; } })()}
+                                </span>
+                                <span className="text-slate-500">|</span>
+                                <span className="font-semibold">{lastRefill.days_since_refill} days ago</span>
+                                {getRefillBadge(lastRefill.days_since_refill)}
+                                {lastRefill.days_since_refill > 30 && (
+                                  <span className="text-red-600 text-xs font-medium flex items-center gap-1">
+                                    <AlertTriangle className="w-3 h-3" /> Refill Alert!
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </>
                     ) : (
                       <div className="flex flex-wrap items-center gap-2">
                         <Button 

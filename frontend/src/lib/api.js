@@ -409,6 +409,32 @@ export const deleteCustomer = (customerId) => api.delete(`/customers/${customerI
 export const bulkUploadCustomers = (data) => api.post('/customers/bulk', data);
 export const bulkUploadCustomersForWarehouse = (warehouseId, data) => api.post(`/customers/bulk/warehouse/${warehouseId}`, data);
 export const getCustomerSummary = () => api.get('/customers/summary');
+export const getCustomerRefillStatus = (params) => api.get('/customers/refill-status', { params });
+export const getCustomerLastRefill = (customerId) => api.get(`/customers/${customerId}/last-refill`);
+
+export const exportCustomerRefillPDF = async (params = {}) => {
+  const response = await api.get('/export/customer-refill-pdf', { params, responseType: 'blob' });
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', `customer_refill_status_${new Date().toISOString().split('T')[0]}.pdf`);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  return response;
+};
+
+export const exportCustomerRefillExcel = async (params = {}) => {
+  const response = await api.get('/export/customer-refill-excel', { params, responseType: 'blob' });
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', `customer_refill_status_${new Date().toISOString().split('T')[0]}.xlsx`);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  return response;
+};
 
 // Customer Sample Excel Template
 export const downloadCustomerTemplate = async () => {

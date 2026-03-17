@@ -1,5 +1,6 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -3578,6 +3579,388 @@ async def bulk_upload_customers_for_warehouse(
         await db.customers.insert_many(customers_to_insert)
     
     return {"message": f"Successfully uploaded {len(customers_to_insert)} customers to {warehouse['name']}", "count": len(customers_to_insert)}
+
+@api_router.get("/customers/refill-status")
+async def get_customers_refill_status(
+    warehouse_id: Optional[str] = None,
+    overdue_only: Optional[bool] = False,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get all customers with their last refill date and days since last refill"""
+    user = await get_current_user(credentials)
+    
+    query = {}
+    if user['role'] != 'admin':
+        query['warehouse_id'] = user.get('warehouse_id')
+    elif warehouse_id and warehouse_id != 'all':
+        query['warehouse_id'] = warehouse_id
+    
+    customers_list = await db.customers.find(query, {'_id': 0}).to_list(5000)
+    
+    # Get all customer IDs
+    customer_ids = [c['id'] for c in customers_list]
+    
+    # Get last refill for each customer from sales_entries (only refill types)
+    pipeline = [
+        {'$match': {
+            'customer_id': {'$in': customer_ids},
+            'connection_type': {'$regex': 'refill', '$options': 'i'}
+        }},
+        {'$sort': {'date': -1}},
+        {'$group': {
+            '_id': '$customer_id',
+            'last_refill_date': {'$first': '$date'},
+            'last_amount': {'$first': '$amount'},
+            'last_payment_mode': {'$first': '$payment_mode'},
+            'total_refills': {'$sum': '$no_of_refills'}
+        }}
+    ]
+    refill_data = await db.sales_entries.aggregate(pipeline).to_list(5000)
+    refill_map = {r['_id']: r for r in refill_data}
+    
+    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    result = []
+    for c in customers_list:
+        refill = refill_map.get(c['id'])
+        last_refill_date = refill['last_refill_date'] if refill else None
+        days_since = None
+        if last_refill_date:
+            try:
+                last_dt = datetime.strptime(last_refill_date, '%Y-%m-%d')
+                today_dt = datetime.strptime(today, '%Y-%m-%d')
+                days_since = (today_dt - last_dt).days
+            except:
+                days_since = None
+        
+        if overdue_only and (days_since is None or days_since < 30):
+            continue
+        
+        # Get warehouse name
+        warehouse = await db.warehouses.find_one({'id': c.get('warehouse_id')}, {'_id': 0})
+        
+        result.append({
+            'id': c['id'],
+            'customer_name': c.get('customer_name', ''),
+            'consumer_no': c.get('consumer_no', ''),
+            'phone': c.get('phone', ''),
+            'address': c.get('address', ''),
+            'connection_type': c.get('connection_type', ''),
+            'warehouse_id': c.get('warehouse_id', ''),
+            'warehouse_name': warehouse['name'] if warehouse else 'Unknown',
+            'last_refill_date': last_refill_date,
+            'days_since_refill': days_since,
+            'last_amount': refill['last_amount'] if refill else None,
+            'last_payment_mode': refill['last_payment_mode'] if refill else None,
+            'total_refills': refill['total_refills'] if refill else 0
+        })
+    
+    # Sort: overdue first, then by days_since descending
+    result.sort(key=lambda x: (x['days_since_refill'] is None, -(x['days_since_refill'] or 0)))
+    
+    # Summary stats
+    total = len(result)
+    recent = sum(1 for r in result if r['days_since_refill'] is not None and r['days_since_refill'] <= 15)
+    moderate = sum(1 for r in result if r['days_since_refill'] is not None and 15 < r['days_since_refill'] <= 30)
+    overdue_count = sum(1 for r in result if r['days_since_refill'] is not None and r['days_since_refill'] > 30)
+    no_history = sum(1 for r in result if r['days_since_refill'] is None)
+    
+    return {
+        'customers': result,
+        'summary': {
+            'total': total,
+            'recent': recent,
+            'moderate': moderate,
+            'overdue': overdue_count,
+            'no_history': no_history
+        }
+    }
+
+@api_router.get("/customers/{customer_id}/last-refill")
+async def get_customer_last_refill(
+    customer_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get last refill details for a specific customer"""
+    await get_current_user(credentials)
+    
+    # Find the last refill entry
+    last_refill = await db.sales_entries.find_one(
+        {'customer_id': customer_id, 'connection_type': {'$regex': 'refill', '$options': 'i'}},
+        {'_id': 0},
+        sort=[('date', -1)]
+    )
+    
+    if not last_refill:
+        return {'has_refill': False, 'message': 'No refill history available'}
+    
+    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    days_since = None
+    try:
+        last_dt = datetime.strptime(last_refill['date'], '%Y-%m-%d')
+        today_dt = datetime.strptime(today, '%Y-%m-%d')
+        days_since = (today_dt - last_dt).days
+    except:
+        pass
+    
+    return {
+        'has_refill': True,
+        'last_refill_date': last_refill['date'],
+        'days_since_refill': days_since,
+        'amount': last_refill.get('amount', 0),
+        'payment_mode': last_refill.get('payment_mode', ''),
+        'no_of_refills': last_refill.get('no_of_refills', 0),
+        'memo_no': last_refill.get('memo_no', '')
+    }
+
+@api_router.get("/export/customer-refill-pdf")
+async def export_customer_refill_pdf(
+    warehouse_id: Optional[str] = None,
+    overdue_only: Optional[bool] = False,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Export customer LPG refill status report as PDF"""
+    user = await get_current_user(credentials)
+    
+    query = {}
+    if user['role'] != 'admin':
+        query['warehouse_id'] = user.get('warehouse_id')
+    elif warehouse_id and warehouse_id != 'all':
+        query['warehouse_id'] = warehouse_id
+    
+    customers_list = await db.customers.find(query, {'_id': 0}).to_list(5000)
+    customer_ids = [c['id'] for c in customers_list]
+    
+    pipeline = [
+        {'$match': {'customer_id': {'$in': customer_ids}, 'connection_type': {'$regex': 'refill', '$options': 'i'}}},
+        {'$sort': {'date': -1}},
+        {'$group': {'_id': '$customer_id', 'last_refill_date': {'$first': '$date'}, 'total_refills': {'$sum': '$no_of_refills'}}}
+    ]
+    refill_data = await db.sales_entries.aggregate(pipeline).to_list(5000)
+    refill_map = {r['_id']: r for r in refill_data}
+    
+    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    today_display = datetime.now(timezone.utc).strftime('%d-%m-%Y')
+    
+    rows = []
+    for c in customers_list:
+        refill = refill_map.get(c['id'])
+        last_date = refill['last_refill_date'] if refill else None
+        days = None
+        if last_date:
+            try:
+                days = (datetime.strptime(today, '%Y-%m-%d') - datetime.strptime(last_date, '%Y-%m-%d')).days
+            except:
+                pass
+        if overdue_only and (days is None or days < 30):
+            continue
+        
+        # Format date as DD-MM-YYYY
+        display_date = '-'
+        if last_date:
+            try:
+                display_date = datetime.strptime(last_date, '%Y-%m-%d').strftime('%d-%m-%Y')
+            except:
+                display_date = last_date
+        
+        rows.append({
+            'name': c.get('customer_name', ''),
+            'consumer_no': c.get('consumer_no', ''),
+            'phone': c.get('phone', ''),
+            'address': c.get('address', ''),
+            'last_date': display_date,
+            'days': days,
+            'total_refills': refill['total_refills'] if refill else 0
+        })
+    
+    rows.sort(key=lambda x: (x['days'] is None, -(x['days'] or 0)))
+    
+    # Summary
+    total_c = len(rows)
+    recent_c = sum(1 for r in rows if r['days'] is not None and r['days'] <= 15)
+    overdue_c = sum(1 for r in rows if r['days'] is not None and r['days'] > 30)
+    
+    output = BytesIO()
+    doc = SimpleDocTemplate(output, pagesize=landscape(A4), topMargin=20, bottomMargin=20, leftMargin=20, rightMargin=20)
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    title_style = ParagraphStyle('Title', parent=styles['Title'], fontSize=16, spaceAfter=4, textColor=colors.HexColor('#15803d'))
+    subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=9, textColor=colors.grey, spaceAfter=8)
+    
+    elements.append(Paragraph("K3 GAS SERVICE - Customer LPG Refill Status Report", title_style))
+    elements.append(Paragraph(f"Generated: {today_display} | Total: {total_c} | Recently Refilled: {recent_c} | Overdue (>30 days): {overdue_c}", subtitle_style))
+    elements.append(Spacer(1, 8))
+    
+    data = [['SL', 'Customer Name', 'Consumer No', 'Phone', 'Address', 'Last Refill Date', 'Days Since', 'Total Refills']]
+    for i, r in enumerate(rows, 1):
+        days_str = str(r['days']) if r['days'] is not None else 'No history'
+        data.append([
+            str(i), r['name'][:20], r['consumer_no'], r['phone'], r['address'][:18], r['last_date'], days_str, str(r['total_refills'])
+        ])
+    
+    col_widths = [25, 120, 70, 70, 110, 80, 55, 55]
+    table = Table(data, colWidths=col_widths, repeatRows=1)
+    
+    style_cmds = [
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#16a34a')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 8),
+        ('FONTSIZE', (0, 1), (-1, -1), 7),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 4),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')])
+    ]
+    
+    # Color-code days column
+    for idx, r in enumerate(rows, 1):
+        if r['days'] is not None:
+            if r['days'] > 30:
+                style_cmds.append(('BACKGROUND', (6, idx), (6, idx), colors.HexColor('#fef2f2')))
+                style_cmds.append(('TEXTCOLOR', (6, idx), (6, idx), colors.HexColor('#dc2626')))
+            elif r['days'] > 15:
+                style_cmds.append(('BACKGROUND', (6, idx), (6, idx), colors.HexColor('#fefce8')))
+                style_cmds.append(('TEXTCOLOR', (6, idx), (6, idx), colors.HexColor('#ca8a04')))
+            else:
+                style_cmds.append(('TEXTCOLOR', (6, idx), (6, idx), colors.HexColor('#16a34a')))
+    
+    table.setStyle(TableStyle(style_cmds))
+    elements.append(table)
+    
+    doc.build(elements)
+    output.seek(0)
+    
+    return StreamingResponse(
+        output,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=customer_refill_status_{today}.pdf"}
+    )
+
+@api_router.get("/export/customer-refill-excel")
+async def export_customer_refill_excel(
+    warehouse_id: Optional[str] = None,
+    overdue_only: Optional[bool] = False,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Export customer LPG refill status report as Excel"""
+    user = await get_current_user(credentials)
+    
+    query = {}
+    if user['role'] != 'admin':
+        query['warehouse_id'] = user.get('warehouse_id')
+    elif warehouse_id and warehouse_id != 'all':
+        query['warehouse_id'] = warehouse_id
+    
+    customers_list = await db.customers.find(query, {'_id': 0}).to_list(5000)
+    customer_ids = [c['id'] for c in customers_list]
+    
+    pipeline = [
+        {'$match': {'customer_id': {'$in': customer_ids}, 'connection_type': {'$regex': 'refill', '$options': 'i'}}},
+        {'$sort': {'date': -1}},
+        {'$group': {'_id': '$customer_id', 'last_refill_date': {'$first': '$date'}, 'total_refills': {'$sum': '$no_of_refills'}}}
+    ]
+    refill_data = await db.sales_entries.aggregate(pipeline).to_list(5000)
+    refill_map = {r['_id']: r for r in refill_data}
+    
+    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    today_display = datetime.now(timezone.utc).strftime('%d-%m-%Y')
+    
+    rows = []
+    for c in customers_list:
+        refill = refill_map.get(c['id'])
+        last_date = refill['last_refill_date'] if refill else None
+        days = None
+        if last_date:
+            try:
+                days = (datetime.strptime(today, '%Y-%m-%d') - datetime.strptime(last_date, '%Y-%m-%d')).days
+            except:
+                pass
+        if overdue_only and (days is None or days < 30):
+            continue
+        
+        display_date = '-'
+        if last_date:
+            try:
+                display_date = datetime.strptime(last_date, '%Y-%m-%d').strftime('%d-%m-%Y')
+            except:
+                display_date = last_date
+        
+        rows.append({
+            'name': c.get('customer_name', ''),
+            'consumer_no': c.get('consumer_no', ''),
+            'phone': c.get('phone', ''),
+            'address': c.get('address', ''),
+            'connection_type': c.get('connection_type', ''),
+            'last_date': display_date,
+            'days': days,
+            'total_refills': refill['total_refills'] if refill else 0
+        })
+    
+    rows.sort(key=lambda x: (x['days'] is None, -(x['days'] or 0)))
+    
+    total_c = len(rows)
+    recent_c = sum(1 for r in rows if r['days'] is not None and r['days'] <= 15)
+    overdue_c = sum(1 for r in rows if r['days'] is not None and r['days'] > 30)
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Refill Status"
+    
+    # Title rows
+    ws.merge_cells('A1:H1')
+    ws['A1'] = "K3 GAS SERVICE - Customer LPG Refill Status Report"
+    ws['A1'].font = Font(bold=True, size=14, color="15803d")
+    ws.merge_cells('A2:H2')
+    ws['A2'] = f"Generated: {today_display} | Total: {total_c} | Recently Refilled (<=15d): {recent_c} | Overdue (>30d): {overdue_c}"
+    ws['A2'].font = Font(size=9, color="666666")
+    
+    headers = ['SL No.', 'Customer Name', 'Consumer No.', 'Phone', 'Address', 'Last Refill Date', 'Days Since Refill', 'Total Refills']
+    ws.append([])
+    ws.append(headers)
+    
+    header_fill = PatternFill(start_color="16a34a", end_color="16a34a", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF", size=10)
+    for cell in ws[4]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center')
+    
+    green_font = Font(color="16a34a", bold=True)
+    yellow_font = Font(color="ca8a04", bold=True)
+    red_font = Font(color="dc2626", bold=True)
+    red_fill = PatternFill(start_color="fef2f2", end_color="fef2f2", fill_type="solid")
+    yellow_fill = PatternFill(start_color="fefce8", end_color="fefce8", fill_type="solid")
+    
+    for i, r in enumerate(rows, 1):
+        days_val = r['days'] if r['days'] is not None else 'No history'
+        ws.append([i, r['name'], r['consumer_no'], r['phone'], r['address'], r['last_date'], days_val, r['total_refills']])
+        row_num = i + 4
+        days_cell = ws.cell(row=row_num, column=7)
+        if r['days'] is not None:
+            if r['days'] > 30:
+                days_cell.font = red_font
+                days_cell.fill = red_fill
+            elif r['days'] > 15:
+                days_cell.font = yellow_font
+                days_cell.fill = yellow_fill
+            else:
+                days_cell.font = green_font
+    
+    col_widths = [8, 25, 14, 14, 25, 16, 16, 14]
+    for idx, w in enumerate(col_widths, 1):
+        ws.column_dimensions[chr(64 + idx)].width = w
+    
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=customer_refill_status_{today}.xlsx"}
+    )
 
 @api_router.get("/customers/summary")
 async def get_customer_summary(

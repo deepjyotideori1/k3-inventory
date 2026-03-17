@@ -13,7 +13,10 @@ import {
   downloadCustomerTemplate,
   exportCustomersPDF,
   exportCustomersExcel,
-  getWarehouses
+  getWarehouses,
+  getCustomerRefillStatus,
+  exportCustomerRefillPDF,
+  exportCustomerRefillExcel
 } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -43,7 +46,10 @@ import {
   Edit,
   CheckCircle,
   XCircle,
-  RefreshCw
+  RefreshCw,
+  AlertTriangle,
+  Flame,
+  Clock
 } from 'lucide-react';
 import { getTodayDate, formatDate } from '../lib/utils';
 import { toast } from 'sonner';
@@ -93,6 +99,11 @@ const CustomerManagement = () => {
   const [bulkUploading, setBulkUploading] = useState(false);
   const [bulkPreview, setBulkPreview] = useState([]);
   const [showBulkPreview, setShowBulkPreview] = useState(false);
+  
+  // Refill status
+  const [refillMap, setRefillMap] = useState({});
+  const [refillSummary, setRefillSummary] = useState({});
+  const [exportingRefill, setExportingRefill] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -123,20 +134,52 @@ const CustomerManagement = () => {
       if (startDate) params.start_date = startDate;
       if (endDate) params.end_date = endDate;
       
-      const [customersRes, summaryRes] = await Promise.all([
+      const [customersRes, summaryRes, refillRes] = await Promise.all([
         getCustomers(params),
-        getCustomerSummary(filterWarehouse !== 'all' ? { warehouse_id: filterWarehouse } : {})
+        getCustomerSummary(filterWarehouse !== 'all' ? { warehouse_id: filterWarehouse } : {}),
+        getCustomerRefillStatus(filterWarehouse !== 'all' ? { warehouse_id: filterWarehouse } : {})
       ]);
       
       setCustomers(customersRes.data);
       setFilteredCustomers(customersRes.data);
       setSummary(summaryRes.data);
+      
+      // Build refill map by customer id
+      const rMap = {};
+      (refillRes.data.customers || []).forEach(c => { rMap[c.id] = c; });
+      setRefillMap(rMap);
+      setRefillSummary(refillRes.data.summary || {});
     } catch (error) {
       console.error('Failed to fetch data:', error);
       toast.error('Failed to load customers');
     } finally {
       setLoading(false);
     }
+  };
+
+  const getRefillBadge = (days) => {
+    if (days === null || days === undefined) return <span className="text-slate-400 text-xs italic">No history</span>;
+    if (days <= 15) return <Badge className="bg-green-100 text-green-800 text-xs">{days}d</Badge>;
+    if (days <= 30) return <Badge className="bg-yellow-100 text-yellow-800 text-xs">{days}d</Badge>;
+    return <Badge className="bg-red-100 text-red-800 text-xs"><AlertTriangle className="w-3 h-3 mr-0.5" />{days}d</Badge>;
+  };
+
+  const handleExportRefillPDF = async () => {
+    setExportingRefill(true);
+    try {
+      await exportCustomerRefillPDF(filterWarehouse !== 'all' ? { warehouse_id: filterWarehouse } : {});
+      toast.success('Refill status PDF exported');
+    } catch { toast.error('Failed to export'); }
+    finally { setExportingRefill(false); }
+  };
+
+  const handleExportRefillExcel = async () => {
+    setExportingRefill(true);
+    try {
+      await exportCustomerRefillExcel(filterWarehouse !== 'all' ? { warehouse_id: filterWarehouse } : {});
+      toast.success('Refill status Excel exported');
+    } catch { toast.error('Failed to export'); }
+    finally { setExportingRefill(false); }
   };
 
   const handleSubmit = async (e) => {
@@ -523,6 +566,26 @@ const CustomerManagement = () => {
                   <div className="flex gap-2 ml-auto">
                     <Button 
                       variant="outline" 
+                      onClick={handleExportRefillPDF}
+                      disabled={exportingRefill}
+                      className="border-orange-300 text-orange-700 hover:bg-orange-50"
+                      data-testid="export-refill-pdf-btn"
+                    >
+                      {exportingRefill ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Flame className="w-4 h-4 mr-2" />}
+                      Refill PDF
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      onClick={handleExportRefillExcel}
+                      disabled={exportingRefill}
+                      className="border-orange-300 text-orange-700 hover:bg-orange-50"
+                      data-testid="export-refill-excel-btn"
+                    >
+                      {exportingRefill ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Flame className="w-4 h-4 mr-2" />}
+                      Refill Excel
+                    </Button>
+                    <Button 
+                      variant="outline" 
                       onClick={handleExportPDF}
                       disabled={exporting}
                       className="border-red-300 text-red-700 hover:bg-red-50"
@@ -568,6 +631,8 @@ const CustomerManagement = () => {
                           <th>Phone</th>
                           <th>Address</th>
                           <th>Consumer No</th>
+                          <th>Last Refill</th>
+                          <th>Days Since</th>
                           <th>Gas Card</th>
                           <th>KYC</th>
                           {isAdmin && <th>Warehouse</th>}
@@ -588,6 +653,12 @@ const CustomerManagement = () => {
                             <td>{c.phone || '-'}</td>
                             <td className="text-sm text-slate-600 max-w-[200px] truncate">{c.address}</td>
                             <td>{c.consumer_no}</td>
+                            <td className="text-xs">
+                              {refillMap[c.id]?.last_refill_date ? (
+                                (() => { try { return new Date(refillMap[c.id].last_refill_date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }); } catch { return refillMap[c.id].last_refill_date; } })()
+                              ) : <span className="text-slate-400 italic">-</span>}
+                            </td>
+                            <td>{getRefillBadge(refillMap[c.id]?.days_since_refill)}</td>
                             <td>
                               {c.gas_card_issued ? 
                                 <CheckCircle className="w-5 h-5 text-green-600" /> : 
