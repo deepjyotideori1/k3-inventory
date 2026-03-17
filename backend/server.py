@@ -3597,14 +3597,13 @@ async def get_customers_refill_status(
     
     customers_list = await db.customers.find(query, {'_id': 0}).to_list(5000)
     
-    # Get all customer IDs
+    # Get all customer IDs and names for matching
     customer_ids = [c['id'] for c in customers_list]
+    customer_names = [c.get('customer_name', '') for c in customers_list if c.get('customer_name')]
     
-    # Get last refill for each customer from sales_entries (only refill types)
-    pipeline = [
-        {'$match': {
-            'customer_id': {'$in': customer_ids}
-        }},
+    # Get last entry for each customer by customer_id
+    pipeline_by_id = [
+        {'$match': {'customer_id': {'$in': customer_ids}}},
         {'$sort': {'date': -1}},
         {'$group': {
             '_id': '$customer_id',
@@ -3614,13 +3613,38 @@ async def get_customers_refill_status(
             'total_refills': {'$sum': '$no_of_refills'}
         }}
     ]
-    refill_data = await db.sales_entries.aggregate(pipeline).to_list(5000)
-    refill_map = {r['_id']: r for r in refill_data}
+    refill_by_id = await db.sales_entries.aggregate(pipeline_by_id).to_list(5000)
+    refill_map = {r['_id']: r for r in refill_by_id}
+    
+    # Also get last entry by consumer_name for entries without customer_id
+    pipeline_by_name = [
+        {'$match': {
+            '$or': [
+                {'customer_id': None},
+                {'customer_id': ''},
+                {'customer_id': {'$exists': False}}
+            ],
+            'consumer_name': {'$in': customer_names}
+        }},
+        {'$sort': {'date': -1}},
+        {'$group': {
+            '_id': '$consumer_name',
+            'last_refill_date': {'$first': '$date'},
+            'last_amount': {'$first': '$amount'},
+            'last_payment_mode': {'$first': '$payment_mode'},
+            'total_refills': {'$sum': '$no_of_refills'}
+        }}
+    ]
+    refill_by_name = await db.sales_entries.aggregate(pipeline_by_name).to_list(5000)
+    name_refill_map = {r['_id'].lower(): r for r in refill_by_name if r['_id']}
     
     today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
     result = []
     for c in customers_list:
+        # Try matching by customer_id first, then fallback to consumer_name
         refill = refill_map.get(c['id'])
+        if not refill:
+            refill = name_refill_map.get((c.get('customer_name') or '').lower())
         last_refill_date = refill['last_refill_date'] if refill else None
         days_since = None
         if last_refill_date:
@@ -3682,12 +3706,25 @@ async def get_customer_last_refill(
     """Get last refill details for a specific customer"""
     await get_current_user(credentials)
     
-    # Find the last refill entry
+    # Find the last entry by customer_id
     last_refill = await db.sales_entries.find_one(
         {'customer_id': customer_id},
         {'_id': 0},
         sort=[('date', -1)]
     )
+    
+    # Fallback: match by consumer_name if no entry found by customer_id
+    if not last_refill:
+        customer = await db.customers.find_one({'id': customer_id}, {'_id': 0})
+        if customer and customer.get('customer_name'):
+            last_refill = await db.sales_entries.find_one(
+                {
+                    'consumer_name': {'$regex': f'^{customer["customer_name"]}$', '$options': 'i'},
+                    '$or': [{'customer_id': None}, {'customer_id': ''}, {'customer_id': {'$exists': False}}]
+                },
+                {'_id': 0},
+                sort=[('date', -1)]
+            )
     
     if not last_refill:
         return {'has_refill': False, 'message': 'No refill history available'}
@@ -3728,6 +3765,7 @@ async def export_customer_refill_pdf(
     
     customers_list = await db.customers.find(query, {'_id': 0}).to_list(5000)
     customer_ids = [c['id'] for c in customers_list]
+    customer_names_pdf = [c.get('customer_name', '') for c in customers_list if c.get('customer_name')]
     
     pipeline = [
         {'$match': {'customer_id': {'$in': customer_ids}}},
@@ -3737,12 +3775,22 @@ async def export_customer_refill_pdf(
     refill_data = await db.sales_entries.aggregate(pipeline).to_list(5000)
     refill_map = {r['_id']: r for r in refill_data}
     
+    pipeline_name_pdf = [
+        {'$match': {'$or': [{'customer_id': None}, {'customer_id': ''}, {'customer_id': {'$exists': False}}], 'consumer_name': {'$in': customer_names_pdf}}},
+        {'$sort': {'date': -1}},
+        {'$group': {'_id': '$consumer_name', 'last_refill_date': {'$first': '$date'}, 'total_refills': {'$sum': '$no_of_refills'}}}
+    ]
+    refill_by_name_pdf = await db.sales_entries.aggregate(pipeline_name_pdf).to_list(5000)
+    name_map_pdf = {r['_id'].lower(): r for r in refill_by_name_pdf if r['_id']}
+    
     today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
     today_display = datetime.now(timezone.utc).strftime('%d-%m-%Y')
     
     rows = []
     for c in customers_list:
         refill = refill_map.get(c['id'])
+        if not refill:
+            refill = name_map_pdf.get((c.get('customer_name') or '').lower())
         last_date = refill['last_refill_date'] if refill else None
         days = None
         if last_date:
@@ -3854,6 +3902,7 @@ async def export_customer_refill_excel(
     
     customers_list = await db.customers.find(query, {'_id': 0}).to_list(5000)
     customer_ids = [c['id'] for c in customers_list]
+    customer_names_xl = [c.get('customer_name', '') for c in customers_list if c.get('customer_name')]
     
     pipeline = [
         {'$match': {'customer_id': {'$in': customer_ids}}},
@@ -3863,12 +3912,22 @@ async def export_customer_refill_excel(
     refill_data = await db.sales_entries.aggregate(pipeline).to_list(5000)
     refill_map = {r['_id']: r for r in refill_data}
     
+    pipeline_name_xl = [
+        {'$match': {'$or': [{'customer_id': None}, {'customer_id': ''}, {'customer_id': {'$exists': False}}], 'consumer_name': {'$in': customer_names_xl}}},
+        {'$sort': {'date': -1}},
+        {'$group': {'_id': '$consumer_name', 'last_refill_date': {'$first': '$date'}, 'total_refills': {'$sum': '$no_of_refills'}}}
+    ]
+    refill_by_name_xl = await db.sales_entries.aggregate(pipeline_name_xl).to_list(5000)
+    name_map_xl = {r['_id'].lower(): r for r in refill_by_name_xl if r['_id']}
+    
     today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
     today_display = datetime.now(timezone.utc).strftime('%d-%m-%Y')
     
     rows = []
     for c in customers_list:
         refill = refill_map.get(c['id'])
+        if not refill:
+            refill = name_map_xl.get((c.get('customer_name') or '').lower())
         last_date = refill['last_refill_date'] if refill else None
         days = None
         if last_date:
