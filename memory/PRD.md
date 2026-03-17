@@ -236,6 +236,14 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] **Refill Status Export** - PDF and Excel reports with color-coded days, summary stats (total, recent, moderate, overdue, no history)
 - [x] **Export Buttons** - "Refill PDF" and "Refill Excel" on Customer Dashboard
 
+### Sales Cylinder Calculation Logic (March 2026)
+- [x] **Clear calculation rules** - New Connection = cylinder sale count (quantity), Refill = cylinder refill count (quantity)
+- [x] **4-category breakdown** - Domestic New Conn (6 cyl), Commercial New Conn (10 cyl), Domestic Refills (19 cyl), Commercial Refills (12 cyl)
+- [x] **Legacy data handling** - Falls back to `no_of_refills` if `cylinder_nos` is empty for new connections
+- [x] **Form labels updated** - "No. of Cylinders" (type=number) for new connections, "No. of Cylinders Refilled" for refills
+- [x] **Table columns** - "New Conn Cyl" and "Refill Cyl" with proper display logic
+- [x] **Exports** - PDF/Excel include category breakdown row with all 4 categories
+
 ### Sales Report Refill & Cylinder Count Fix (March 2026)
 - [x] **Backend summary fix** - `no_of_refills` now only summed for refill-type entries, not new connections
 - [x] **New cylinder count metric** - Total cylinders calculated from `cylinder_nos` (new connections) + `no_of_refills` (refills)
