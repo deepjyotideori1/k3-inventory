@@ -236,6 +236,18 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] **Refill Status Export** - PDF and Excel reports with color-coded days, summary stats (total, recent, moderate, overdue, no history)
 - [x] **Export Buttons** - "Refill PDF" and "Refill Excel" on Customer Dashboard
 
+### Order Cancellation Feature (March 2026)
+- [x] **Cancel Order Status** - New "Cancelled" status alongside Pending and Delivered
+- [x] **Confirmation Dialog** - Modal with optional cancellation reason textarea before cancelling
+- [x] **Read-Only Cancelled Orders** - Cancelled orders cannot be edited (400 error), edit button hidden
+- [x] **Visual Indicators** - Red badge, red row background (bg-red-50), cancellation reason shown
+- [x] **Summary Card** - Red "Cancelled" summary card with count in Order Management
+- [x] **Status Filter** - Filter orders by All/Pending/Delivered/Cancelled
+- [x] **Exports** - PDF and Excel exports include Status column with cancelled status and reason
+- [x] **Sales Exclusion** - Cancelled orders do not affect refill tracking (uses sales_entries, not orders)
+- [x] **Admin Revert** - Admin can revert cancelled orders back to pending
+- [x] **Order Analysis** - Admin dashboard order analysis includes total_cancelled count
+
 ### Sales → Customer Auto-Creation Fix (March 2026)
 - [x] **New Connection sales auto-create customer** - When a "Domestic" or "Commercial" new connection sale is created, a customer record is auto-created in the customers collection
 - [x] **Both endpoints fixed** - Manager endpoint and admin warehouse-specific endpoint both auto-create customers
