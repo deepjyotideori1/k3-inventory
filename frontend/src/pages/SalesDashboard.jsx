@@ -592,27 +592,26 @@ const SalesDashboard = () => {
     }
   };
 
-  // Calculate filtered totals - separate refills (refill entries only) and cylinders
+  // Calculate filtered totals - separate new connection cyl and refill cyl
   const filteredTotals = useMemo(() => {
     return entries.reduce((acc, e) => {
       const isRefill = (e.connection_type || '').includes('refill');
       const refillCyl = isRefill ? (e.no_of_refills || 0) : 0;
       let newCyl = 0;
       if (!isRefill) {
-        const cn = (e.cylinder_nos || '').trim();
-        if (cn) {
-          const parts = cn.split(',').filter(p => p.trim());
-          try { newCyl = parts.length === 1 ? (parseInt(parts[0]) || 1) : parts.length; } catch { newCyl = parts.length; }
-        } else {
-          newCyl = 1;
+        const cn = parseInt(e.cylinder_nos);
+        if (cn > 0) { newCyl = cn; }
+        else {
+          const nr = parseInt(e.no_of_refills);
+          newCyl = (nr > 0) ? nr : 1;
         }
       }
       return {
         amount: acc.amount + (e.amount || 0),
         refills: acc.refills + refillCyl,
-        cylinders: acc.cylinders + newCyl + refillCyl
+        newCyl: acc.newCyl + newCyl
       };
-    }, { amount: 0, refills: 0, cylinders: 0 });
+    }, { amount: 0, refills: 0, newCyl: 0 });
   }, [entries]);
 
   // Combined entries: merge cylinder + accessory sales for unified table
@@ -644,20 +643,19 @@ const SalesDashboard = () => {
       const refillCyl = isRefill ? (e.no_of_refills || 0) : 0;
       let newCyl = 0;
       if (!isRefill && e.sale_type !== 'accessory') {
-        const cn = (e.cylinder_nos || '').trim();
-        if (cn) {
-          const parts = cn.split(',').filter(p => p.trim());
-          try { newCyl = parts.length === 1 ? (parseInt(parts[0]) || 1) : parts.length; } catch { newCyl = parts.length; }
-        } else {
-          newCyl = 1;
+        const cn = parseInt(e.cylinder_nos);
+        if (cn > 0) { newCyl = cn; }
+        else {
+          const nr = parseInt(e.no_of_refills);
+          newCyl = (nr > 0) ? nr : 1;
         }
       }
       return {
         amount: acc.amount + (e.amount || 0),
         refills: acc.refills + refillCyl,
-        cylinders: acc.cylinders + newCyl + refillCyl
+        newCyl: acc.newCyl + newCyl
       };
-    }, { amount: 0, refills: 0, cylinders: 0 });
+    }, { amount: 0, refills: 0, newCyl: 0 });
   }, [combinedEntries]);
 
   if (loading) {
@@ -1111,28 +1109,31 @@ const SalesDashboard = () => {
                       </Select>
                     </div>
                     
-                    {/* Cylinder Nos for New Connection (domestic/commercial) */}
+                    {/* No. of Cylinders for New Connection (domestic/commercial) */}
                     {customerMode === 'new' && (
                       <div>
-                        <Label>Cylinder Nos.</Label>
+                        <Label>No. of Cylinders *</Label>
                         <Input 
+                          type="number"
+                          min="1"
                           value={formData.cylinder_nos}
                           onChange={(e) => setFormData({ ...formData, cylinder_nos: e.target.value })}
-                          placeholder="Enter cylinder numbers"
+                          placeholder="Enter no. of cylinders"
                           className="mt-1"
+                          data-testid="new-conn-cylinder-count"
                         />
                       </div>
                     )}
                     
-                    {/* No of Refills for Existing Customer (refill types) */}
+                    {/* No. of Cylinders Refilled for Existing Customer (refill types) */}
                     {customerMode === 'existing' && (
                       <div>
-                        <Label className="text-sm">No of Refills *</Label>
+                        <Label className="text-sm">No. of Cylinders Refilled *</Label>
                         <Input 
                           type="number"
                           value={formData.no_of_refills}
                           onChange={(e) => setFormData({ ...formData, no_of_refills: e.target.value })}
-                          placeholder="Enter refills count"
+                          placeholder="No. of cylinders to refill"
                           className="mt-1"
                         />
                       </div>
@@ -1251,11 +1252,45 @@ const SalesDashboard = () => {
                   <TrendingUp className="w-4 h-4" /> Grand Total
                 </p>
                 <p className="text-2xl font-bold text-purple-800">{formatINR(summary.total.amount + accessorySummary.total_amount)}</p>
-                <p className="text-xs text-purple-600">{summary.total.cylinders} total cyl · {summary.total.refills} refilled · {summary.total.new_connections} new conn</p>
+                <p className="text-xs text-purple-600">{summary.total.new_connection_cylinders || 0} new cyl · {summary.total.refill_cylinders || 0} refill cyl</p>
               </div>
             </CardContent>
           </Card>
         </div>
+
+        {/* Category Breakdown Cards */}
+        {summary.categories && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3" data-testid="category-breakdown">
+            <Card className="border-cyan-200 bg-cyan-50/50">
+              <CardContent className="p-3 text-center">
+                <p className="text-xs text-cyan-700 font-medium">Domestic New Conn.</p>
+                <p className="text-xl font-bold text-cyan-800">{summary.categories.domestic_new_cyl} <span className="text-xs font-normal">cyl</span></p>
+                <p className="text-xs text-cyan-500">{summary.categories.domestic_new_count} entries</p>
+              </CardContent>
+            </Card>
+            <Card className="border-violet-200 bg-violet-50/50">
+              <CardContent className="p-3 text-center">
+                <p className="text-xs text-violet-700 font-medium">Commercial New Conn.</p>
+                <p className="text-xl font-bold text-violet-800">{summary.categories.commercial_new_cyl} <span className="text-xs font-normal">cyl</span></p>
+                <p className="text-xs text-violet-500">{summary.categories.commercial_new_count} entries</p>
+              </CardContent>
+            </Card>
+            <Card className="border-yellow-200 bg-yellow-50/50">
+              <CardContent className="p-3 text-center">
+                <p className="text-xs text-yellow-700 font-medium">Domestic Refills</p>
+                <p className="text-xl font-bold text-yellow-800">{summary.categories.domestic_refill_cyl} <span className="text-xs font-normal">cyl</span></p>
+                <p className="text-xs text-yellow-500">{summary.categories.domestic_refill_count} entries</p>
+              </CardContent>
+            </Card>
+            <Card className="border-rose-200 bg-rose-50/50">
+              <CardContent className="p-3 text-center">
+                <p className="text-xs text-rose-700 font-medium">Commercial Refills</p>
+                <p className="text-xl font-bold text-rose-800">{summary.categories.commercial_refill_cyl} <span className="text-xs font-normal">cyl</span></p>
+                <p className="text-xs text-rose-500">{summary.categories.commercial_refill_count} entries</p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Filters */}
         <Card>
@@ -1429,7 +1464,7 @@ const SalesDashboard = () => {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label>No of Refills *</Label>
+                    <Label>No of Cylinders Refilled *</Label>
                     <Input 
                       type="number"
                       value={quickRefillForm.no_of_refills}
@@ -1539,8 +1574,8 @@ const SalesDashboard = () => {
                     <th>Memo</th>
                     <th>Amount</th>
                     <th>Payment</th>
-                    <th>Cyl Nos</th>
-                    <th>Refills</th>
+                    <th>New Conn Cyl</th>
+                    <th>Refill Cyl</th>
                     <th>Remarks</th>
                     {isAdmin && <th>Warehouse</th>}
                     <th>Actions</th>
@@ -1570,7 +1605,8 @@ const SalesDashboard = () => {
                           <td>{getPaymentBadge(entry.payment_mode)}</td>
                           <td className="text-center">
                             {entry.sale_type === 'accessory' ? '-' : 
-                              (!(entry.connection_type || '').includes('refill') ? (entry.cylinder_nos || '-') : '-')}
+                              (!(entry.connection_type || '').includes('refill') ? 
+                                (parseInt(entry.cylinder_nos) || (entry.no_of_refills || 1)) : '-')}
                           </td>
                           <td className="text-center">
                             {entry.sale_type === 'accessory' ? '-' : 
@@ -1609,7 +1645,7 @@ const SalesDashboard = () => {
                         <td colSpan={7} className="text-right">TOTAL:</td>
                         <td className="text-green-800">{formatINR(combinedTotals.amount)}</td>
                         <td></td>
-                        <td className="text-center">{combinedTotals.cylinders}</td>
+                        <td className="text-center">{combinedTotals.newCyl}</td>
                         <td className="text-center">{combinedTotals.refills}</td>
                         <td colSpan={isAdmin ? 3 : 2}></td>
                       </tr>
@@ -1683,24 +1719,28 @@ const SalesDashboard = () => {
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-sm">No of Refills</Label>
+                  <Label className="text-sm">No. of Cylinders Refilled</Label>
                   <Input 
                     type="number"
+                    min="1"
                     value={editForm.no_of_refills || ''}
                     onChange={(e) => setEditForm({ ...editForm, no_of_refills: e.target.value })}
                     className="mt-1"
+                    disabled={!(editForm.connection_type || '').includes('refill')}
                   />
                 </div>
               </div>
 
-              {/* Cylinder Nos for new connection types */}
+              {/* No. of Cylinders for new connection types */}
               {(editForm.connection_type === 'domestic' || editForm.connection_type === 'commercial') && (
                 <div>
-                  <Label className="text-sm">Cylinder Nos.</Label>
+                  <Label className="text-sm">No. of Cylinders</Label>
                   <Input 
+                    type="number"
+                    min="1"
                     value={editForm.cylinder_nos || ''}
                     onChange={(e) => setEditForm({ ...editForm, cylinder_nos: e.target.value })}
-                    placeholder="Enter cylinder numbers"
+                    placeholder="No. of cylinders sold"
                     className="mt-1"
                   />
                 </div>

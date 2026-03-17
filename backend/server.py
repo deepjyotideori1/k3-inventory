@@ -4711,20 +4711,47 @@ async def get_sales_summary(
     
     results = await db.sales_entries.aggregate(pipeline).to_list(100)
     
-    # Also calculate total cylinders from cylinder_nos field for new connections
-    new_conn_query = {**match_stage, 'connection_type': {'$in': ['domestic', 'commercial']}}
-    new_connections = await db.sales_entries.find(new_conn_query, {'_id': 0, 'cylinder_nos': 1}).to_list(5000)
-    total_new_cylinders = 0
-    for nc in new_connections:
-        cn = nc.get('cylinder_nos', '') or ''
-        if cn.strip():
-            parts = [p.strip() for p in cn.split(',') if p.strip()]
-            try:
-                total_new_cylinders += int(parts[0]) if len(parts) == 1 else len(parts)
-            except ValueError:
-                total_new_cylinders += len(parts)
-        else:
-            total_new_cylinders += 1  # At least 1 cylinder per new connection
+    # Calculate cylinders per category from actual data
+    all_entries = await db.sales_entries.find(match_stage, {'_id': 0, 'connection_type': 1, 'cylinder_nos': 1, 'no_of_refills': 1, 'payment_mode': 1}).to_list(5000)
+    
+    def get_new_conn_cylinders(entry):
+        """Get cylinder count for a new connection entry"""
+        cn = _count_cylinders(entry.get('cylinder_nos', ''))
+        if cn > 0:
+            return cn
+        # Legacy fallback: some old entries stored count in no_of_refills
+        nr = int(entry.get('no_of_refills', 0) or 0)
+        return nr if nr > 0 else 1
+    
+    def get_refill_cylinders(entry):
+        """Get cylinder count for a refill entry"""
+        return int(entry.get('no_of_refills', 0) or 0)
+    
+    # Calculate per-category totals
+    categories = {
+        'domestic_new_cyl': 0, 'commercial_new_cyl': 0,
+        'domestic_refill_cyl': 0, 'commercial_refill_cyl': 0,
+        'domestic_new_count': 0, 'commercial_new_count': 0,
+        'domestic_refill_count': 0, 'commercial_refill_count': 0
+    }
+    
+    for e in all_entries:
+        ct = e.get('connection_type', '')
+        if ct == 'domestic':
+            categories['domestic_new_count'] += 1
+            categories['domestic_new_cyl'] += get_new_conn_cylinders(e)
+        elif ct == 'commercial':
+            categories['commercial_new_count'] += 1
+            categories['commercial_new_cyl'] += get_new_conn_cylinders(e)
+        elif ct == 'domestic_refill':
+            categories['domestic_refill_count'] += 1
+            categories['domestic_refill_cyl'] += get_refill_cylinders(e)
+        elif ct == 'commercial_refill':
+            categories['commercial_refill_count'] += 1
+            categories['commercial_refill_cyl'] += get_refill_cylinders(e)
+    
+    total_new_cyl = categories['domestic_new_cyl'] + categories['commercial_new_cyl']
+    total_refill_cyl = categories['domestic_refill_cyl'] + categories['commercial_refill_cyl']
     
     summary = {
         'cash': {'amount': 0, 'refills': 0, 'count': 0, 'cylinders': 0, 'new_connections': 0},
@@ -4749,8 +4776,13 @@ async def get_sales_summary(
         summary['total']['cylinders'] += r['total_refills']
         summary['total']['new_connections'] += r['new_connection_entries']
     
-    # Add new connection cylinder count to total cylinders
-    summary['total']['cylinders'] += total_new_cylinders
+    # Override with accurate per-category cylinder counts
+    summary['total']['refills'] = total_refill_cyl
+    summary['total']['cylinders'] = total_new_cyl + total_refill_cyl
+    summary['total']['new_connections'] = categories['domestic_new_count'] + categories['commercial_new_count']
+    summary['total']['new_connection_cylinders'] = total_new_cyl
+    summary['total']['refill_cylinders'] = total_refill_cyl
+    summary['categories'] = categories
     
     return summary
 
@@ -4903,22 +4935,38 @@ async def export_sales_pdf(
     elements.append(Spacer(1, 5))
     
     # Table data - include Memo No, Cylinder Nos and Refills
-    data = [['SL', 'Date', 'Consumer', 'Address', 'Cons.No', 'Memo No', 'Type', 'Amount', 'Mode', 'Cyl Nos', 'Refills']]
+    data = [['SL', 'Date', 'Consumer', 'Address', 'Cons.No', 'Memo No', 'Type', 'Amount', 'Mode', 'New Cyl', 'Refill Cyl']]
     
     total_amount = 0
-    total_refills = 0
-    total_cylinders = 0  # Count total cylinders for new connections
+    total_new_cyl = 0
+    total_refill_cyl = 0
+    dom_new_cyl = 0
+    com_new_cyl = 0
+    dom_refill_cyl = 0
+    com_refill_cyl = 0
+    
+    def _get_new_cyl(entry):
+        cn = _count_cylinders(entry.get('cylinder_nos', ''))
+        if cn > 0: return cn
+        nr = int(entry.get('no_of_refills', 0) or 0)
+        return nr if nr > 0 else 1
     
     for i, e in enumerate(entries, 1):
         conn_type = e.get('connection_type', 'domestic')
         is_refill = 'refill' in conn_type.lower()
         cylinder_nos = e.get('cylinder_nos', '')
         
-        # Count cylinders for new connections (count comma-separated values or single entry)
-        if not is_refill and cylinder_nos:
-            # Count number of cylinder entries (comma-separated or single)
-            cyl_count = len([c.strip() for c in cylinder_nos.split(',') if c.strip()])
-            total_cylinders += cyl_count
+        # Calculate cylinder count per entry
+        if is_refill:
+            cyl = int(e.get('no_of_refills', 0) or 0)
+            total_refill_cyl += cyl
+            if conn_type == 'domestic_refill': dom_refill_cyl += cyl
+            else: com_refill_cyl += cyl
+        else:
+            cyl = _get_new_cyl(e)
+            total_new_cyl += cyl
+            if conn_type == 'domestic': dom_new_cyl += cyl
+            else: com_new_cyl += cyl
         
         data.append([
             str(i),
@@ -4930,15 +4978,14 @@ async def export_sales_pdf(
             conn_type[:8].replace('_', ' ').title(),
             format_inr(e.get('amount', 0)),
             e.get('payment_mode', 'cash')[:4].title(),
-            cylinder_nos if not is_refill else '-',  # Show cylinder nos for new connections
-            str(e.get('no_of_refills', 0)) if is_refill else '-'  # Show refills for refill types
+            str(cyl) if not is_refill else '-',  # Show cylinder count for new connections
+            str(cyl) if is_refill else '-'  # Show refill cylinder count for refill types
         ])
         total_amount += e.get('amount', 0)
-        if is_refill:
-            total_refills += e.get('no_of_refills', 0)
     
-    # Add total row with cylinder count and refills
-    data.append(['', '', '', '', '', '', 'CYL TOTAL:', format_inr(total_amount), '', str(total_cylinders), str(total_refills)])
+    # Add category summary row
+    data.append(['', '', '', '', '', '', 'CYL TOTAL:', format_inr(total_amount), '',
+                 str(total_new_cyl), str(total_refill_cyl)])
     
     # Add accessory sales section
     acc_total_amount = 0
@@ -4965,7 +5012,12 @@ async def export_sales_pdf(
     
     # Grand total row
     grand_total = total_amount + acc_total_amount
-    data.append(['', '', '', '', '', '', 'GRAND TOTAL:', format_inr(grand_total), '', str(total_cylinders), str(total_refills)])
+    data.append(['', '', '', '', '', '', 'GRAND TOTAL:', format_inr(grand_total), '',
+                 str(total_new_cyl), str(total_refill_cyl)])
+    
+    # Add category breakdown row
+    data.append(['', '', 'Dom New:', str(dom_new_cyl), 'Com New:', str(com_new_cyl),
+                 'Dom Refill:', str(dom_refill_cyl), 'Com Refill:', str(com_refill_cyl), ''])
     
     # Create table - fit A4 landscape (11 columns now with Memo No)
     col_widths = [22, 50, 80, 65, 52, 42, 48, 52, 36, 42, 36]
@@ -5081,7 +5133,7 @@ async def export_sales_excel(
     ws.title = "Sales Data"
     
     # Headers with clear form heads - include Memo No, Cylinder Nos and Refills
-    headers = ['SL No.', 'Date', 'Consumer Name', 'Address', 'Consumer No.', 'Memo No.', 'Type', 'Amount (Rs.)', 'Payment Mode', 'Cylinder Nos', 'No. of Refills', 'Remarks']
+    headers = ['SL No.', 'Date', 'Consumer Name', 'Address', 'Consumer No.', 'Memo No.', 'Type', 'Amount (Rs.)', 'Payment Mode', 'New Conn Cyl', 'Refill Cyl', 'Remarks']
     ws.append(headers)
     
     # Style headers
@@ -5093,18 +5145,33 @@ async def export_sales_excel(
         cell.alignment = Alignment(horizontal='center')
     
     total_amount = 0
-    total_refills = 0
-    total_cylinders = 0  # Count total cylinders for new connections
+    total_new_cyl = 0
+    total_refill_cyl = 0
+    dom_new_cyl = 0
+    com_new_cyl = 0
+    dom_refill_cyl = 0
+    com_refill_cyl = 0
+    
+    def _get_new_cyl_excel(entry):
+        cn = _count_cylinders(entry.get('cylinder_nos', ''))
+        if cn > 0: return cn
+        nr = int(entry.get('no_of_refills', 0) or 0)
+        return nr if nr > 0 else 1
     
     for i, e in enumerate(entries, 1):
         conn_type = e.get('connection_type', 'domestic')
         is_refill = 'refill' in conn_type.lower()
-        cylinder_nos = e.get('cylinder_nos', '')
         
-        # Count cylinders for new connections (count comma-separated values or single entry)
-        if not is_refill and cylinder_nos:
-            cyl_count = len([c.strip() for c in cylinder_nos.split(',') if c.strip()])
-            total_cylinders += cyl_count
+        if is_refill:
+            cyl = int(e.get('no_of_refills', 0) or 0)
+            total_refill_cyl += cyl
+            if conn_type == 'domestic_refill': dom_refill_cyl += cyl
+            else: com_refill_cyl += cyl
+        else:
+            cyl = _get_new_cyl_excel(e)
+            total_new_cyl += cyl
+            if conn_type == 'domestic': dom_new_cyl += cyl
+            else: com_new_cyl += cyl
         
         ws.append([
             i,
@@ -5116,17 +5183,16 @@ async def export_sales_excel(
             conn_type.replace('_', ' ').title(),
             format_inr(e.get('amount', 0)),
             e.get('payment_mode', 'cash').capitalize(),
-            cylinder_nos if not is_refill else '-',  # Show cylinder nos for new connections
-            e.get('no_of_refills', 0) if is_refill else '-',  # Show refills for refill types
+            cyl if not is_refill else '-',  # New conn cylinder count
+            cyl if is_refill else '-',  # Refill cylinder count
             e.get('remarks', '')
         ])
         total_amount += e.get('amount', 0)
-        if is_refill:
-            total_refills += e.get('no_of_refills', 0)
     
     # Add cylinder total row
     cyl_total_row = len(entries) + 2
-    ws.append(['', '', '', '', '', '', 'CYL TOTAL:', format_inr(total_amount), '', total_cylinders, total_refills, ''])
+    ws.append(['', '', '', '', '', '', 'CYL TOTAL:', format_inr(total_amount), '',
+               total_new_cyl, total_refill_cyl, ''])
     
     # Style cylinder total row
     total_fill = PatternFill(start_color="f0fdf4", end_color="f0fdf4", fill_type="solid")
@@ -5175,10 +5241,20 @@ async def export_sales_excel(
     # Grand total row
     grand_total_row_num = ws.max_row + 1
     grand_total_excel = total_amount + acc_total_amount_excel
-    ws.append(['', '', '', '', '', '', 'GRAND TOTAL:', format_inr(grand_total_excel), '', total_cylinders, total_refills, ''])
+    ws.append(['', '', '', '', '', '', 'GRAND TOTAL:', format_inr(grand_total_excel), '',
+               total_new_cyl, total_refill_cyl, ''])
     grand_fill = PatternFill(start_color="ede9fe", end_color="ede9fe", fill_type="solid")
     for cell in ws[grand_total_row_num]:
         cell.fill = grand_fill
+        cell.font = Font(bold=True)
+    
+    # Category breakdown row
+    cat_row = ws.max_row + 1
+    ws.append(['', '', 'Dom New Cyl:', dom_new_cyl, 'Com New Cyl:', com_new_cyl,
+               'Dom Refill Cyl:', dom_refill_cyl, 'Com Refill Cyl:', com_refill_cyl, '', ''])
+    cat_fill = PatternFill(start_color="e8f5e9", end_color="e8f5e9", fill_type="solid")
+    for cell in ws[cat_row]:
+        cell.fill = cat_fill
         cell.font = Font(bold=True)
     
     # Adjust column widths
@@ -6428,17 +6504,16 @@ async def export_order_analysis_excel(
 # ===================== CONNECTION & REFILL ANALYTICS =====================
 
 def _count_cylinders(cylinder_nos_str):
-    """Count cylinders from cylinder_nos field - handles 'CYL-001,CYL-002' or '2' formats"""
-    if not cylinder_nos_str or not cylinder_nos_str.strip():
+    """Count cylinder quantity from the cylinder_nos field (should be a number)"""
+    if not cylinder_nos_str or not str(cylinder_nos_str).strip():
         return 0
-    parts = [p.strip() for p in str(cylinder_nos_str).split(',') if p.strip()]
-    # If single numeric value, return it as count
-    if len(parts) == 1:
-        try:
-            return int(parts[0])
-        except ValueError:
-            return 1
-    return len(parts)
+    val = str(cylinder_nos_str).strip()
+    try:
+        return int(val)
+    except ValueError:
+        # Legacy data: comma-separated serial numbers
+        parts = [p.strip() for p in val.split(',') if p.strip()]
+        return len(parts)
 
 def _get_date_range_for_period(period, custom_start=None, custom_end=None):
     """Return (start_date, end_date) strings for a given period"""

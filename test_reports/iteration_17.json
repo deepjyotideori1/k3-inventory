@@ -1,0 +1,75 @@
+{
+  "summary": "Sales Cylinder Calculation Logic testing COMPLETE - All 7 backend tests passed, all frontend UI features verified. Feature includes: 4 category breakdown cards (Domestic New Conn, Commercial New Conn, Domestic Refills, Commercial Refills), Grand Total showing 'X new cyl · Y refill cyl', table headers with 'New Conn Cyl' and 'Refill Cyl', proper row display logic (new conn shows cyl in first col, refills in second), form labels ('No. of Cylinders' for new connections, 'No. of Cylinders Refilled' for refills), PDF/Excel exports with cylinder columns.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Sales Dashboard table", "issues": ["React hydration warning: <span> cannot be child of <tbody>/<tr> - cosmetic issue from visual editor wrapper, does not affect functionality"]}
+    ]
+  },
+  "passed_tests": [
+    "Backend: GET /api/sales-entries/summary returns categories object with all required fields",
+    "Backend: GET /api/sales-entries/summary categories contain domestic_new_cyl, commercial_new_cyl, domestic_refill_cyl, commercial_refill_cyl",
+    "Backend: GET /api/sales-entries/summary categories contain entry counts (domestic_new_count, commercial_new_count, etc.)",
+    "Backend: GET /api/sales-entries/summary total.new_connection_cylinders equals domestic_new_cyl + commercial_new_cyl",
+    "Backend: GET /api/sales-entries/summary total.refill_cylinders equals domestic_refill_cyl + commercial_refill_cyl",
+    "Backend: GET /api/sales-entries/summary total.cylinders equals new_connection_cylinders + refill_cylinders",
+    "Backend: GET /api/export/sales-pdf returns PDF file with 'New Cyl' and 'Refill Cyl' columns",
+    "Backend: GET /api/export/sales-excel returns Excel file with 'New Conn Cyl' and 'Refill Cyl' headers",
+    "Backend: Legacy data handling - entries with cylinder count in no_of_refills field are properly calculated",
+    "Frontend: 4 category breakdown cards visible (Domestic New Conn, Commercial New Conn, Domestic Refills, Commercial Refills)",
+    "Frontend: Each category card shows cylinder count and entry count",
+    "Frontend: Grand Total card shows 'X new cyl · Y refill cyl' format",
+    "Frontend: Table headers show 'New Conn Cyl' and 'Refill Cyl'",
+    "Frontend: New connection rows show cylinder count in 'New Conn Cyl' and '-' in 'Refill Cyl'",
+    "Frontend: Refill rows show '-' in 'New Conn Cyl' and cylinder count in 'Refill Cyl'",
+    "Frontend: Accessory rows show '-' in both cylinder columns",
+    "Frontend: TOTAL row shows correct totals for both columns separately",
+    "Frontend: Add Entry form shows 'No. of Cylinders *' label for new connections (type=number)",
+    "Frontend: Add Entry form shows 'No. of Cylinders Refilled *' label for refills",
+    "Frontend: Export dialog has 'Download PDF' and 'Download Excel' buttons"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_sales_cylinder_calculation.py",
+    "/app/test_reports/pytest/pytest_sales_cylinder.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Minor React hydration warning in console - <span> elements inside <tbody>/<tr> - known cosmetic issue from visual editor wrapper, does not impact user functionality"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_sales_cylinder_calculation.py"
+  ],
+  "success_rate": {
+    "backend": "100% (7/7 tests passed)",
+    "frontend": "100% (All UI features verified)"
+  },
+  "test_credentials": {
+    "admin": "admin@k3gas.com / Admin@123"
+  },
+  "seed_data_creation": "No new seed data created - used existing sales_entries data",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Sales Cylinder Calculation feature is COMPLETE. Endpoint: GET /api/sales-entries/summary returns categories object with domestic_new_cyl, commercial_new_cyl, domestic_refill_cyl, commercial_refill_cyl and their respective counts. Total object contains new_connection_cylinders, refill_cylinders, and cylinders. Legacy data handling: entries with cylinder count stored in no_of_refills field (when cylinder_nos is empty) are properly counted using fallback logic. Frontend: Category breakdown cards appear between summary cards and filters. Table has 'New Conn Cyl' and 'Refill Cyl' columns. Form shows appropriate labels based on customer mode (new vs existing).",
+  "verified_features": {
+    "backend_apis": {
+      "GET /api/sales-entries/summary": "Returns summary with categories object containing per-category cylinder counts and entry counts, plus totals",
+      "GET /api/export/sales-pdf": "Returns PDF with 'New Cyl' and 'Refill Cyl' columns and CYL TOTAL row",
+      "GET /api/export/sales-excel": "Returns Excel with 'New Conn Cyl' and 'Refill Cyl' headers and cylinder total row",
+      "Legacy data handling": "Entries with connection_type=domestic/commercial but cylinder count in no_of_refills field are correctly counted"
+    },
+    "frontend_ui": {
+      "category_cards": "4 cards showing Domestic New Conn (cyan), Commercial New Conn (violet), Domestic Refills (yellow), Commercial Refills (rose) - each with cylinder count and entry count",
+      "grand_total_card": "Shows 'X new cyl · Y refill cyl' format in purple card",
+      "table_headers": "'New Conn Cyl' and 'Refill Cyl' columns in sales entries table",
+      "table_row_display": "New connections show cyl in first col and '-' in second, refills show '-' in first and cyl in second",
+      "total_row": "TOTAL row shows separate totals for new conn and refill cylinders",
+      "form_labels": "'No. of Cylinders *' for new connections, 'No. of Cylinders Refilled *' for existing customer refills",
+      "export_dialog": "Has Date Range, Connection Type filters, Download PDF and Download Excel buttons"
+    }
+  }
+}
