@@ -58,6 +58,7 @@ const Layout = ({ children }) => {
     { path: '/sales-data', label: 'Sales Data', icon: TrendingUp },
     { path: '/customers', label: 'Customers', icon: UserPlus },
     { path: '/orders', label: 'Orders', icon: ShoppingCart },
+    { path: '/customer-order-report', label: 'Order Report', icon: ClipboardList },
     { path: '/accessory-sales', label: 'Accessory Sales', icon: ShoppingBag },
     { path: '/my-reports', label: 'My Reports', icon: FileText },
   ];
@@ -66,6 +67,7 @@ const Layout = ({ children }) => {
     { path: '/sales-data', label: 'Sales Data', icon: TrendingUp },
     { path: '/customers', label: 'Customers', icon: UserPlus },
     { path: '/orders', label: 'Orders', icon: ShoppingCart },
+    { path: '/customer-order-report', label: 'Order Report', icon: ClipboardList },
     { path: '/accessory-sales', label: 'Accessory Sales', icon: ShoppingBag },
     { path: '/bulk-messaging', label: 'Bulk Messaging', icon: MessageSquare },
   ];

@@ -222,6 +222,13 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] **Export** - PDF and Excel exports with date-wise grouping, warehouse label, and summary section
 - [x] **Admin-only Access** - All endpoints require admin role, non-admin gets 403
 
+### Customer Order Report - All Roles Access (March 2026)
+- [x] **Order Report accessible to all roles** - Admin, Warehouse Managers, and Sales Executives can view and export
+- [x] **Auto-warehouse filtering** - Non-admin users see only their assigned warehouse data
+- [x] **Warehouse dropdown hidden** for non-admin users (auto-filtered)
+- [x] **PDF/Excel exports** work for all roles (filtered to their warehouse)
+- [x] **Sidebar link** added for managers and sales executives
+
 ### Customer LPG Refill Tracking (March 2026)
 - [x] **Refill Status API** - Backend aggregates last refill date per customer from sales entries
 - [x] **Customer Dashboard** - "Last Refill" and "Days Since" columns with color-coded badges (Green <=15d, Yellow 16-30d, Red >30d)

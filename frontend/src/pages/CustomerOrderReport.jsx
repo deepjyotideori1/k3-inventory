@@ -34,7 +34,7 @@ const CustomerOrderReport = () => {
     setLoading(true);
     try {
       const params = {};
-      if (filterWarehouse !== 'all') params.warehouse_id = filterWarehouse;
+      if (isAdmin && filterWarehouse !== 'all') params.warehouse_id = filterWarehouse;
       if (filterStartDate) params.start_date = filterStartDate;
       if (filterEndDate) params.end_date = filterEndDate;
       if (search) params.search = search;
@@ -49,7 +49,7 @@ const CustomerOrderReport = () => {
     } finally {
       setLoading(false);
     }
-  }, [filterWarehouse, filterStartDate, filterEndDate, search]);
+  }, [isAdmin, filterWarehouse, filterStartDate, filterEndDate, search]);
 
   useEffect(() => { fetchReport(); }, [fetchReport]);
 
@@ -61,7 +61,7 @@ const CustomerOrderReport = () => {
     setExporting(true);
     try {
       const params = {};
-      if (filterWarehouse !== 'all') params.warehouse_id = filterWarehouse;
+      if (isAdmin && filterWarehouse !== 'all') params.warehouse_id = filterWarehouse;
       if (filterStartDate) params.start_date = filterStartDate;
       if (filterEndDate) params.end_date = filterEndDate;
       await exportCustomerOrderReportPDF(params);
@@ -74,7 +74,7 @@ const CustomerOrderReport = () => {
     setExporting(true);
     try {
       const params = {};
-      if (filterWarehouse !== 'all') params.warehouse_id = filterWarehouse;
+      if (isAdmin && filterWarehouse !== 'all') params.warehouse_id = filterWarehouse;
       if (filterStartDate) params.start_date = filterStartDate;
       if (filterEndDate) params.end_date = filterEndDate;
       await exportCustomerOrderReportExcel(params);
@@ -89,18 +89,6 @@ const CustomerOrderReport = () => {
     catch { return d; }
   };
 
-  if (!isAdmin) {
-    return (
-      <Layout>
-        <div className="flex flex-col items-center justify-center h-64 text-center">
-          <Users className="w-16 h-16 text-slate-300 mb-4" />
-          <h2 className="text-2xl font-bold text-slate-700 mb-2">Access Restricted</h2>
-          <p className="text-slate-500">Customer Order Reports are available for admins only.</p>
-        </div>
-      </Layout>
-    );
-  }
-
   return (
     <Layout>
       <div className="space-y-5" data-testid="customer-order-report-page">
@@ -108,7 +96,7 @@ const CustomerOrderReport = () => {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-2xl font-bold text-slate-800">Customer Order Report</h1>
-            <p className="text-sm text-slate-500">Warehouse-wise customer order history</p>
+            <p className="text-sm text-slate-500">{isAdmin ? 'Warehouse-wise customer order history' : `${user?.warehouse_name || 'Your warehouse'} customer order history`}</p>
           </div>
         </div>
 
@@ -116,17 +104,19 @@ const CustomerOrderReport = () => {
         <Card>
           <CardContent className="p-4">
             <div className="flex flex-wrap items-center gap-3">
-              <Select value={filterWarehouse} onValueChange={setFilterWarehouse}>
-                <SelectTrigger className="w-44 h-9 text-sm" data-testid="report-warehouse-filter">
-                  <SelectValue placeholder="Warehouse" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Warehouses</SelectItem>
-                  {warehouses.map(w => (
-                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {isAdmin && (
+                <Select value={filterWarehouse} onValueChange={setFilterWarehouse}>
+                  <SelectTrigger className="w-44 h-9 text-sm" data-testid="report-warehouse-filter">
+                    <SelectValue placeholder="Warehouse" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Warehouses</SelectItem>
+                    {warehouses.map(w => (
+                      <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               <div className="flex items-center gap-1">
                 <Calendar className="w-4 h-4 text-slate-400" />
                 <Input type="date" value={filterStartDate} onChange={e => setFilterStartDate(e.target.value)} className="w-36 h-9 text-sm" placeholder="From" data-testid="report-start-date" />

@@ -223,7 +223,7 @@ function AppRoutes() {
       <Route
         path="/customer-order-report"
         element={
-          <ProtectedRoute adminOnly>
+          <ProtectedRoute>
             <CustomerOrderReport />
           </ProtectedRoute>
         }

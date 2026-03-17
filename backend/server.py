@@ -6308,10 +6308,12 @@ async def get_customer_order_report(
     search: Optional[str] = None,
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
-    """Admin customer-wise order report grouped by warehouse"""
+    """Customer-wise order report grouped by warehouse - all roles with warehouse filtering"""
     user = await get_current_user(credentials)
+    
+    # Non-admin users are forced to their own warehouse
     if user['role'] != 'admin':
-        raise HTTPException(status_code=403, detail="Admin access required")
+        warehouse_id = user.get('warehouse_id', '')
     
     # Build customer query
     cust_query = {}
@@ -6489,10 +6491,10 @@ async def export_customer_order_report_pdf(
     end_date: Optional[str] = None,
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
-    """Export customer-wise order report as PDF"""
+    """Export customer-wise order report as PDF - all roles"""
     user = await get_current_user(credentials)
     if user['role'] != 'admin':
-        raise HTTPException(status_code=403, detail="Admin access required")
+        warehouse_id = user.get('warehouse_id', '')
     
     # Reuse the report logic
     from starlette.datastructures import QueryParams
@@ -6647,10 +6649,10 @@ async def export_customer_order_report_excel(
     end_date: Optional[str] = None,
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
-    """Export customer-wise order report as Excel"""
+    """Export customer-wise order report as Excel - all roles"""
     user = await get_current_user(credentials)
     if user['role'] != 'admin':
-        raise HTTPException(status_code=403, detail="Admin access required")
+        warehouse_id = user.get('warehouse_id', '')
     
     cust_query = {}
     if warehouse_id and warehouse_id != 'all':
