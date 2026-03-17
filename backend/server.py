@@ -4498,6 +4498,34 @@ async def create_sales_entry(
     # Remove MongoDB's _id before returning (insert_one mutates the dict)
     entry_doc.pop('_id', None)
     
+    # Auto-create customer for new connections (not refills)
+    is_new_connection = entry.connection_type in ('domestic', 'commercial')
+    if is_new_connection and not entry.customer_id:
+        new_cust = {
+            'id': str(uuid.uuid4()),
+            'date': entry.date,
+            'customer_name': entry.consumer_name,
+            'address': entry.address or '',
+            'consumer_no': entry.consumer_no or '',
+            'cash_memo_no': entry.memo_no or '',
+            'connection_type': 'Domestic' if entry.connection_type == 'domestic' else 'Commercial',
+            'category': 'Domestic' if entry.connection_type == 'domestic' else 'Commercial',
+            'cylinder_nos': entry.cylinder_nos or '',
+            'phone': '',
+            'gas_card_issued': False,
+            'kyc_done': False,
+            'remarks': entry.remarks or '',
+            'warehouse_id': warehouse_id,
+            'warehouse_name': warehouse_name,
+            'created_by': user['id'],
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+        await db.customers.insert_one(new_cust)
+        new_cust.pop('_id', None)
+        # Link the sales entry to the new customer
+        await db.sales_entries.update_one({'id': entry_doc['id']}, {'$set': {'customer_id': new_cust['id']}})
+        entry_doc['customer_id'] = new_cust['id']
+    
     return {
         **entry_doc,
         'warehouse_name': warehouse_name,
@@ -4538,6 +4566,34 @@ async def create_sales_entry_for_warehouse(
     
     # Remove MongoDB's _id before returning (insert_one mutates the dict)
     entry_doc.pop('_id', None)
+    
+    # Auto-create customer for new connections (not refills)
+    is_new_connection = entry.connection_type in ('domestic', 'commercial')
+    if is_new_connection and not entry.customer_id:
+        new_cust = {
+            'id': str(uuid.uuid4()),
+            'date': entry.date,
+            'customer_name': entry.consumer_name,
+            'address': entry.address or '',
+            'consumer_no': entry.consumer_no or '',
+            'cash_memo_no': entry.memo_no or '',
+            'connection_type': 'Domestic' if entry.connection_type == 'domestic' else 'Commercial',
+            'category': 'Domestic' if entry.connection_type == 'domestic' else 'Commercial',
+            'cylinder_nos': entry.cylinder_nos or '',
+            'phone': '',
+            'gas_card_issued': False,
+            'kyc_done': False,
+            'remarks': entry.remarks or '',
+            'warehouse_id': warehouse_id,
+            'warehouse_name': warehouse['name'],
+            'created_by': user['id'],
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+        await db.customers.insert_one(new_cust)
+        new_cust.pop('_id', None)
+        # Link the sales entry to the new customer
+        await db.sales_entries.update_one({'id': entry_doc['id']}, {'$set': {'customer_id': new_cust['id']}})
+        entry_doc['customer_id'] = new_cust['id']
     
     return {
         **entry_doc,

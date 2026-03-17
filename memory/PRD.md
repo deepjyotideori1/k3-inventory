@@ -236,6 +236,11 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] **Refill Status Export** - PDF and Excel reports with color-coded days, summary stats (total, recent, moderate, overdue, no history)
 - [x] **Export Buttons** - "Refill PDF" and "Refill Excel" on Customer Dashboard
 
+### Sales → Customer Auto-Creation Fix (March 2026)
+- [x] **New Connection sales auto-create customer** - When a "Domestic" or "Commercial" new connection sale is created, a customer record is auto-created in the customers collection
+- [x] **Both endpoints fixed** - Manager endpoint and admin warehouse-specific endpoint both auto-create customers
+- [x] **Sales entry linked** - The sales entry's `customer_id` is updated to reference the newly created customer
+
 ### UI/UX
 - [x] Professional green theme matching gas/energy industry
 - [x] K3 Gas Service logo integration
