@@ -134,21 +134,27 @@ const CustomerManagement = () => {
       if (startDate) params.start_date = startDate;
       if (endDate) params.end_date = endDate;
       
-      const [customersRes, summaryRes, refillRes] = await Promise.all([
+      const [customersRes, summaryRes] = await Promise.all([
         getCustomers(params),
-        getCustomerSummary(filterWarehouse !== 'all' ? { warehouse_id: filterWarehouse } : {}),
-        getCustomerRefillStatus(filterWarehouse !== 'all' ? { warehouse_id: filterWarehouse } : {})
+        getCustomerSummary(filterWarehouse !== 'all' ? { warehouse_id: filterWarehouse } : {})
       ]);
       
       setCustomers(customersRes.data);
       setFilteredCustomers(customersRes.data);
       setSummary(summaryRes.data);
       
-      // Build refill map by customer id
-      const rMap = {};
-      (refillRes.data.customers || []).forEach(c => { rMap[c.id] = c; });
-      setRefillMap(rMap);
-      setRefillSummary(refillRes.data.summary || {});
+      // Fetch refill status separately (non-blocking) so it doesn't break the page
+      try {
+        const refillRes = await getCustomerRefillStatus(filterWarehouse !== 'all' ? { warehouse_id: filterWarehouse } : {});
+        const rMap = {};
+        (refillRes.data.customers || []).forEach(c => { rMap[c.id] = c; });
+        setRefillMap(rMap);
+        setRefillSummary(refillRes.data.summary || {});
+      } catch (refillErr) {
+        console.error('Failed to fetch refill status:', refillErr);
+        setRefillMap({});
+        setRefillSummary({});
+      }
     } catch (error) {
       console.error('Failed to fetch data:', error);
       toast.error('Failed to load customers');
