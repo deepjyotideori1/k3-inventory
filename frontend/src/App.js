@@ -22,6 +22,7 @@ import AccessoryReports from "./pages/AccessoryReports";
 import AccessorySales from "./pages/AccessorySales";
 import CustomerManagement from "./pages/CustomerManagement";
 import OrderManagement from "./pages/OrderManagement";
+import CustomerOrderReport from "./pages/CustomerOrderReport";
 import BulkMessaging from "./pages/BulkMessaging";
 
 // Protected Route Component
@@ -216,6 +217,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <OrderManagement />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/customer-order-report"
+        element={
+          <ProtectedRoute adminOnly>
+            <CustomerOrderReport />
           </ProtectedRoute>
         }
       />

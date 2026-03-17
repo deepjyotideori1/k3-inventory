@@ -6300,6 +6300,512 @@ async def export_order_analysis_excel(
     output.seek(0)
     return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f"attachment; filename=order_analysis_{datetime.now(timezone.utc).strftime('%Y-%m-%d')}.xlsx"})
 
+@api_router.get("/admin/customer-order-report")
+async def get_customer_order_report(
+    warehouse_id: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    search: Optional[str] = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Admin customer-wise order report grouped by warehouse"""
+    user = await get_current_user(credentials)
+    if user['role'] != 'admin':
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Build customer query
+    cust_query = {}
+    if warehouse_id and warehouse_id != 'all':
+        cust_query['warehouse_id'] = warehouse_id
+    if search:
+        cust_query['$or'] = [
+            {'customer_name': {'$regex': search, '$options': 'i'}},
+            {'phone': {'$regex': search, '$options': 'i'}},
+            {'consumer_no': {'$regex': search, '$options': 'i'}}
+        ]
+    
+    customers = await db.customers.find(cust_query, {'_id': 0}).to_list(5000)
+    
+    # Get warehouse names
+    all_wh = await db.warehouses.find({}, {'_id': 0}).to_list(100)
+    wh_map = {w['id']: w['name'] for w in all_wh}
+    
+    # Build order query
+    order_query = {}
+    if warehouse_id and warehouse_id != 'all':
+        order_query['warehouse_id'] = warehouse_id
+    if start_date:
+        order_query['order_date'] = order_query.get('order_date', {})
+        order_query['order_date']['$gte'] = start_date
+    if end_date:
+        if 'order_date' not in order_query:
+            order_query['order_date'] = {}
+        order_query['order_date']['$lte'] = end_date
+    
+    all_orders = await db.orders.find(order_query, {'_id': 0}).sort('order_date', 1).to_list(10000)
+    
+    # Also get sales entries for connection/refill history
+    sales_query = {}
+    if warehouse_id and warehouse_id != 'all':
+        sales_query['warehouse_id'] = warehouse_id
+    if start_date:
+        sales_query['date'] = sales_query.get('date', {})
+        sales_query['date']['$gte'] = start_date
+    if end_date:
+        if 'date' not in sales_query:
+            sales_query['date'] = {}
+        sales_query['date']['$lte'] = end_date
+    
+    all_sales = await db.sales_entries.find(sales_query, {'_id': 0}).sort('date', 1).to_list(10000)
+    
+    # Build customer-id to orders map and name to orders map
+    order_by_cid = {}
+    order_by_name = {}
+    for o in all_orders:
+        cid = o.get('customer_id')
+        cname = (o.get('customer_name') or '').lower()
+        if cid:
+            order_by_cid.setdefault(cid, []).append(o)
+        elif cname:
+            order_by_name.setdefault(cname, []).append(o)
+    
+    sales_by_cid = {}
+    sales_by_name = {}
+    for s in all_sales:
+        cid = s.get('customer_id')
+        cname = (s.get('consumer_name') or '').lower()
+        if cid:
+            sales_by_cid.setdefault(cid, []).append(s)
+        elif cname:
+            sales_by_name.setdefault(cname, []).append(s)
+    
+    total_orders = 0
+    total_refills = 0
+    customer_groups = []
+    
+    for c in customers:
+        cid = c['id']
+        cname = (c.get('customer_name') or '').lower()
+        
+        # Get orders for this customer
+        c_orders = order_by_cid.get(cid, []) + order_by_name.get(cname, [])
+        c_sales = sales_by_cid.get(cid, []) + sales_by_name.get(cname, [])
+        
+        # Combine into unified entries
+        entries = []
+        seen_ids = set()
+        
+        for o in c_orders:
+            oid = o.get('id', o.get('order_no', ''))
+            if oid in seen_ids:
+                continue
+            seen_ids.add(oid)
+            conn_type = o.get('connection_type', '')
+            is_refill = 'refill' in conn_type.lower()
+            qty = o.get('no_of_cylinders', 1) or 1
+            entries.append({
+                'source': 'order',
+                'id': o.get('order_no', o.get('id', '')),
+                'date': o.get('order_date', ''),
+                'type': 'Refill' if is_refill else 'New Connection',
+                'cylinder_type': conn_type.replace('_refill', '').replace('_', ' ').title(),
+                'cylinder_nos': o.get('cylinder_nos', ''),
+                'quantity': qty,
+                'status': o.get('status', 'pending').title(),
+                'payment': o.get('payment_mode', '').replace('_', ' ').title(),
+                'memo_no': o.get('memo_no', '')
+            })
+            total_orders += 1
+            if is_refill:
+                total_refills += qty
+        
+        for s in c_sales:
+            sid = s.get('id', '')
+            if sid in seen_ids:
+                continue
+            seen_ids.add(sid)
+            conn_type = s.get('connection_type', '')
+            is_refill = 'refill' in conn_type.lower()
+            qty = s.get('no_of_refills', 1) or 1 if is_refill else 1
+            entries.append({
+                'source': 'sale',
+                'id': s.get('memo_no', s.get('id', '')),
+                'date': s.get('date', ''),
+                'type': 'Refill' if is_refill else 'New Connection',
+                'cylinder_type': conn_type.replace('_refill', '').replace('_', ' ').title(),
+                'cylinder_nos': s.get('cylinder_nos', ''),
+                'quantity': qty,
+                'status': 'Completed',
+                'payment': s.get('payment_mode', '').replace('_', ' ').title(),
+                'memo_no': s.get('memo_no', '')
+            })
+            total_orders += 1
+            if is_refill:
+                total_refills += qty
+        
+        # Sort entries by date ascending
+        entries.sort(key=lambda x: x.get('date', ''))
+        
+        if not entries and not search:
+            continue
+        
+        # Find initial connection date
+        connection_date = None
+        for e in entries:
+            if e['type'] == 'New Connection':
+                connection_date = e['date']
+                break
+        
+        customer_groups.append({
+            'customer_name': c.get('customer_name', ''),
+            'customer_id': c['id'],
+            'consumer_no': c.get('consumer_no', ''),
+            'phone': c.get('phone', ''),
+            'address': c.get('address', ''),
+            'connection_type': c.get('connection_type', ''),
+            'warehouse_id': c.get('warehouse_id', ''),
+            'warehouse_name': wh_map.get(c.get('warehouse_id', ''), 'Unknown'),
+            'connection_date': connection_date,
+            'total_entries': len(entries),
+            'entries': entries
+        })
+    
+    # Sort customer groups by name
+    customer_groups.sort(key=lambda x: x['customer_name'].lower())
+    
+    return {
+        'customers': customer_groups,
+        'summary': {
+            'total_customers': len(customer_groups),
+            'total_orders': total_orders,
+            'total_refills': total_refills
+        }
+    }
+
+@api_router.get("/export/customer-order-report-pdf")
+async def export_customer_order_report_pdf(
+    warehouse_id: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Export customer-wise order report as PDF"""
+    user = await get_current_user(credentials)
+    if user['role'] != 'admin':
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Reuse the report logic
+    from starlette.datastructures import QueryParams
+    
+    # Build same data
+    cust_query = {}
+    if warehouse_id and warehouse_id != 'all':
+        cust_query['warehouse_id'] = warehouse_id
+    customers = await db.customers.find(cust_query, {'_id': 0}).to_list(5000)
+    
+    all_wh = await db.warehouses.find({}, {'_id': 0}).to_list(100)
+    wh_map = {w['id']: w['name'] for w in all_wh}
+    wh_label = wh_map.get(warehouse_id, 'All Warehouses') if warehouse_id and warehouse_id != 'all' else 'All Warehouses'
+    
+    order_query = {}
+    if warehouse_id and warehouse_id != 'all':
+        order_query['warehouse_id'] = warehouse_id
+    if start_date:
+        order_query['order_date'] = order_query.get('order_date', {})
+        order_query['order_date']['$gte'] = start_date
+    if end_date:
+        if 'order_date' not in order_query:
+            order_query['order_date'] = {}
+        order_query['order_date']['$lte'] = end_date
+    
+    all_orders = await db.orders.find(order_query, {'_id': 0}).sort('order_date', 1).to_list(10000)
+    
+    sales_query = {}
+    if warehouse_id and warehouse_id != 'all':
+        sales_query['warehouse_id'] = warehouse_id
+    if start_date:
+        sales_query['date'] = sales_query.get('date', {})
+        sales_query['date']['$gte'] = start_date
+    if end_date:
+        if 'date' not in sales_query:
+            sales_query['date'] = {}
+        sales_query['date']['$lte'] = end_date
+    
+    all_sales = await db.sales_entries.find(sales_query, {'_id': 0}).sort('date', 1).to_list(10000)
+    
+    order_by_cid = {}
+    order_by_name = {}
+    for o in all_orders:
+        cid = o.get('customer_id')
+        cname = (o.get('customer_name') or '').lower()
+        if cid:
+            order_by_cid.setdefault(cid, []).append(o)
+        elif cname:
+            order_by_name.setdefault(cname, []).append(o)
+    
+    sales_by_cid = {}
+    sales_by_name = {}
+    for s in all_sales:
+        cid = s.get('customer_id')
+        cname = (s.get('consumer_name') or '').lower()
+        if cid:
+            sales_by_cid.setdefault(cid, []).append(s)
+        elif cname:
+            sales_by_name.setdefault(cname, []).append(s)
+    
+    today_display = datetime.now(timezone.utc).strftime('%d-%m-%Y')
+    total_orders = 0
+    total_refills = 0
+    
+    output = BytesIO()
+    doc = SimpleDocTemplate(output, pagesize=landscape(A4), topMargin=20, bottomMargin=20, leftMargin=20, rightMargin=20)
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    title_style = ParagraphStyle('Title', parent=styles['Title'], fontSize=15, spaceAfter=4, textColor=colors.HexColor('#15803d'))
+    subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=9, textColor=colors.grey, spaceAfter=6)
+    cust_header_style = ParagraphStyle('CustHeader', parent=styles['Heading3'], fontSize=10, textColor=colors.HexColor('#1e3a5f'), spaceBefore=10, spaceAfter=2)
+    cust_info_style = ParagraphStyle('CustInfo', parent=styles['Normal'], fontSize=7, textColor=colors.HexColor('#666666'), spaceAfter=4)
+    
+    elements.append(Paragraph("K3 GAS SERVICE - Customer Order Report", title_style))
+    elements.append(Paragraph(f"Warehouse: {wh_label} | Generated: {today_display}", subtitle_style))
+    
+    for c in sorted(customers, key=lambda x: (x.get('customer_name') or '').lower()):
+        cid = c['id']
+        cname = (c.get('customer_name') or '').lower()
+        c_orders = order_by_cid.get(cid, []) + order_by_name.get(cname, [])
+        c_sales = sales_by_cid.get(cid, []) + sales_by_name.get(cname, [])
+        
+        entries = []
+        seen_ids = set()
+        for o in c_orders:
+            oid = o.get('id', o.get('order_no', ''))
+            if oid in seen_ids: continue
+            seen_ids.add(oid)
+            conn_type = o.get('connection_type', '')
+            is_refill = 'refill' in conn_type.lower()
+            qty = o.get('no_of_cylinders', 1) or 1
+            entries.append({'id': o.get('order_no', ''), 'date': o.get('order_date', ''), 'type': 'Refill' if is_refill else 'Connection', 'cyl_type': conn_type.replace('_refill', '').replace('_', ' ').title(), 'cyl_nos': o.get('cylinder_nos', ''), 'qty': qty, 'status': o.get('status', 'pending').title(), 'payment': o.get('payment_mode', '').title()})
+            total_orders += 1
+            if is_refill: total_refills += qty
+        
+        for s in c_sales:
+            sid = s.get('id', '')
+            if sid in seen_ids: continue
+            seen_ids.add(sid)
+            conn_type = s.get('connection_type', '')
+            is_refill = 'refill' in conn_type.lower()
+            qty = s.get('no_of_refills', 1) or 1 if is_refill else 1
+            entries.append({'id': s.get('memo_no', sid[:8]), 'date': s.get('date', ''), 'type': 'Refill' if is_refill else 'Connection', 'cyl_type': conn_type.replace('_refill', '').replace('_', ' ').title(), 'cyl_nos': s.get('cylinder_nos', ''), 'qty': qty, 'status': 'Completed', 'payment': s.get('payment_mode', '').title()})
+            total_orders += 1
+            if is_refill: total_refills += qty
+        
+        if not entries: continue
+        entries.sort(key=lambda x: x.get('date', ''))
+        
+        wh_name = wh_map.get(c.get('warehouse_id', ''), 'Unknown')
+        elements.append(Paragraph(f"{c.get('customer_name', '')} ({wh_name})", cust_header_style))
+        elements.append(Paragraph(f"Phone: {c.get('phone', '-')} | Consumer No: {c.get('consumer_no', '-')} | Address: {c.get('address', '-')[:40]}", cust_info_style))
+        
+        data = [['SL', 'Date', 'Order ID', 'Type', 'Cylinder', 'Cyl Nos', 'Qty', 'Status', 'Payment']]
+        for i, e in enumerate(entries, 1):
+            try:
+                d = datetime.strptime(e['date'], '%Y-%m-%d').strftime('%d-%m-%Y')
+            except:
+                d = e['date']
+            data.append([str(i), d, str(e['id'])[:12], e['type'], e['cyl_type'][:10], e.get('cyl_nos', '')[:10], str(e['qty']), e['status'], e['payment'][:8]])
+        
+        col_widths = [20, 55, 65, 55, 60, 55, 25, 50, 50]
+        table = Table(data, colWidths=col_widths, repeatRows=1)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1e3a5f')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 7),
+            ('FONTSIZE', (0, 1), (-1, -1), 7),
+            ('TOPPADDING', (0, 0), (-1, -1), 2),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 3),
+            ('GRID', (0, 0), (-1, -1), 0.4, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f0f4ff')])
+        ]))
+        elements.append(table)
+        elements.append(Spacer(1, 6))
+    
+    # Add summary at end
+    elements.append(Spacer(1, 12))
+    elements.append(Paragraph(f"Summary: {len([c for c in customers])} Customers | {total_orders} Orders | {total_refills} Refills", subtitle_style))
+    
+    doc.build(elements)
+    output.seek(0)
+    return StreamingResponse(output, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=customer_order_report_{datetime.now(timezone.utc).strftime('%Y-%m-%d')}.pdf"})
+
+@api_router.get("/export/customer-order-report-excel")
+async def export_customer_order_report_excel(
+    warehouse_id: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Export customer-wise order report as Excel"""
+    user = await get_current_user(credentials)
+    if user['role'] != 'admin':
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    cust_query = {}
+    if warehouse_id and warehouse_id != 'all':
+        cust_query['warehouse_id'] = warehouse_id
+    customers = await db.customers.find(cust_query, {'_id': 0}).to_list(5000)
+    
+    all_wh = await db.warehouses.find({}, {'_id': 0}).to_list(100)
+    wh_map = {w['id']: w['name'] for w in all_wh}
+    wh_label = wh_map.get(warehouse_id, 'All Warehouses') if warehouse_id and warehouse_id != 'all' else 'All Warehouses'
+    
+    order_query = {}
+    if warehouse_id and warehouse_id != 'all':
+        order_query['warehouse_id'] = warehouse_id
+    if start_date:
+        order_query['order_date'] = order_query.get('order_date', {})
+        order_query['order_date']['$gte'] = start_date
+    if end_date:
+        if 'order_date' not in order_query:
+            order_query['order_date'] = {}
+        order_query['order_date']['$lte'] = end_date
+    
+    all_orders = await db.orders.find(order_query, {'_id': 0}).sort('order_date', 1).to_list(10000)
+    
+    sales_query = {}
+    if warehouse_id and warehouse_id != 'all':
+        sales_query['warehouse_id'] = warehouse_id
+    if start_date:
+        sales_query['date'] = sales_query.get('date', {})
+        sales_query['date']['$gte'] = start_date
+    if end_date:
+        if 'date' not in sales_query:
+            sales_query['date'] = {}
+        sales_query['date']['$lte'] = end_date
+    
+    all_sales = await db.sales_entries.find(sales_query, {'_id': 0}).sort('date', 1).to_list(10000)
+    
+    order_by_cid = {}
+    order_by_name = {}
+    for o in all_orders:
+        cid = o.get('customer_id')
+        cname = (o.get('customer_name') or '').lower()
+        if cid:
+            order_by_cid.setdefault(cid, []).append(o)
+        elif cname:
+            order_by_name.setdefault(cname, []).append(o)
+    
+    sales_by_cid = {}
+    sales_by_name = {}
+    for s in all_sales:
+        cid = s.get('customer_id')
+        cname = (s.get('consumer_name') or '').lower()
+        if cid:
+            sales_by_cid.setdefault(cid, []).append(s)
+        elif cname:
+            sales_by_name.setdefault(cname, []).append(s)
+    
+    today_display = datetime.now(timezone.utc).strftime('%d-%m-%Y')
+    total_orders = 0
+    total_refills = 0
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Customer Order Report"
+    
+    ws.merge_cells('A1:I1')
+    ws['A1'] = "K3 GAS SERVICE - Customer Order Report"
+    ws['A1'].font = Font(bold=True, size=14, color="15803d")
+    ws.merge_cells('A2:I2')
+    ws['A2'] = f"Warehouse: {wh_label} | Generated: {today_display}"
+    ws['A2'].font = Font(size=9, color="666666")
+    
+    current_row = 4
+    header_fill = PatternFill(start_color="1e3a5f", end_color="1e3a5f", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF", size=9)
+    cust_fill = PatternFill(start_color="e0e7ff", end_color="e0e7ff", fill_type="solid")
+    cust_font = Font(bold=True, size=10, color="1e3a5f")
+    info_font = Font(size=8, color="666666")
+    
+    for c in sorted(customers, key=lambda x: (x.get('customer_name') or '').lower()):
+        cid = c['id']
+        cname = (c.get('customer_name') or '').lower()
+        c_orders = order_by_cid.get(cid, []) + order_by_name.get(cname, [])
+        c_sales = sales_by_cid.get(cid, []) + sales_by_name.get(cname, [])
+        
+        entries = []
+        seen_ids = set()
+        for o in c_orders:
+            oid = o.get('id', o.get('order_no', ''))
+            if oid in seen_ids: continue
+            seen_ids.add(oid)
+            conn_type = o.get('connection_type', '')
+            is_refill = 'refill' in conn_type.lower()
+            qty = o.get('no_of_cylinders', 1) or 1
+            entries.append({'id': o.get('order_no', ''), 'date': o.get('order_date', ''), 'type': 'Refill' if is_refill else 'Connection', 'cyl_type': conn_type.replace('_refill', '').replace('_', ' ').title(), 'cyl_nos': o.get('cylinder_nos', ''), 'qty': qty, 'status': o.get('status', 'pending').title(), 'payment': o.get('payment_mode', '').title()})
+            total_orders += 1
+            if is_refill: total_refills += qty
+        
+        for s in c_sales:
+            sid = s.get('id', '')
+            if sid in seen_ids: continue
+            seen_ids.add(sid)
+            conn_type = s.get('connection_type', '')
+            is_refill = 'refill' in conn_type.lower()
+            qty = s.get('no_of_refills', 1) or 1 if is_refill else 1
+            entries.append({'id': s.get('memo_no', sid[:8]), 'date': s.get('date', ''), 'type': 'Refill' if is_refill else 'Connection', 'cyl_type': conn_type.replace('_refill', '').replace('_', ' ').title(), 'cyl_nos': s.get('cylinder_nos', ''), 'qty': qty, 'status': 'Completed', 'payment': s.get('payment_mode', '').title()})
+            total_orders += 1
+            if is_refill: total_refills += qty
+        
+        if not entries: continue
+        entries.sort(key=lambda x: x.get('date', ''))
+        
+        wh_name = wh_map.get(c.get('warehouse_id', ''), 'Unknown')
+        
+        # Customer header row
+        ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=9)
+        cell = ws.cell(row=current_row, column=1, value=f"{c.get('customer_name', '')} ({wh_name})")
+        cell.fill = cust_fill
+        cell.font = cust_font
+        current_row += 1
+        
+        ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=9)
+        cell = ws.cell(row=current_row, column=1, value=f"Phone: {c.get('phone', '-')} | Consumer No: {c.get('consumer_no', '-')} | Address: {c.get('address', '-')}")
+        cell.font = info_font
+        current_row += 1
+        
+        headers = ['SL', 'Date', 'Order ID', 'Type', 'Cylinder Type', 'Cyl Nos', 'Qty', 'Status', 'Payment']
+        for col, h in enumerate(headers, 1):
+            cell = ws.cell(row=current_row, column=col, value=h)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center')
+        current_row += 1
+        
+        for i, e in enumerate(entries, 1):
+            try:
+                d = datetime.strptime(e['date'], '%Y-%m-%d').strftime('%d-%m-%Y')
+            except:
+                d = e['date']
+            ws.append([i, d, str(e['id']), e['type'], e['cyl_type'], e.get('cyl_nos', ''), e['qty'], e['status'], e['payment']])
+            current_row += 1
+        
+        current_row += 1
+    
+    # Summary
+    ws.cell(row=current_row + 1, column=1, value=f"Total Customers: {len(customers)} | Total Orders: {total_orders} | Total Refills: {total_refills}").font = Font(bold=True, size=10)
+    
+    col_widths = [6, 12, 16, 12, 14, 12, 6, 12, 12]
+    for idx, w in enumerate(col_widths, 1):
+        ws.column_dimensions[chr(64 + idx)].width = w
+    
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f"attachment; filename=customer_order_report_{datetime.now(timezone.utc).strftime('%Y-%m-%d')}.xlsx"})
+
 @api_router.get("/orders/summary/stats")
 async def get_order_summary(
     start_date: Optional[str] = None,

@@ -511,6 +511,31 @@ export const updateOrderStatus = (orderId, status) => api.patch(`/orders/${order
 export const deleteOrder = (orderId) => api.delete(`/orders/${orderId}`);
 export const getOrderSummary = (params) => api.get('/orders/summary/stats', { params });
 export const getOrderAnalysis = (params) => api.get('/admin/order-analysis', { params });
+export const getCustomerOrderReport = (params) => api.get('/admin/customer-order-report', { params });
+
+export const exportCustomerOrderReportPDF = async (params = {}) => {
+  const response = await api.get('/export/customer-order-report-pdf', { params, responseType: 'blob' });
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', `customer_order_report_${new Date().toISOString().split('T')[0]}.pdf`);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  return response;
+};
+
+export const exportCustomerOrderReportExcel = async (params = {}) => {
+  const response = await api.get('/export/customer-order-report-excel', { params, responseType: 'blob' });
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', `customer_order_report_${new Date().toISOString().split('T')[0]}.xlsx`);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  return response;
+};
 
 export const exportOrderAnalysisPDF = async (params = {}) => {
   const response = await api.get('/export/order-analysis-pdf', { params, responseType: 'blob' });

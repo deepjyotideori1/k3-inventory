@@ -42,6 +42,7 @@ const Layout = ({ children }) => {
     { path: '/sales-data', label: 'Sales Data', icon: TrendingUp },
     { path: '/customers', label: 'Customers', icon: UserPlus },
     { path: '/orders', label: 'Orders', icon: ShoppingCart },
+    { path: '/customer-order-report', label: 'Order Report', icon: ClipboardList },
     { path: '/bulk-messaging', label: 'Bulk Messaging', icon: MessageSquare },
     { path: '/plant-hollongi', label: 'Plant Hollongi', icon: Factory },
     { path: '/dealer-reports', label: 'Dealer Reports', icon: UserCheck },
