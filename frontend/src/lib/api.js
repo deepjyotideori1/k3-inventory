@@ -561,6 +561,33 @@ export const exportOrderAnalysisExcel = async (params = {}) => {
   return response;
 };
 
+// Connection & Refill Analytics
+export const getConnectionRefillAnalytics = (params) => api.get('/admin/connection-refill-analytics', { params });
+
+export const exportConnectionRefillPDF = async (params = {}) => {
+  const response = await api.get('/export/connection-refill-analytics-pdf', { params, responseType: 'blob' });
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', `connection_refill_analytics_${new Date().toISOString().split('T')[0]}.pdf`);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  return response;
+};
+
+export const exportConnectionRefillExcel = async (params = {}) => {
+  const response = await api.get('/export/connection-refill-analytics-excel', { params, responseType: 'blob' });
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', `connection_refill_analytics_${new Date().toISOString().split('T')[0]}.xlsx`);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  return response;
+};
+
 // Order PDF Download (single order)
 export const downloadOrderPDF = async (orderId) => {
   try {

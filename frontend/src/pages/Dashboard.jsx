@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { getDashboardStats, getDailyReports, getOrderAnalysis, getWarehouses, exportOrderAnalysisPDF, exportOrderAnalysisExcel } from '../lib/api';
+import { getDashboardStats, getDailyReports, getOrderAnalysis, getWarehouses, exportOrderAnalysisPDF, exportOrderAnalysisExcel, getConnectionRefillAnalytics, exportConnectionRefillPDF, exportConnectionRefillExcel } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -31,7 +31,10 @@ import {
   Calendar,
   CheckCircle2,
   Clock,
-  Truck
+  Truck,
+  BarChart3,
+  Home,
+  Flame
 } from 'lucide-react';
 import { formatDate } from '../lib/utils';
 import { toast } from 'sonner';
@@ -66,6 +69,15 @@ const Dashboard = () => {
   const [orderEndDate, setOrderEndDate] = useState('');
   const [orderSearch, setOrderSearch] = useState('');
   const [allWarehouses, setAllWarehouses] = useState([]);
+
+  // Connection & Refill Analytics state
+  const [analyticsData, setAnalyticsData] = useState(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsExporting, setAnalyticsExporting] = useState(false);
+  const [analyticsPeriod, setAnalyticsPeriod] = useState('monthly');
+  const [analyticsWarehouse, setAnalyticsWarehouse] = useState('all');
+  const [analyticsStartDate, setAnalyticsStartDate] = useState('');
+  const [analyticsEndDate, setAnalyticsEndDate] = useState('');
 
   useEffect(() => {
     fetchStats();
@@ -191,6 +203,58 @@ const Dashboard = () => {
       toast.success('Order analysis Excel exported');
     } catch { toast.error('Failed to export Excel'); }
     finally { setOrderExporting(false); }
+  };
+
+  // Connection & Refill Analytics
+  const fetchAnalytics = useCallback(async () => {
+    setAnalyticsLoading(true);
+    try {
+      const params = { period: analyticsPeriod };
+      if (analyticsWarehouse !== 'all') params.warehouse_id = analyticsWarehouse;
+      if (analyticsPeriod === 'custom') {
+        if (analyticsStartDate) params.start_date = analyticsStartDate;
+        if (analyticsEndDate) params.end_date = analyticsEndDate;
+      }
+      const res = await getConnectionRefillAnalytics(params);
+      setAnalyticsData(res.data);
+    } catch (error) {
+      console.error('Failed to fetch analytics:', error);
+      toast.error('Failed to load analytics');
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }, [analyticsPeriod, analyticsWarehouse, analyticsStartDate, analyticsEndDate]);
+
+  useEffect(() => {
+    if (activeTab === 'analytics') fetchAnalytics();
+  }, [activeTab, fetchAnalytics]);
+
+  const getAnalyticsExportParams = () => {
+    const params = { period: analyticsPeriod };
+    if (analyticsWarehouse !== 'all') params.warehouse_id = analyticsWarehouse;
+    if (analyticsPeriod === 'custom') {
+      if (analyticsStartDate) params.start_date = analyticsStartDate;
+      if (analyticsEndDate) params.end_date = analyticsEndDate;
+    }
+    return params;
+  };
+
+  const handleExportAnalyticsPDF = async () => {
+    setAnalyticsExporting(true);
+    try {
+      await exportConnectionRefillPDF(getAnalyticsExportParams());
+      toast.success('Analytics PDF exported');
+    } catch { toast.error('Failed to export PDF'); }
+    finally { setAnalyticsExporting(false); }
+  };
+
+  const handleExportAnalyticsExcel = async () => {
+    setAnalyticsExporting(true);
+    try {
+      await exportConnectionRefillExcel(getAnalyticsExportParams());
+      toast.success('Analytics Excel exported');
+    } catch { toast.error('Failed to export Excel'); }
+    finally { setAnalyticsExporting(false); }
   };
 
   // Filtered stock data based on selected filters
@@ -575,6 +639,9 @@ const Dashboard = () => {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList>
             <TabsTrigger value="overview" data-testid="overview-tab">Warehouse Overview</TabsTrigger>
+            <TabsTrigger value="analytics" data-testid="analytics-tab">
+              <BarChart3 className="w-4 h-4 mr-1" /> Analytics
+            </TabsTrigger>
             <TabsTrigger value="orders" data-testid="orders-tab">Order Analysis</TabsTrigger>
             <TabsTrigger value="discrepancies" data-testid="discrepancies-tab" className="relative">
               Stock Discrepancies
@@ -745,6 +812,250 @@ const Dashboard = () => {
             </div>
           </TabsContent>
 
+          {/* Connection & Refill Analytics Tab */}
+          <TabsContent value="analytics">
+            <div className="space-y-4" data-testid="analytics-section">
+              {/* Filters */}
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Select value={analyticsPeriod} onValueChange={setAnalyticsPeriod}>
+                      <SelectTrigger className="w-36 h-9 text-sm" data-testid="analytics-period-filter">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="daily">Daily</SelectItem>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                        <SelectItem value="quarterly">Quarterly</SelectItem>
+                        <SelectItem value="yearly">Yearly</SelectItem>
+                        <SelectItem value="custom">Custom Range</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    <Select value={analyticsWarehouse} onValueChange={setAnalyticsWarehouse}>
+                      <SelectTrigger className="w-44 h-9 text-sm" data-testid="analytics-warehouse-filter">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Warehouses</SelectItem>
+                        {allWarehouses.map(w => (
+                          <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    {analyticsPeriod === 'custom' && (
+                      <>
+                        <Input type="date" value={analyticsStartDate} onChange={e => setAnalyticsStartDate(e.target.value)} className="w-36 h-9 text-sm" data-testid="analytics-start-date" />
+                        <Input type="date" value={analyticsEndDate} onChange={e => setAnalyticsEndDate(e.target.value)} className="w-36 h-9 text-sm" data-testid="analytics-end-date" />
+                      </>
+                    )}
+
+                    <Button variant="outline" size="sm" onClick={fetchAnalytics} className="h-9 gap-1" data-testid="analytics-refresh-btn">
+                      <RefreshCw className="w-3.5 h-3.5" /> Refresh
+                    </Button>
+
+                    <div className="ml-auto flex gap-2">
+                      <Button variant="outline" size="sm" onClick={handleExportAnalyticsPDF} disabled={analyticsExporting} className="h-9 gap-1 text-red-700 border-red-200 hover:bg-red-50" data-testid="analytics-export-pdf">
+                        <Download className="w-3.5 h-3.5" /> PDF
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={handleExportAnalyticsExcel} disabled={analyticsExporting} className="h-9 gap-1 text-green-700 border-green-200 hover:bg-green-50" data-testid="analytics-export-excel">
+                        <FileSpreadsheet className="w-3.5 h-3.5" /> Excel
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {analyticsLoading ? (
+                <div className="flex items-center justify-center h-40">
+                  <Loader2 className="w-8 h-8 animate-spin text-green-600" />
+                </div>
+              ) : analyticsData ? (
+                <>
+                  {/* Date Range Info */}
+                  {analyticsData.date_range && (
+                    <p className="text-xs text-slate-500">
+                      <Calendar className="w-3 h-3 inline mr-1" />
+                      {analyticsData.date_range.start} to {analyticsData.date_range.end}
+                    </p>
+                  )}
+
+                  {/* Summary Cards - New Connections */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-600 mb-2 flex items-center gap-1.5">
+                      <Home className="w-4 h-4 text-blue-600" /> New Connections
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                      <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200" data-testid="card-total-new">
+                        <CardContent className="p-3 text-center">
+                          <p className="text-xs text-blue-700 font-medium">Total New</p>
+                          <p className="text-2xl font-bold text-blue-800">{analyticsData.summary.total_new_connections}</p>
+                          <p className="text-xs text-blue-500">{analyticsData.summary.domestic_new_cylinders + analyticsData.summary.commercial_new_cylinders} cylinders</p>
+                        </CardContent>
+                      </Card>
+                      <Card className="bg-gradient-to-br from-cyan-50 to-sky-50 border-cyan-200" data-testid="card-domestic-new">
+                        <CardContent className="p-3 text-center">
+                          <p className="text-xs text-cyan-700 font-medium">Domestic New</p>
+                          <p className="text-2xl font-bold text-cyan-800">{analyticsData.summary.domestic_new_connections}</p>
+                          <p className="text-xs text-cyan-500">{analyticsData.summary.domestic_new_cylinders} cylinders</p>
+                        </CardContent>
+                      </Card>
+                      <Card className="bg-gradient-to-br from-violet-50 to-purple-50 border-violet-200" data-testid="card-commercial-new">
+                        <CardContent className="p-3 text-center">
+                          <p className="text-xs text-violet-700 font-medium">Commercial New</p>
+                          <p className="text-2xl font-bold text-violet-800">{analyticsData.summary.commercial_new_connections}</p>
+                          <p className="text-xs text-violet-500">{analyticsData.summary.commercial_new_cylinders} cylinders</p>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </div>
+
+                  {/* Refill Cards */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-600 mb-2 flex items-center gap-1.5">
+                      <Flame className="w-4 h-4 text-orange-600" /> Refill Activity
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                      <Card className="bg-gradient-to-br from-orange-50 to-amber-50 border-orange-200" data-testid="card-total-refills">
+                        <CardContent className="p-3 text-center">
+                          <p className="text-xs text-orange-700 font-medium">Total Refills</p>
+                          <p className="text-2xl font-bold text-orange-800">{analyticsData.summary.total_refills}</p>
+                          <p className="text-xs text-orange-500">{analyticsData.summary.domestic_refill_cylinders + analyticsData.summary.commercial_refill_cylinders} cylinders</p>
+                        </CardContent>
+                      </Card>
+                      <Card className="bg-gradient-to-br from-yellow-50 to-amber-50 border-yellow-200" data-testid="card-domestic-refills">
+                        <CardContent className="p-3 text-center">
+                          <p className="text-xs text-yellow-700 font-medium">Domestic Refills</p>
+                          <p className="text-2xl font-bold text-yellow-800">{analyticsData.summary.domestic_refills}</p>
+                          <p className="text-xs text-yellow-500">{analyticsData.summary.domestic_refill_cylinders} cylinders</p>
+                        </CardContent>
+                      </Card>
+                      <Card className="bg-gradient-to-br from-rose-50 to-pink-50 border-rose-200" data-testid="card-commercial-refills">
+                        <CardContent className="p-3 text-center">
+                          <p className="text-xs text-rose-700 font-medium">Commercial Refills</p>
+                          <p className="text-2xl font-bold text-rose-800">{analyticsData.summary.commercial_refills}</p>
+                          <p className="text-xs text-rose-500">{analyticsData.summary.commercial_refill_cylinders} cylinders</p>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </div>
+
+                  {/* Warehouse Breakdown Table */}
+                  {analyticsData.warehouse_breakdown?.length > 0 && (
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
+                          <Warehouse className="w-4 h-4" /> Warehouse Breakdown
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-0">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs" data-testid="analytics-warehouse-table">
+                            <thead>
+                              <tr className="bg-slate-50 border-b">
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600">Warehouse</th>
+                                <th className="px-2 py-2 text-center font-semibold text-cyan-700">Dom. New</th>
+                                <th className="px-2 py-2 text-center font-semibold text-cyan-600">Cyl</th>
+                                <th className="px-2 py-2 text-center font-semibold text-violet-700">Com. New</th>
+                                <th className="px-2 py-2 text-center font-semibold text-violet-600">Cyl</th>
+                                <th className="px-2 py-2 text-center font-semibold text-yellow-700">Dom. Refill</th>
+                                <th className="px-2 py-2 text-center font-semibold text-yellow-600">Cyl</th>
+                                <th className="px-2 py-2 text-center font-semibold text-rose-700">Com. Refill</th>
+                                <th className="px-2 py-2 text-center font-semibold text-rose-600">Cyl</th>
+                                <th className="px-2 py-2 text-center font-semibold text-slate-700">Total</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {analyticsData.warehouse_breakdown.map((w, i) => {
+                                const total = w.domestic_new + w.commercial_new + w.domestic_refill + w.commercial_refill;
+                                return (
+                                  <tr key={i} className="border-b hover:bg-slate-50/50">
+                                    <td className="px-3 py-2 font-medium text-slate-800">{w.warehouse_name}</td>
+                                    <td className="px-2 py-2 text-center">{w.domestic_new}</td>
+                                    <td className="px-2 py-2 text-center text-slate-500">{w.domestic_new_cyl}</td>
+                                    <td className="px-2 py-2 text-center">{w.commercial_new}</td>
+                                    <td className="px-2 py-2 text-center text-slate-500">{w.commercial_new_cyl}</td>
+                                    <td className="px-2 py-2 text-center">{w.domestic_refill}</td>
+                                    <td className="px-2 py-2 text-center text-slate-500">{w.domestic_refill_cyl}</td>
+                                    <td className="px-2 py-2 text-center">{w.commercial_refill}</td>
+                                    <td className="px-2 py-2 text-center text-slate-500">{w.commercial_refill_cyl}</td>
+                                    <td className="px-2 py-2 text-center font-semibold">{total}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Date-wise Breakdown Table */}
+                  {analyticsData.date_breakdown?.length > 0 && (
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
+                          <Calendar className="w-4 h-4" /> Date-wise Breakdown
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-0">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs" data-testid="analytics-date-table">
+                            <thead>
+                              <tr className="bg-slate-50 border-b">
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600">Date</th>
+                                <th className="px-2 py-2 text-center font-semibold text-cyan-700">Dom. New</th>
+                                <th className="px-2 py-2 text-center font-semibold text-cyan-600">Cyl</th>
+                                <th className="px-2 py-2 text-center font-semibold text-violet-700">Com. New</th>
+                                <th className="px-2 py-2 text-center font-semibold text-violet-600">Cyl</th>
+                                <th className="px-2 py-2 text-center font-semibold text-yellow-700">Dom. Refill</th>
+                                <th className="px-2 py-2 text-center font-semibold text-yellow-600">Cyl</th>
+                                <th className="px-2 py-2 text-center font-semibold text-rose-700">Com. Refill</th>
+                                <th className="px-2 py-2 text-center font-semibold text-rose-600">Cyl</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {analyticsData.date_breakdown.map((d, i) => (
+                                <tr key={i} className="border-b hover:bg-slate-50/50">
+                                  <td className="px-3 py-2 font-medium text-slate-800">{d.date}</td>
+                                  <td className="px-2 py-2 text-center">{d.domestic_new}</td>
+                                  <td className="px-2 py-2 text-center text-slate-500">{d.domestic_new_cyl}</td>
+                                  <td className="px-2 py-2 text-center">{d.commercial_new}</td>
+                                  <td className="px-2 py-2 text-center text-slate-500">{d.commercial_new_cyl}</td>
+                                  <td className="px-2 py-2 text-center">{d.domestic_refill}</td>
+                                  <td className="px-2 py-2 text-center text-slate-500">{d.domestic_refill_cyl}</td>
+                                  <td className="px-2 py-2 text-center">{d.commercial_refill}</td>
+                                  <td className="px-2 py-2 text-center text-slate-500">{d.commercial_refill_cyl}</td>
+                                </tr>
+                              ))}
+                              {/* Totals row */}
+                              <tr className="bg-amber-50 font-semibold border-t-2">
+                                <td className="px-3 py-2">TOTAL</td>
+                                <td className="px-2 py-2 text-center">{analyticsData.summary.domestic_new_connections}</td>
+                                <td className="px-2 py-2 text-center">{analyticsData.summary.domestic_new_cylinders}</td>
+                                <td className="px-2 py-2 text-center">{analyticsData.summary.commercial_new_connections}</td>
+                                <td className="px-2 py-2 text-center">{analyticsData.summary.commercial_new_cylinders}</td>
+                                <td className="px-2 py-2 text-center">{analyticsData.summary.domestic_refills}</td>
+                                <td className="px-2 py-2 text-center">{analyticsData.summary.domestic_refill_cylinders}</td>
+                                <td className="px-2 py-2 text-center">{analyticsData.summary.commercial_refills}</td>
+                                <td className="px-2 py-2 text-center">{analyticsData.summary.commercial_refill_cylinders}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-40 text-slate-400">
+                  <BarChart3 className="w-12 h-12 mb-2" />
+                  <p className="text-sm">Select filters and click Refresh to load analytics</p>
+                </div>
+              )}
+            </div>
+          </TabsContent>
 
           {/* Order Analysis Tab */}
           <TabsContent value="orders">

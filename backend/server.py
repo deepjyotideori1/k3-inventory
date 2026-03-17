@@ -6379,6 +6379,424 @@ async def export_order_analysis_excel(
     output.seek(0)
     return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f"attachment; filename=order_analysis_{datetime.now(timezone.utc).strftime('%Y-%m-%d')}.xlsx"})
 
+
+# ===================== CONNECTION & REFILL ANALYTICS =====================
+
+def _count_cylinders(cylinder_nos_str):
+    """Count cylinders from cylinder_nos field - handles 'CYL-001,CYL-002' or '2' formats"""
+    if not cylinder_nos_str or not cylinder_nos_str.strip():
+        return 0
+    parts = [p.strip() for p in str(cylinder_nos_str).split(',') if p.strip()]
+    # If single numeric value, return it as count
+    if len(parts) == 1:
+        try:
+            return int(parts[0])
+        except ValueError:
+            return 1
+    return len(parts)
+
+def _get_date_range_for_period(period, custom_start=None, custom_end=None):
+    """Return (start_date, end_date) strings for a given period"""
+    today = datetime.now(timezone.utc).date()
+    if period == 'daily':
+        return str(today), str(today)
+    elif period == 'monthly':
+        return str(today.replace(day=1)), str(today)
+    elif period == 'quarterly':
+        q_month = ((today.month - 1) // 3) * 3 + 1
+        return str(today.replace(month=q_month, day=1)), str(today)
+    elif period == 'yearly':
+        return str(today.replace(month=1, day=1)), str(today)
+    elif period == 'custom' and custom_start and custom_end:
+        return custom_start, custom_end
+    return str(today), str(today)
+
+@api_router.get("/admin/connection-refill-analytics")
+async def get_connection_refill_analytics(
+    period: str = 'monthly',
+    warehouse_id: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Analytics for new connections and refills from sales_entries"""
+    user = await get_current_user(credentials)
+    if user['role'] != 'admin':
+        warehouse_id = user.get('warehouse_id', '')
+    
+    sd, ed = _get_date_range_for_period(period, start_date, end_date)
+    
+    query = {'date': {'$gte': sd, '$lte': ed}}
+    if warehouse_id and warehouse_id != 'all':
+        query['warehouse_id'] = warehouse_id
+    
+    entries = await db.sales_entries.find(query, {'_id': 0}).to_list(None)
+    
+    # Categorize
+    domestic_new = [e for e in entries if e.get('connection_type') == 'domestic']
+    commercial_new = [e for e in entries if e.get('connection_type') == 'commercial']
+    domestic_refill = [e for e in entries if e.get('connection_type') == 'domestic_refill']
+    commercial_refill = [e for e in entries if e.get('connection_type') == 'commercial_refill']
+    
+    # Cylinder counts
+    domestic_new_cyl = sum(_count_cylinders(e.get('cylinder_nos', '')) for e in domestic_new)
+    commercial_new_cyl = sum(_count_cylinders(e.get('cylinder_nos', '')) for e in commercial_new)
+    domestic_refill_cyl = sum(int(e.get('no_of_refills', 0) or 0) for e in domestic_refill)
+    commercial_refill_cyl = sum(int(e.get('no_of_refills', 0) or 0) for e in commercial_refill)
+    
+    # For new connections without cylinder_nos, count as 1 per entry
+    for e in domestic_new:
+        if not e.get('cylinder_nos', '').strip():
+            domestic_new_cyl += 1
+    for e in commercial_new:
+        if not e.get('cylinder_nos', '').strip():
+            commercial_new_cyl += 1
+    
+    # Warehouse breakdown
+    warehouses = await db.warehouses.find({}, {'_id': 0}).to_list(None)
+    wh_map = {w['id']: w['name'] for w in warehouses}
+    
+    wh_breakdown = {}
+    for e in entries:
+        wid = e.get('warehouse_id', '')
+        if wid not in wh_breakdown:
+            wh_breakdown[wid] = {
+                'warehouse_id': wid,
+                'warehouse_name': wh_map.get(wid, e.get('warehouse_name', 'Unknown')),
+                'domestic_new': 0, 'commercial_new': 0,
+                'domestic_new_cyl': 0, 'commercial_new_cyl': 0,
+                'domestic_refill': 0, 'commercial_refill': 0,
+                'domestic_refill_cyl': 0, 'commercial_refill_cyl': 0
+            }
+        wb = wh_breakdown[wid]
+        ct = e.get('connection_type', '')
+        if ct == 'domestic':
+            wb['domestic_new'] += 1
+            cyl = _count_cylinders(e.get('cylinder_nos', ''))
+            wb['domestic_new_cyl'] += cyl if cyl > 0 else 1
+        elif ct == 'commercial':
+            wb['commercial_new'] += 1
+            cyl = _count_cylinders(e.get('cylinder_nos', ''))
+            wb['commercial_new_cyl'] += cyl if cyl > 0 else 1
+        elif ct == 'domestic_refill':
+            wb['domestic_refill'] += 1
+            wb['domestic_refill_cyl'] += int(e.get('no_of_refills', 0) or 0)
+        elif ct == 'commercial_refill':
+            wb['commercial_refill'] += 1
+            wb['commercial_refill_cyl'] += int(e.get('no_of_refills', 0) or 0)
+    
+    # Date-wise breakdown
+    from collections import defaultdict
+    date_data = defaultdict(lambda: {
+        'domestic_new': 0, 'commercial_new': 0,
+        'domestic_new_cyl': 0, 'commercial_new_cyl': 0,
+        'domestic_refill': 0, 'commercial_refill': 0,
+        'domestic_refill_cyl': 0, 'commercial_refill_cyl': 0
+    })
+    
+    for e in entries:
+        d = e.get('date', '')
+        ct = e.get('connection_type', '')
+        dd = date_data[d]
+        if ct == 'domestic':
+            dd['domestic_new'] += 1
+            cyl = _count_cylinders(e.get('cylinder_nos', ''))
+            dd['domestic_new_cyl'] += cyl if cyl > 0 else 1
+        elif ct == 'commercial':
+            dd['commercial_new'] += 1
+            cyl = _count_cylinders(e.get('cylinder_nos', ''))
+            dd['commercial_new_cyl'] += cyl if cyl > 0 else 1
+        elif ct == 'domestic_refill':
+            dd['domestic_refill'] += 1
+            dd['domestic_refill_cyl'] += int(e.get('no_of_refills', 0) or 0)
+        elif ct == 'commercial_refill':
+            dd['commercial_refill'] += 1
+            dd['commercial_refill_cyl'] += int(e.get('no_of_refills', 0) or 0)
+    
+    date_breakdown = [{'date': k, **v} for k, v in sorted(date_data.items())]
+    
+    return {
+        'summary': {
+            'total_new_connections': len(domestic_new) + len(commercial_new),
+            'domestic_new_connections': len(domestic_new),
+            'commercial_new_connections': len(commercial_new),
+            'domestic_new_cylinders': domestic_new_cyl,
+            'commercial_new_cylinders': commercial_new_cyl,
+            'total_refills': len(domestic_refill) + len(commercial_refill),
+            'domestic_refills': len(domestic_refill),
+            'commercial_refills': len(commercial_refill),
+            'domestic_refill_cylinders': domestic_refill_cyl,
+            'commercial_refill_cylinders': commercial_refill_cyl
+        },
+        'warehouse_breakdown': list(wh_breakdown.values()),
+        'date_breakdown': date_breakdown,
+        'period': period,
+        'date_range': {'start': sd, 'end': ed}
+    }
+
+@api_router.get("/export/connection-refill-analytics-pdf")
+async def export_connection_refill_analytics_pdf(
+    period: str = 'monthly',
+    warehouse_id: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Export connection & refill analytics as PDF"""
+    user = await get_current_user(credentials)
+    if user['role'] != 'admin':
+        warehouse_id = user.get('warehouse_id', '')
+    
+    sd, ed = _get_date_range_for_period(period, start_date, end_date)
+    query = {'date': {'$gte': sd, '$lte': ed}}
+    if warehouse_id and warehouse_id != 'all':
+        query['warehouse_id'] = warehouse_id
+    
+    entries = await db.sales_entries.find(query, {'_id': 0}).to_list(None)
+    warehouses = await db.warehouses.find({}, {'_id': 0}).to_list(None)
+    wh_map = {w['id']: w['name'] for w in warehouses}
+    
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), topMargin=30, bottomMargin=30)
+    styles = getSampleStyleSheet()
+    elements = []
+    
+    # Title
+    title_style = ParagraphStyle('ReportTitle', parent=styles['Title'], fontSize=16, spaceAfter=6)
+    elements.append(Paragraph("Connection & Refill Analytics Report", title_style))
+    
+    wh_label = 'All Warehouses'
+    if warehouse_id and warehouse_id != 'all':
+        wh_label = wh_map.get(warehouse_id, warehouse_id)
+    elements.append(Paragraph(f"Period: {sd} to {ed} | Warehouse: {wh_label}", styles['Normal']))
+    elements.append(Spacer(1, 12))
+    
+    # Summary table
+    domestic_new = [e for e in entries if e.get('connection_type') == 'domestic']
+    commercial_new = [e for e in entries if e.get('connection_type') == 'commercial']
+    domestic_refill = [e for e in entries if e.get('connection_type') == 'domestic_refill']
+    commercial_refill = [e for e in entries if e.get('connection_type') == 'commercial_refill']
+    
+    dn_cyl = sum(_count_cylinders(e.get('cylinder_nos', '')) or 1 for e in domestic_new)
+    cn_cyl = sum(_count_cylinders(e.get('cylinder_nos', '')) or 1 for e in commercial_new)
+    dr_cyl = sum(int(e.get('no_of_refills', 0) or 0) for e in domestic_refill)
+    cr_cyl = sum(int(e.get('no_of_refills', 0) or 0) for e in commercial_refill)
+    
+    summary_data = [
+        ['Category', 'Count', 'Cylinders'],
+        ['Domestic New Connections', str(len(domestic_new)), str(dn_cyl)],
+        ['Commercial New Connections', str(len(commercial_new)), str(cn_cyl)],
+        ['Total New Connections', str(len(domestic_new)+len(commercial_new)), str(dn_cyl+cn_cyl)],
+        ['Domestic Refills', str(len(domestic_refill)), str(dr_cyl)],
+        ['Commercial Refills', str(len(commercial_refill)), str(cr_cyl)],
+        ['Total Refills', str(len(domestic_refill)+len(commercial_refill)), str(dr_cyl+cr_cyl)],
+        ['Grand Total', str(len(entries)), str(dn_cyl+cn_cyl+dr_cyl+cr_cyl)]
+    ]
+    
+    st = Table(summary_data, colWidths=[250, 100, 100])
+    st.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1e3a5f')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+        ('BACKGROUND', (0, 3), (-1, 3), colors.HexColor('#e8f5e9')),
+        ('BACKGROUND', (0, 6), (-1, 6), colors.HexColor('#e3f2fd')),
+        ('BACKGROUND', (0, 7), (-1, 7), colors.HexColor('#fff3e0')),
+        ('FONTNAME', (0, 3), (-1, 3), 'Helvetica-Bold'),
+        ('FONTNAME', (0, 6), (-1, 6), 'Helvetica-Bold'),
+        ('FONTNAME', (0, 7), (-1, 7), 'Helvetica-Bold'),
+    ]))
+    elements.append(st)
+    elements.append(Spacer(1, 16))
+    
+    # Date-wise breakdown table
+    elements.append(Paragraph("Date-wise Breakdown", styles['Heading3']))
+    from collections import defaultdict
+    date_data = defaultdict(lambda: [0]*8)
+    for e in entries:
+        d = e.get('date', '')
+        ct = e.get('connection_type', '')
+        dd = date_data[d]
+        if ct == 'domestic':
+            dd[0] += 1; dd[1] += _count_cylinders(e.get('cylinder_nos', '')) or 1
+        elif ct == 'commercial':
+            dd[2] += 1; dd[3] += _count_cylinders(e.get('cylinder_nos', '')) or 1
+        elif ct == 'domestic_refill':
+            dd[4] += 1; dd[5] += int(e.get('no_of_refills', 0) or 0)
+        elif ct == 'commercial_refill':
+            dd[6] += 1; dd[7] += int(e.get('no_of_refills', 0) or 0)
+    
+    dt_table = [['Date', 'Dom. New', 'Cyl', 'Com. New', 'Cyl', 'Dom. Refill', 'Cyl', 'Com. Refill', 'Cyl']]
+    grand = [0]*8
+    for d in sorted(date_data.keys()):
+        row = date_data[d]
+        dt_table.append([d] + [str(v) for v in row])
+        for i in range(8): grand[i] += row[i]
+    dt_table.append(['TOTAL'] + [str(v) for v in grand])
+    
+    dt = Table(dt_table, colWidths=[70, 55, 40, 55, 40, 60, 40, 60, 40])
+    dt.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1e3a5f')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#fff3e0')),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+    ]))
+    elements.append(dt)
+    
+    doc.build(elements)
+    buffer.seek(0)
+    return StreamingResponse(buffer, media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=connection_refill_analytics_{sd}_to_{ed}.pdf"})
+
+@api_router.get("/export/connection-refill-analytics-excel")
+async def export_connection_refill_analytics_excel(
+    period: str = 'monthly',
+    warehouse_id: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Export connection & refill analytics as Excel"""
+    user = await get_current_user(credentials)
+    if user['role'] != 'admin':
+        warehouse_id = user.get('warehouse_id', '')
+    
+    sd, ed = _get_date_range_for_period(period, start_date, end_date)
+    query = {'date': {'$gte': sd, '$lte': ed}}
+    if warehouse_id and warehouse_id != 'all':
+        query['warehouse_id'] = warehouse_id
+    
+    entries = await db.sales_entries.find(query, {'_id': 0}).to_list(None)
+    warehouses = await db.warehouses.find({}, {'_id': 0}).to_list(None)
+    wh_map = {w['id']: w['name'] for w in warehouses}
+    
+    output = BytesIO()
+    workbook = xlsxwriter.Workbook(output)
+    
+    header_format = workbook.add_format({'bold': True, 'bg_color': '#1e3a5f', 'font_color': 'white', 'border': 1, 'align': 'center'})
+    data_fmt = workbook.add_format({'border': 1, 'align': 'center'})
+    bold_fmt = workbook.add_format({'border': 1, 'bold': True, 'align': 'center', 'bg_color': '#fff3e0'})
+    green_fmt = workbook.add_format({'border': 1, 'bold': True, 'align': 'center', 'bg_color': '#e8f5e9'})
+    blue_fmt = workbook.add_format({'border': 1, 'bold': True, 'align': 'center', 'bg_color': '#e3f2fd'})
+    
+    # Summary Sheet
+    ws1 = workbook.add_worksheet('Summary')
+    domestic_new = [e for e in entries if e.get('connection_type') == 'domestic']
+    commercial_new = [e for e in entries if e.get('connection_type') == 'commercial']
+    domestic_refill = [e for e in entries if e.get('connection_type') == 'domestic_refill']
+    commercial_refill = [e for e in entries if e.get('connection_type') == 'commercial_refill']
+    
+    dn_cyl = sum(_count_cylinders(e.get('cylinder_nos', '')) or 1 for e in domestic_new)
+    cn_cyl = sum(_count_cylinders(e.get('cylinder_nos', '')) or 1 for e in commercial_new)
+    dr_cyl = sum(int(e.get('no_of_refills', 0) or 0) for e in domestic_refill)
+    cr_cyl = sum(int(e.get('no_of_refills', 0) or 0) for e in commercial_refill)
+    
+    ws1.write(0, 0, f'Connection & Refill Analytics | {sd} to {ed}', workbook.add_format({'bold': True, 'font_size': 14}))
+    for col, h in enumerate(['Category', 'Count', 'Cylinders']):
+        ws1.write(2, col, h, header_format)
+    summary_rows = [
+        ('Domestic New Connections', len(domestic_new), dn_cyl),
+        ('Commercial New Connections', len(commercial_new), cn_cyl),
+        ('Total New Connections', len(domestic_new)+len(commercial_new), dn_cyl+cn_cyl),
+        ('Domestic Refills', len(domestic_refill), dr_cyl),
+        ('Commercial Refills', len(commercial_refill), cr_cyl),
+        ('Total Refills', len(domestic_refill)+len(commercial_refill), dr_cyl+cr_cyl),
+        ('Grand Total', len(entries), dn_cyl+cn_cyl+dr_cyl+cr_cyl)
+    ]
+    for i, (cat, cnt, cyl) in enumerate(summary_rows):
+        fmt = green_fmt if i == 2 else (blue_fmt if i == 5 else (bold_fmt if i == 6 else data_fmt))
+        ws1.write(3+i, 0, cat, fmt)
+        ws1.write(3+i, 1, cnt, fmt)
+        ws1.write(3+i, 2, cyl, fmt)
+    ws1.set_column(0, 0, 30)
+    ws1.set_column(1, 2, 15)
+    
+    # Date-wise Sheet
+    ws2 = workbook.add_worksheet('Date-wise Breakdown')
+    headers = ['Date', 'Warehouse', 'Dom. New', 'Dom. New Cyl', 'Com. New', 'Com. New Cyl', 'Dom. Refill', 'Dom. Refill Cyl', 'Com. Refill', 'Com. Refill Cyl']
+    for col, h in enumerate(headers):
+        ws2.write(0, col, h, header_format)
+        ws2.set_column(col, col, 15)
+    
+    row = 1
+    from collections import defaultdict
+    date_wh = defaultdict(lambda: [0]*8)
+    for e in entries:
+        key = (e.get('date', ''), e.get('warehouse_id', ''))
+        ct = e.get('connection_type', '')
+        dd = date_wh[key]
+        if ct == 'domestic':
+            dd[0] += 1; dd[1] += _count_cylinders(e.get('cylinder_nos', '')) or 1
+        elif ct == 'commercial':
+            dd[2] += 1; dd[3] += _count_cylinders(e.get('cylinder_nos', '')) or 1
+        elif ct == 'domestic_refill':
+            dd[4] += 1; dd[5] += int(e.get('no_of_refills', 0) or 0)
+        elif ct == 'commercial_refill':
+            dd[6] += 1; dd[7] += int(e.get('no_of_refills', 0) or 0)
+    
+    grand = [0]*8
+    for (d, wid), vals in sorted(date_wh.items()):
+        ws2.write(row, 0, d, data_fmt)
+        ws2.write(row, 1, wh_map.get(wid, 'Unknown'), data_fmt)
+        for i, v in enumerate(vals):
+            ws2.write(row, 2+i, v, data_fmt)
+            grand[i] += v
+        row += 1
+    
+    ws2.write(row, 0, 'TOTAL', bold_fmt)
+    ws2.write(row, 1, '', bold_fmt)
+    for i, v in enumerate(grand):
+        ws2.write(row, 2+i, v, bold_fmt)
+    
+    # Warehouse Sheet
+    ws3 = workbook.add_worksheet('Warehouse Breakdown')
+    wh_headers = ['Warehouse', 'Dom. New', 'Dom. New Cyl', 'Com. New', 'Com. New Cyl', 'Dom. Refill', 'Dom. Refill Cyl', 'Com. Refill', 'Com. Refill Cyl', 'Total']
+    for col, h in enumerate(wh_headers):
+        ws3.write(0, col, h, header_format)
+        ws3.set_column(col, col, 16)
+    
+    wh_data = defaultdict(lambda: [0]*8)
+    for e in entries:
+        wid = e.get('warehouse_id', '')
+        ct = e.get('connection_type', '')
+        dd = wh_data[wid]
+        if ct == 'domestic':
+            dd[0] += 1; dd[1] += _count_cylinders(e.get('cylinder_nos', '')) or 1
+        elif ct == 'commercial':
+            dd[2] += 1; dd[3] += _count_cylinders(e.get('cylinder_nos', '')) or 1
+        elif ct == 'domestic_refill':
+            dd[4] += 1; dd[5] += int(e.get('no_of_refills', 0) or 0)
+        elif ct == 'commercial_refill':
+            dd[6] += 1; dd[7] += int(e.get('no_of_refills', 0) or 0)
+    
+    row = 1
+    grand = [0]*8
+    for wid, vals in sorted(wh_data.items(), key=lambda x: wh_map.get(x[0], '')):
+        ws3.write(row, 0, wh_map.get(wid, 'Unknown'), data_fmt)
+        total = 0
+        for i, v in enumerate(vals):
+            ws3.write(row, 1+i, v, data_fmt)
+            grand[i] += v
+            total += v
+        ws3.write(row, 9, total, data_fmt)
+        row += 1
+    ws3.write(row, 0, 'TOTAL', bold_fmt)
+    for i, v in enumerate(grand):
+        ws3.write(row, 1+i, v, bold_fmt)
+    ws3.write(row, 9, sum(grand), bold_fmt)
+    
+    workbook.close()
+    output.seek(0)
+    return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=connection_refill_analytics_{sd}_to_{ed}.xlsx"})
+
+
 @api_router.get("/admin/customer-order-report")
 async def get_customer_order_report(
     warehouse_id: Optional[str] = None,
