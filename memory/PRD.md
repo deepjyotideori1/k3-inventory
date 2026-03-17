@@ -214,6 +214,13 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] **Expandable Warehouse Breakdown** - Table showing per-warehouse stock with Plant Hollongi row and TOTAL row
 - [x] **Role-Based Access** - Only admin sees full warehouse-level details; managers see their own dashboard
 
+### Customer LPG Refill Tracking (March 2026)
+- [x] **Refill Status API** - Backend aggregates last refill date per customer from sales entries
+- [x] **Customer Dashboard** - "Last Refill" and "Days Since" columns with color-coded badges (Green <=15d, Yellow 16-30d, Red >30d)
+- [x] **Order Management** - Last refill info panel shown when selecting existing customer (date, days, color badge, alert if overdue)
+- [x] **Refill Status Export** - PDF and Excel reports with color-coded days, summary stats (total, recent, moderate, overdue, no history)
+- [x] **Export Buttons** - "Refill PDF" and "Refill Excel" on Customer Dashboard
+
 ### UI/UX
 - [x] Professional green theme matching gas/energy industry
 - [x] K3 Gas Service logo integration
