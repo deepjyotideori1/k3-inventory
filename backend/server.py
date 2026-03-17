@@ -4681,18 +4681,56 @@ async def get_sales_summary(
         {'$group': {
             '_id': '$payment_mode',
             'total_amount': {'$sum': '$amount'},
-            'total_refills': {'$sum': '$no_of_refills'},
-            'count': {'$sum': 1}
+            'count': {'$sum': 1},
+            # Only sum no_of_refills for refill-type entries
+            'total_refills': {'$sum': {
+                '$cond': [
+                    {'$in': ['$connection_type', ['domestic_refill', 'commercial_refill']]},
+                    {'$ifNull': ['$no_of_refills', 0]},
+                    0
+                ]
+            }},
+            # Count refill entries (transactions)
+            'refill_entries': {'$sum': {
+                '$cond': [
+                    {'$in': ['$connection_type', ['domestic_refill', 'commercial_refill']]},
+                    1,
+                    0
+                ]
+            }},
+            # Count new connection entries
+            'new_connection_entries': {'$sum': {
+                '$cond': [
+                    {'$in': ['$connection_type', ['domestic', 'commercial']]},
+                    1,
+                    0
+                ]
+            }}
         }}
     ]
     
     results = await db.sales_entries.aggregate(pipeline).to_list(100)
     
+    # Also calculate total cylinders from cylinder_nos field for new connections
+    new_conn_query = {**match_stage, 'connection_type': {'$in': ['domestic', 'commercial']}}
+    new_connections = await db.sales_entries.find(new_conn_query, {'_id': 0, 'cylinder_nos': 1}).to_list(5000)
+    total_new_cylinders = 0
+    for nc in new_connections:
+        cn = nc.get('cylinder_nos', '') or ''
+        if cn.strip():
+            parts = [p.strip() for p in cn.split(',') if p.strip()]
+            try:
+                total_new_cylinders += int(parts[0]) if len(parts) == 1 else len(parts)
+            except ValueError:
+                total_new_cylinders += len(parts)
+        else:
+            total_new_cylinders += 1  # At least 1 cylinder per new connection
+    
     summary = {
-        'cash': {'amount': 0, 'refills': 0, 'count': 0},
-        'online': {'amount': 0, 'refills': 0, 'count': 0},
-        'pending': {'amount': 0, 'refills': 0, 'count': 0},
-        'total': {'amount': 0, 'refills': 0, 'count': 0}
+        'cash': {'amount': 0, 'refills': 0, 'count': 0, 'cylinders': 0, 'new_connections': 0},
+        'online': {'amount': 0, 'refills': 0, 'count': 0, 'cylinders': 0, 'new_connections': 0},
+        'pending': {'amount': 0, 'refills': 0, 'count': 0, 'cylinders': 0, 'new_connections': 0},
+        'total': {'amount': 0, 'refills': 0, 'count': 0, 'cylinders': 0, 'new_connections': 0}
     }
     
     for r in results:
@@ -4701,11 +4739,18 @@ async def get_sales_summary(
             summary[mode] = {
                 'amount': r['total_amount'],
                 'refills': r['total_refills'],
-                'count': r['count']
+                'count': r['count'],
+                'cylinders': r['total_refills'],
+                'new_connections': r['new_connection_entries']
             }
         summary['total']['amount'] += r['total_amount']
         summary['total']['refills'] += r['total_refills']
         summary['total']['count'] += r['count']
+        summary['total']['cylinders'] += r['total_refills']
+        summary['total']['new_connections'] += r['new_connection_entries']
+    
+    # Add new connection cylinder count to total cylinders
+    summary['total']['cylinders'] += total_new_cylinders
     
     return summary
 

@@ -236,6 +236,13 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] **Refill Status Export** - PDF and Excel reports with color-coded days, summary stats (total, recent, moderate, overdue, no history)
 - [x] **Export Buttons** - "Refill PDF" and "Refill Excel" on Customer Dashboard
 
+### Sales Report Refill & Cylinder Count Fix (March 2026)
+- [x] **Backend summary fix** - `no_of_refills` now only summed for refill-type entries, not new connections
+- [x] **New cylinder count metric** - Total cylinders calculated from `cylinder_nos` (new connections) + `no_of_refills` (refills)
+- [x] **Summary cards updated** - Show "X cyl refilled" per payment mode, Grand Total shows "total cyl / refilled / new conn"
+- [x] **Table columns fixed** - Separate "Cyl Nos" (new connections only) and "Refills" (refill entries only) columns
+- [x] **Total row fixed** - Shows correct totals for both columns independently
+
 ### Dashboard Analytics - Connections & Refills (March 2026)
 - [x] **Analytics Tab** on Dashboard with chart icon
 - [x] **Time Period Filters**: Daily, Monthly, Quarterly, Yearly, Custom Range

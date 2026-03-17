@@ -66,10 +66,10 @@ const SalesDashboard = () => {
   const [customers, setCustomers] = useState([]);
   const [frequentCustomers, setFrequentCustomers] = useState([]);
   const [summary, setSummary] = useState({
-    cash: { amount: 0, refills: 0, count: 0 },
-    online: { amount: 0, refills: 0, count: 0 },
-    pending: { amount: 0, refills: 0, count: 0 },
-    total: { amount: 0, refills: 0, count: 0 }
+    cash: { amount: 0, refills: 0, count: 0, cylinders: 0, new_connections: 0 },
+    online: { amount: 0, refills: 0, count: 0, cylinders: 0, new_connections: 0 },
+    pending: { amount: 0, refills: 0, count: 0, cylinders: 0, new_connections: 0 },
+    total: { amount: 0, refills: 0, count: 0, cylinders: 0, new_connections: 0 }
   });
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -592,12 +592,27 @@ const SalesDashboard = () => {
     }
   };
 
-  // Calculate filtered totals
+  // Calculate filtered totals - separate refills (refill entries only) and cylinders
   const filteredTotals = useMemo(() => {
-    return entries.reduce((acc, e) => ({
-      amount: acc.amount + (e.amount || 0),
-      refills: acc.refills + (e.no_of_refills || 0)
-    }), { amount: 0, refills: 0 });
+    return entries.reduce((acc, e) => {
+      const isRefill = (e.connection_type || '').includes('refill');
+      const refillCyl = isRefill ? (e.no_of_refills || 0) : 0;
+      let newCyl = 0;
+      if (!isRefill) {
+        const cn = (e.cylinder_nos || '').trim();
+        if (cn) {
+          const parts = cn.split(',').filter(p => p.trim());
+          try { newCyl = parts.length === 1 ? (parseInt(parts[0]) || 1) : parts.length; } catch { newCyl = parts.length; }
+        } else {
+          newCyl = 1;
+        }
+      }
+      return {
+        amount: acc.amount + (e.amount || 0),
+        refills: acc.refills + refillCyl,
+        cylinders: acc.cylinders + newCyl + refillCyl
+      };
+    }, { amount: 0, refills: 0, cylinders: 0 });
   }, [entries]);
 
   // Combined entries: merge cylinder + accessory sales for unified table
@@ -624,10 +639,25 @@ const SalesDashboard = () => {
   }, [entries, accessorySales]);
 
   const combinedTotals = useMemo(() => {
-    return combinedEntries.reduce((acc, e) => ({
-      amount: acc.amount + (e.amount || 0),
-      refills: acc.refills + (e.no_of_refills || 0)
-    }), { amount: 0, refills: 0 });
+    return combinedEntries.reduce((acc, e) => {
+      const isRefill = (e.connection_type || '').includes('refill');
+      const refillCyl = isRefill ? (e.no_of_refills || 0) : 0;
+      let newCyl = 0;
+      if (!isRefill && e.sale_type !== 'accessory') {
+        const cn = (e.cylinder_nos || '').trim();
+        if (cn) {
+          const parts = cn.split(',').filter(p => p.trim());
+          try { newCyl = parts.length === 1 ? (parseInt(parts[0]) || 1) : parts.length; } catch { newCyl = parts.length; }
+        } else {
+          newCyl = 1;
+        }
+      }
+      return {
+        amount: acc.amount + (e.amount || 0),
+        refills: acc.refills + refillCyl,
+        cylinders: acc.cylinders + newCyl + refillCyl
+      };
+    }, { amount: 0, refills: 0, cylinders: 0 });
   }, [combinedEntries]);
 
   if (loading) {
@@ -1173,7 +1203,7 @@ const SalesDashboard = () => {
                   <Banknote className="w-4 h-4" /> Cash Collection
                 </p>
                 <p className="text-2xl font-bold text-green-800">{formatINR(summary.cash.amount)}</p>
-                <p className="text-xs text-green-600">{summary.cash.count} entries · {summary.cash.refills} refills</p>
+                <p className="text-xs text-green-600">{summary.cash.count} entries · {summary.cash.refills} cyl refilled</p>
               </div>
             </CardContent>
           </Card>
@@ -1185,7 +1215,7 @@ const SalesDashboard = () => {
                   <CreditCard className="w-4 h-4" /> Online Collection
                 </p>
                 <p className="text-2xl font-bold text-blue-800">{formatINR(summary.online.amount)}</p>
-                <p className="text-xs text-blue-600">{summary.online.count} entries · {summary.online.refills} refills</p>
+                <p className="text-xs text-blue-600">{summary.online.count} entries · {summary.online.refills} cyl refilled</p>
               </div>
             </CardContent>
           </Card>
@@ -1197,7 +1227,7 @@ const SalesDashboard = () => {
                   <Clock className="w-4 h-4" /> Pending Collection
                 </p>
                 <p className="text-2xl font-bold text-amber-800">{formatINR(summary.pending.amount)}</p>
-                <p className="text-xs text-amber-600">{summary.pending.count} entries · {summary.pending.refills} refills</p>
+                <p className="text-xs text-amber-600">{summary.pending.count} entries · {summary.pending.refills} cyl refilled</p>
               </div>
             </CardContent>
           </Card>
@@ -1221,7 +1251,7 @@ const SalesDashboard = () => {
                   <TrendingUp className="w-4 h-4" /> Grand Total
                 </p>
                 <p className="text-2xl font-bold text-purple-800">{formatINR(summary.total.amount + accessorySummary.total_amount)}</p>
-                <p className="text-xs text-purple-600">Cylinder: {formatINR(summary.total.amount)} · Accessory: {formatINR(accessorySummary.total_amount)}</p>
+                <p className="text-xs text-purple-600">{summary.total.cylinders} total cyl · {summary.total.refills} refilled · {summary.total.new_connections} new conn</p>
               </div>
             </CardContent>
           </Card>
@@ -1509,6 +1539,7 @@ const SalesDashboard = () => {
                     <th>Memo</th>
                     <th>Amount</th>
                     <th>Payment</th>
+                    <th>Cyl Nos</th>
                     <th>Refills</th>
                     <th>Remarks</th>
                     {isAdmin && <th>Warehouse</th>}
@@ -1518,7 +1549,7 @@ const SalesDashboard = () => {
                 <tbody>
                   {combinedEntries.length === 0 ? (
                     <tr>
-                      <td colSpan={isAdmin ? 13 : 12} className="text-center py-8 text-slate-500">
+                      <td colSpan={isAdmin ? 14 : 13} className="text-center py-8 text-slate-500">
                         No sales entries found
                       </td>
                     </tr>
@@ -1533,16 +1564,18 @@ const SalesDashboard = () => {
                           <td>{entry.consumer_no || '-'}</td>
                           <td>
                             {getConnectionTypeBadge(entry.connection_type)}
-                            {entry.cylinder_nos && (
-                              <div className="text-xs text-slate-500 mt-1">
-                                <span className="font-medium">Cyl:</span> {entry.cylinder_nos}
-                              </div>
-                            )}
                           </td>
                           <td>{entry.memo_no || '-'}</td>
                           <td className="font-semibold text-green-700">{formatINR(entry.amount)}</td>
                           <td>{getPaymentBadge(entry.payment_mode)}</td>
-                          <td className="text-center">{entry.sale_type === 'accessory' ? '-' : (entry.no_of_refills || 0)}</td>
+                          <td className="text-center">
+                            {entry.sale_type === 'accessory' ? '-' : 
+                              (!(entry.connection_type || '').includes('refill') ? (entry.cylinder_nos || '-') : '-')}
+                          </td>
+                          <td className="text-center">
+                            {entry.sale_type === 'accessory' ? '-' : 
+                              ((entry.connection_type || '').includes('refill') ? (entry.no_of_refills || 0) : '-')}
+                          </td>
                           <td className="max-w-[120px] truncate">{entry.remarks || '-'}</td>
                           {isAdmin && <td><Badge variant="outline">{entry.warehouse_name}</Badge></td>}
                           <td>
@@ -1576,6 +1609,7 @@ const SalesDashboard = () => {
                         <td colSpan={7} className="text-right">TOTAL:</td>
                         <td className="text-green-800">{formatINR(combinedTotals.amount)}</td>
                         <td></td>
+                        <td className="text-center">{combinedTotals.cylinders}</td>
                         <td className="text-center">{combinedTotals.refills}</td>
                         <td colSpan={isAdmin ? 3 : 2}></td>
                       </tr>
