@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { getDashboardStats, getDailyReports } from '../lib/api';
+import { getDashboardStats, getDailyReports, getOrderAnalysis, getWarehouses, exportOrderAnalysisPDF, exportOrderAnalysisExcel } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Input } from '../components/ui/input';
 import { 
   Warehouse, 
   Package, 
@@ -22,7 +23,15 @@ import {
   ArrowDownRight,
   Timer,
   Filter,
-  PackageOpen
+  PackageOpen,
+  ShoppingCart,
+  Download,
+  FileSpreadsheet,
+  Search,
+  Calendar,
+  CheckCircle2,
+  Clock,
+  Truck
 } from 'lucide-react';
 import { formatDate } from '../lib/utils';
 import { toast } from 'sonner';
@@ -46,8 +55,21 @@ const Dashboard = () => {
   const intervalRef = useRef(null);
   const countdownRef = useRef(null);
 
+  // Order Analysis state
+  const [orderAnalysis, setOrderAnalysis] = useState(null);
+  const [orderLoading, setOrderLoading] = useState(false);
+  const [orderExporting, setOrderExporting] = useState(false);
+  const [orderFilterWarehouse, setOrderFilterWarehouse] = useState('all');
+  const [orderFilterStatus, setOrderFilterStatus] = useState('all');
+  const [orderFilterDateRange, setOrderFilterDateRange] = useState('month');
+  const [orderStartDate, setOrderStartDate] = useState('');
+  const [orderEndDate, setOrderEndDate] = useState('');
+  const [orderSearch, setOrderSearch] = useState('');
+  const [allWarehouses, setAllWarehouses] = useState([]);
+
   useEffect(() => {
     fetchStats();
+    loadWarehouses();
   }, []);
 
   // Auto-refresh logic
@@ -87,6 +109,88 @@ const Dashboard = () => {
     } finally {
       if (!silent) setLoading(false);
     }
+  };
+
+  const loadWarehouses = async () => {
+    try {
+      const res = await getWarehouses();
+      setAllWarehouses(res.data || []);
+    } catch {}
+  };
+
+  const fetchOrderAnalysis = useCallback(async () => {
+    setOrderLoading(true);
+    try {
+      const today = new Date();
+      let sd = '', ed = '';
+      if (orderFilterDateRange === 'today') {
+        sd = ed = today.toISOString().split('T')[0];
+      } else if (orderFilterDateRange === 'week') {
+        const w = new Date(today); w.setDate(w.getDate() - 7);
+        sd = w.toISOString().split('T')[0]; ed = today.toISOString().split('T')[0];
+      } else if (orderFilterDateRange === 'month') {
+        const m = new Date(today); m.setDate(m.getDate() - 30);
+        sd = m.toISOString().split('T')[0]; ed = today.toISOString().split('T')[0];
+      } else if (orderFilterDateRange === 'year') {
+        const y = new Date(today); y.setFullYear(y.getFullYear() - 1);
+        sd = y.toISOString().split('T')[0]; ed = today.toISOString().split('T')[0];
+      } else if (orderFilterDateRange === 'custom') {
+        sd = orderStartDate; ed = orderEndDate;
+      }
+      const params = {};
+      if (orderFilterWarehouse !== 'all') params.warehouse_id = orderFilterWarehouse;
+      if (orderFilterStatus !== 'all') params.status = orderFilterStatus;
+      if (sd) params.start_date = sd;
+      if (ed) params.end_date = ed;
+      if (orderSearch) params.search = orderSearch;
+      const res = await getOrderAnalysis(params);
+      setOrderAnalysis(res.data);
+    } catch (error) {
+      console.error('Failed to fetch order analysis:', error);
+      toast.error('Failed to load order analysis');
+    } finally {
+      setOrderLoading(false);
+    }
+  }, [orderFilterWarehouse, orderFilterStatus, orderFilterDateRange, orderStartDate, orderEndDate, orderSearch]);
+
+  useEffect(() => {
+    if (activeTab === 'orders') fetchOrderAnalysis();
+  }, [activeTab, fetchOrderAnalysis]);
+
+  const handleExportOrderPDF = async () => {
+    setOrderExporting(true);
+    try {
+      const params = {};
+      if (orderFilterWarehouse !== 'all') params.warehouse_id = orderFilterWarehouse;
+      if (orderFilterStatus !== 'all') params.status = orderFilterStatus;
+      const today = new Date();
+      if (orderFilterDateRange === 'today') { params.start_date = params.end_date = today.toISOString().split('T')[0]; }
+      else if (orderFilterDateRange === 'week') { const w = new Date(today); w.setDate(w.getDate() - 7); params.start_date = w.toISOString().split('T')[0]; params.end_date = today.toISOString().split('T')[0]; }
+      else if (orderFilterDateRange === 'month') { const m = new Date(today); m.setDate(m.getDate() - 30); params.start_date = m.toISOString().split('T')[0]; params.end_date = today.toISOString().split('T')[0]; }
+      else if (orderFilterDateRange === 'year') { const y = new Date(today); y.setFullYear(y.getFullYear() - 1); params.start_date = y.toISOString().split('T')[0]; params.end_date = today.toISOString().split('T')[0]; }
+      else if (orderFilterDateRange === 'custom') { params.start_date = orderStartDate; params.end_date = orderEndDate; }
+      await exportOrderAnalysisPDF(params);
+      toast.success('Order analysis PDF exported');
+    } catch { toast.error('Failed to export PDF'); }
+    finally { setOrderExporting(false); }
+  };
+
+  const handleExportOrderExcel = async () => {
+    setOrderExporting(true);
+    try {
+      const params = {};
+      if (orderFilterWarehouse !== 'all') params.warehouse_id = orderFilterWarehouse;
+      if (orderFilterStatus !== 'all') params.status = orderFilterStatus;
+      const today = new Date();
+      if (orderFilterDateRange === 'today') { params.start_date = params.end_date = today.toISOString().split('T')[0]; }
+      else if (orderFilterDateRange === 'week') { const w = new Date(today); w.setDate(w.getDate() - 7); params.start_date = w.toISOString().split('T')[0]; params.end_date = today.toISOString().split('T')[0]; }
+      else if (orderFilterDateRange === 'month') { const m = new Date(today); m.setDate(m.getDate() - 30); params.start_date = m.toISOString().split('T')[0]; params.end_date = today.toISOString().split('T')[0]; }
+      else if (orderFilterDateRange === 'year') { const y = new Date(today); y.setFullYear(y.getFullYear() - 1); params.start_date = y.toISOString().split('T')[0]; params.end_date = today.toISOString().split('T')[0]; }
+      else if (orderFilterDateRange === 'custom') { params.start_date = orderStartDate; params.end_date = orderEndDate; }
+      await exportOrderAnalysisExcel(params);
+      toast.success('Order analysis Excel exported');
+    } catch { toast.error('Failed to export Excel'); }
+    finally { setOrderExporting(false); }
   };
 
   // Filtered stock data based on selected filters
@@ -471,6 +575,7 @@ const Dashboard = () => {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList>
             <TabsTrigger value="overview" data-testid="overview-tab">Warehouse Overview</TabsTrigger>
+            <TabsTrigger value="orders" data-testid="orders-tab">Order Analysis</TabsTrigger>
             <TabsTrigger value="discrepancies" data-testid="discrepancies-tab" className="relative">
               Stock Discrepancies
               {totalDiscrepancies > 0 && (
@@ -639,6 +744,197 @@ const Dashboard = () => {
               </div>
             </div>
           </TabsContent>
+
+
+          {/* Order Analysis Tab */}
+          <TabsContent value="orders">
+            <div className="space-y-4">
+              {/* Filters */}
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Select value={orderFilterWarehouse} onValueChange={setOrderFilterWarehouse}>
+                      <SelectTrigger className="w-44 h-9 text-sm" data-testid="order-warehouse-filter">
+                        <SelectValue placeholder="Warehouse" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Warehouses</SelectItem>
+                        {allWarehouses.map(w => (
+                          <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={orderFilterStatus} onValueChange={setOrderFilterStatus}>
+                      <SelectTrigger className="w-36 h-9 text-sm" data-testid="order-status-filter">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="delivered">Delivered</SelectItem>
+                        <SelectItem value="cancelled">Cancelled</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={orderFilterDateRange} onValueChange={setOrderFilterDateRange}>
+                      <SelectTrigger className="w-32 h-9 text-sm" data-testid="order-date-filter">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="today">Today</SelectItem>
+                        <SelectItem value="week">This Week</SelectItem>
+                        <SelectItem value="month">This Month</SelectItem>
+                        <SelectItem value="year">This Year</SelectItem>
+                        <SelectItem value="custom">Custom</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {orderFilterDateRange === 'custom' && (
+                      <>
+                        <Input type="date" value={orderStartDate} onChange={e => setOrderStartDate(e.target.value)} className="w-36 h-9 text-sm" />
+                        <Input type="date" value={orderEndDate} onChange={e => setOrderEndDate(e.target.value)} className="w-36 h-9 text-sm" />
+                      </>
+                    )}
+                    <div className="relative flex-1 min-w-[180px]">
+                      <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400" />
+                      <Input 
+                        placeholder="Search orders..." 
+                        value={orderSearch} 
+                        onChange={e => setOrderSearch(e.target.value)}
+                        className="pl-9 h-9 text-sm"
+                        data-testid="order-search-input"
+                      />
+                    </div>
+                    <Button variant="outline" size="sm" onClick={fetchOrderAnalysis} className="h-9 gap-1" data-testid="order-refresh-btn">
+                      <RefreshCw className="w-3.5 h-3.5" /> Refresh
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={handleExportOrderPDF} disabled={orderExporting} className="h-9 gap-1 border-red-300 text-red-700 hover:bg-red-50" data-testid="order-export-pdf">
+                      {orderExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} PDF
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={handleExportOrderExcel} disabled={orderExporting} className="h-9 gap-1 border-green-300 text-green-700 hover:bg-green-50" data-testid="order-export-excel">
+                      {orderExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />} Excel
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Summary Cards */}
+              {orderAnalysis && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200" data-testid="order-total-card">
+                    <CardContent className="p-4">
+                      <p className="text-sm text-blue-600 font-medium flex items-center gap-1"><ShoppingCart className="w-4 h-4" /> Total Orders</p>
+                      <p className="text-3xl font-bold text-blue-800 mt-1">{orderAnalysis.summary.total_orders}</p>
+                      <p className="text-xs text-blue-500 mt-1">Qty: {orderAnalysis.summary.total_quantity}</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-gradient-to-br from-amber-50 to-amber-100 border-amber-200" data-testid="order-pending-card">
+                    <CardContent className="p-4">
+                      <p className="text-sm text-amber-600 font-medium flex items-center gap-1"><Clock className="w-4 h-4" /> Pending</p>
+                      <p className="text-3xl font-bold text-amber-800 mt-1">{orderAnalysis.summary.total_pending}</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200" data-testid="order-delivered-card">
+                    <CardContent className="p-4">
+                      <p className="text-sm text-green-600 font-medium flex items-center gap-1"><CheckCircle2 className="w-4 h-4" /> Delivered</p>
+                      <p className="text-3xl font-bold text-green-800 mt-1">{orderAnalysis.summary.total_delivered}</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200" data-testid="order-breakdown-card">
+                    <CardContent className="p-4">
+                      <p className="text-sm text-purple-600 font-medium flex items-center gap-1"><Warehouse className="w-4 h-4" /> Warehouse Split</p>
+                      <div className="mt-1 space-y-0.5">
+                        {Object.entries(orderAnalysis.summary.warehouse_breakdown || {}).map(([wh, cnt]) => (
+                          <div key={wh} className="flex justify-between text-xs">
+                            <span className="text-purple-700 font-medium">{wh}</span>
+                            <span className="text-purple-800 font-bold">{cnt}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* Date-grouped Orders */}
+              {orderLoading ? (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                </div>
+              ) : orderAnalysis && orderAnalysis.groups.length > 0 ? (
+                <div className="space-y-4">
+                  {orderAnalysis.groups.map(group => (
+                    <Card key={group.date} data-testid={`order-group-${group.date}`}>
+                      <CardHeader className="py-3 px-4 bg-blue-50 border-b border-blue-100">
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-sm font-semibold text-blue-800 flex items-center gap-2">
+                            <Calendar className="w-4 h-4" />
+                            {(() => { try { return new Date(group.date).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }); } catch { return group.date; } })()}
+                          </CardTitle>
+                          <Badge className="bg-blue-100 text-blue-800 text-xs">{group.count} orders</Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="p-0">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b border-slate-200 bg-slate-50">
+                                <th className="text-left py-2 px-3 text-xs font-medium text-slate-600">Order No</th>
+                                <th className="text-left py-2 px-3 text-xs font-medium text-slate-600">Customer</th>
+                                <th className="text-left py-2 px-3 text-xs font-medium text-slate-600">Product</th>
+                                <th className="text-center py-2 px-3 text-xs font-medium text-slate-600">Qty</th>
+                                <th className="text-center py-2 px-3 text-xs font-medium text-slate-600">Status</th>
+                                <th className="text-center py-2 px-3 text-xs font-medium text-slate-600">Payment</th>
+                                <th className="text-left py-2 px-3 text-xs font-medium text-slate-600">Warehouse</th>
+                                <th className="text-left py-2 px-3 text-xs font-medium text-slate-600">Delivery</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {group.orders.map(o => (
+                                <tr key={o.id} className="border-b border-slate-100 hover:bg-slate-50">
+                                  <td className="py-2 px-3 font-medium text-blue-700">{o.order_no}</td>
+                                  <td className="py-2 px-3">
+                                    <div className="font-medium text-slate-800">{o.customer_name}</div>
+                                    {o.mobile_number && <div className="text-xs text-slate-400">{o.mobile_number}</div>}
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    <Badge variant="outline" className="text-xs">{o.product}</Badge>
+                                  </td>
+                                  <td className="text-center py-2 px-3 font-semibold">{o.quantity}</td>
+                                  <td className="text-center py-2 px-3">
+                                    {o.status === 'delivered' ? (
+                                      <Badge className="bg-green-100 text-green-800 text-xs"><CheckCircle2 className="w-3 h-3 mr-0.5" />Delivered</Badge>
+                                    ) : o.status === 'cancelled' ? (
+                                      <Badge className="bg-red-100 text-red-800 text-xs">Cancelled</Badge>
+                                    ) : (
+                                      <Badge className="bg-amber-100 text-amber-800 text-xs"><Clock className="w-3 h-3 mr-0.5" />Pending</Badge>
+                                    )}
+                                  </td>
+                                  <td className="text-center py-2 px-3">
+                                    <Badge variant="outline" className="text-xs">{o.payment_mode?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</Badge>
+                                  </td>
+                                  <td className="py-2 px-3 text-xs font-medium text-slate-600">{o.warehouse_name}</td>
+                                  <td className="py-2 px-3 text-xs text-slate-500">
+                                    {o.delivered_at ? (() => { try { return new Date(o.delivered_at).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }); } catch { return '-'; } })() : '-'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <Card>
+                  <CardContent className="py-16 text-center">
+                    <ShoppingCart className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                    <p className="text-slate-500 font-medium">No orders found for the selected filters</p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </TabsContent>
+
 
           {/* Discrepancies Tab */}
           <TabsContent value="discrepancies">
