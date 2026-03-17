@@ -5598,10 +5598,11 @@ class OrderUpdate(BaseModel):
     cylinder_nos: Optional[str] = None
     payment_mode: Optional[str] = None
     remarks: Optional[str] = None
-    status: Optional[str] = None  # pending, delivered
+    status: Optional[str] = None  # pending, delivered, cancelled
 
 class OrderStatusUpdate(BaseModel):
-    status: str  # pending, delivered
+    status: str  # pending, delivered, cancelled
+    cancellation_reason: Optional[str] = None
 
 async def get_next_order_number(warehouse_id: str) -> str:
     """Generate next order number for a warehouse with warehouse-specific prefix"""
@@ -5707,7 +5708,9 @@ async def get_orders(
             'remarks': o.get('remarks', ''),
             'created_by': o.get('created_by', ''),
             'created_at': o.get('created_at', ''),
-            'delivered_at': o.get('delivered_at')
+            'delivered_at': o.get('delivered_at'),
+            'cancelled_at': o.get('cancelled_at'),
+            'cancellation_reason': o.get('cancellation_reason', '')
         })
     
     return result
@@ -5888,12 +5891,16 @@ async def update_order(
     order: OrderUpdate,
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
-    """Update an order - all users can edit all fields"""
+    """Update an order - all users can edit all fields. Cancelled orders are read-only."""
     user = await get_current_user(credentials)
     
     existing = await db.orders.find_one({'id': order_id})
     if not existing:
         raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Block edits on cancelled orders
+    if existing.get('status') == 'cancelled':
+        raise HTTPException(status_code=400, detail="Cancelled orders cannot be edited")
     
     update_data = {}
     if order.order_date is not None:
@@ -5949,7 +5956,7 @@ async def update_order_status(
     status_update: OrderStatusUpdate,
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
-    """Update order status (Pending → Delivered)"""
+    """Update order status (Pending / Delivered / Cancelled)"""
     user = await get_current_user(credentials)
     
     existing = await db.orders.find_one({'id': order_id})
@@ -5960,8 +5967,12 @@ async def update_order_status(
     if user['role'] != 'admin' and existing.get('warehouse_id') != user.get('warehouse_id'):
         raise HTTPException(status_code=403, detail="Access denied")
     
-    if status_update.status not in ['pending', 'delivered']:
-        raise HTTPException(status_code=400, detail="Invalid status. Must be 'pending' or 'delivered'")
+    if status_update.status not in ['pending', 'delivered', 'cancelled']:
+        raise HTTPException(status_code=400, detail="Invalid status. Must be 'pending', 'delivered', or 'cancelled'")
+    
+    # Prevent changes to cancelled orders (except by admin reverting)
+    if existing.get('status') == 'cancelled' and user['role'] != 'admin':
+        raise HTTPException(status_code=400, detail="Cancelled orders cannot be modified")
     
     update_data = {
         'status': status_update.status,
@@ -5970,8 +5981,16 @@ async def update_order_status(
     
     if status_update.status == 'delivered':
         update_data['delivered_at'] = datetime.now(timezone.utc).isoformat()
+        update_data['cancelled_at'] = None
+        update_data['cancellation_reason'] = None
+    elif status_update.status == 'cancelled':
+        update_data['cancelled_at'] = datetime.now(timezone.utc).isoformat()
+        update_data['cancellation_reason'] = status_update.cancellation_reason or ''
+        update_data['delivered_at'] = None
     elif status_update.status == 'pending':
         update_data['delivered_at'] = None
+        update_data['cancelled_at'] = None
+        update_data['cancellation_reason'] = None
     
     await db.orders.update_one({'id': order_id}, {'$set': update_data})
     
@@ -5985,6 +6004,8 @@ async def update_order_status(
         'order_no': updated['order_no'],
         'status': updated['status'],
         'delivered_at': updated.get('delivered_at'),
+        'cancelled_at': updated.get('cancelled_at'),
+        'cancellation_reason': updated.get('cancellation_reason'),
         'message': f"Order {updated['order_no']} marked as {status_update.status}"
     }
 
@@ -6093,6 +6114,7 @@ async def get_order_analysis(
     
     total_pending = sum(1 for o in orders if o.get('status', 'pending') == 'pending')
     total_delivered = sum(1 for o in orders if o.get('status') == 'delivered')
+    total_cancelled = sum(1 for o in orders if o.get('status') == 'cancelled')
     
     return {
         'groups': grouped,
@@ -6101,6 +6123,7 @@ async def get_order_analysis(
             'total_quantity': total_quantity,
             'total_pending': total_pending,
             'total_delivered': total_delivered,
+            'total_cancelled': total_cancelled,
             'warehouse_breakdown': wh_breakdown,
             'date_range': {
                 'start': min((o.get('order_date', '') for o in orders), default=''),
@@ -6903,6 +6926,8 @@ async def get_order_summary(
     total_credit = await db.orders.count_documents(credit_query)
     total_pending = await db.orders.count_documents(pending_query)
     total_delivered = await db.orders.count_documents(delivered_query)
+    cancelled_query = {**query, 'status': 'cancelled'}
+    total_cancelled = await db.orders.count_documents(cancelled_query)
     
     return {
         'total_orders': total_orders,
@@ -6912,7 +6937,8 @@ async def get_order_summary(
         'total_online': total_online,
         'total_credit_pending': total_credit,
         'total_pending': total_pending,
-        'total_delivered': total_delivered
+        'total_delivered': total_delivered,
+        'total_cancelled': total_cancelled
     }
 
 @api_router.get("/orders/pdf/{order_id}")
@@ -7075,9 +7101,12 @@ async def export_orders_pdf(
     elements.append(Spacer(1, 5))
     
     # Table data with clear headers
-    table_data = [['Date', 'Order No', 'Customer', 'Mobile', 'Address', 'Type', 'Payment', 'Remarks']]
+    table_data = [['Date', 'Order No', 'Customer', 'Mobile', 'Address', 'Type', 'Payment', 'Status', 'Remarks']]
     
     for o in orders:
+        status = o.get('status', 'pending').title()
+        if status == 'Cancelled' and o.get('cancellation_reason'):
+            status = f"Cancelled: {o.get('cancellation_reason', '')[:15]}"
         table_data.append([
             o.get('order_date', ''),
             o.get('order_no', ''),
@@ -7086,11 +7115,12 @@ async def export_orders_pdf(
             o.get('address_landmark', '')[:20],
             o.get('connection_type', '').replace('_', ' ').title()[:10],
             o.get('payment_mode', '').title()[:6],
+            status[:18],
             o.get('remarks', '')[:12]
         ])
     
     # Fit to A4 landscape
-    col_widths = [60, 50, 120, 80, 140, 80, 60, 80]
+    col_widths = [55, 45, 100, 70, 110, 70, 50, 75, 70]
     table = Table(table_data, colWidths=col_widths, repeatRows=1)
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2d5016')),
@@ -7171,9 +7201,12 @@ async def export_orders_excel(
     cash_format = workbook.add_format({'border': 1, 'align': 'center', 'bg_color': '#d4edda'})
     online_format = workbook.add_format({'border': 1, 'align': 'center', 'bg_color': '#cce5ff'})
     credit_format = workbook.add_format({'border': 1, 'align': 'center', 'bg_color': '#fff3cd'})
+    cancelled_format = workbook.add_format({'border': 1, 'align': 'center', 'bg_color': '#f8d7da', 'font_color': '#721c24'})
+    delivered_format = workbook.add_format({'border': 1, 'align': 'center', 'bg_color': '#d4edda', 'font_color': '#155724'})
+    pending_format = workbook.add_format({'border': 1, 'align': 'center', 'bg_color': '#fff3cd', 'font_color': '#856404'})
     
     # Headers
-    headers = ['Order Date', 'Order No', 'Customer Name', 'Mobile', 'Address/Landmark', 'Connection Type', 'Payment Mode', 'Remarks', 'Warehouse']
+    headers = ['Order Date', 'Order No', 'Customer Name', 'Mobile', 'Address/Landmark', 'Connection Type', 'Payment Mode', 'Status', 'Remarks', 'Warehouse']
     
     for col, header in enumerate(headers):
         worksheet.write(0, col, header, header_format)
@@ -7192,8 +7225,15 @@ async def export_orders_excel(
         pm_format = cash_format if pm == 'cash' else (online_format if pm == 'online' else credit_format)
         worksheet.write(row, 6, pm.replace('_', ' ').title(), pm_format)
         
-        worksheet.write(row, 7, o.get('remarks', ''), data_format)
-        worksheet.write(row, 8, warehouse_map.get(o.get('warehouse_id', ''), 'Unknown'), data_format)
+        status = o.get('status', 'pending')
+        status_label = status.title()
+        if status == 'cancelled' and o.get('cancellation_reason'):
+            status_label = f"Cancelled: {o.get('cancellation_reason', '')}"
+        s_fmt = cancelled_format if status == 'cancelled' else (delivered_format if status == 'delivered' else pending_format)
+        worksheet.write(row, 7, status_label, s_fmt)
+        
+        worksheet.write(row, 8, o.get('remarks', ''), data_format)
+        worksheet.write(row, 9, warehouse_map.get(o.get('warehouse_id', ''), 'Unknown'), data_format)
     
     workbook.close()
     output.seek(0)

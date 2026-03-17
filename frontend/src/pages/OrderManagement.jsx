@@ -56,7 +56,8 @@ import {
   Package,
   Truck,
   AlertTriangle,
-  Flame
+  Flame,
+  XCircle
 } from 'lucide-react';
 import { getTodayDate, formatDate, getDateRange } from '../lib/utils';
 import { toast } from 'sonner';
@@ -116,6 +117,11 @@ const OrderManagement = () => {
   const [exporting, setExporting] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(null);
   const [filteredOrders, setFilteredOrders] = useState([]);
+
+  // Cancel dialog state
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancellingOrder, setCancellingOrder] = useState(null);
+  const [cancelReason, setCancelReason] = useState('');
 
   useEffect(() => {
     fetchCustomers();
@@ -321,6 +327,13 @@ const OrderManagement = () => {
   };
 
   const handleStatusChange = async (orderId, newStatus) => {
+    if (newStatus === 'cancelled') {
+      // Show cancel confirmation dialog
+      setCancellingOrder(orderId);
+      setCancelReason('');
+      setCancelDialogOpen(true);
+      return;
+    }
     setUpdatingStatus(orderId);
     try {
       const response = await updateOrderStatus(orderId, newStatus);
@@ -332,6 +345,25 @@ const OrderManagement = () => {
       toast.error(error.response?.data?.detail || 'Failed to update status');
     } finally {
       setUpdatingStatus(null);
+    }
+  };
+
+  const handleConfirmCancel = async () => {
+    if (!cancellingOrder) return;
+    setUpdatingStatus(cancellingOrder);
+    setCancelDialogOpen(false);
+    try {
+      const response = await updateOrderStatus(cancellingOrder, 'cancelled', cancelReason || undefined);
+      toast.success(response.data.message);
+      fetchOrders();
+      fetchSummary();
+    } catch (error) {
+      console.error('Failed to cancel order:', error);
+      toast.error(error.response?.data?.detail || 'Failed to cancel order');
+    } finally {
+      setUpdatingStatus(null);
+      setCancellingOrder(null);
+      setCancelReason('');
     }
   };
 
@@ -436,6 +468,8 @@ const OrderManagement = () => {
         return <Badge className="bg-orange-100 text-orange-800 border-orange-300"><Package className="w-3 h-3 mr-1" />Pending</Badge>;
       case 'delivered':
         return <Badge className="bg-green-100 text-green-800 border-green-300"><CheckCircle2 className="w-3 h-3 mr-1" />Delivered</Badge>;
+      case 'cancelled':
+        return <Badge className="bg-red-100 text-red-800 border-red-300"><XCircle className="w-3 h-3 mr-1" />Cancelled</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -485,7 +519,7 @@ const OrderManagement = () => {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-9 gap-3">
           <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
             <CardContent className="p-3 text-center">
               <ShoppingCart className="w-5 h-5 text-green-600 mx-auto mb-1" />
@@ -505,6 +539,13 @@ const OrderManagement = () => {
               <CheckCircle2 className="w-5 h-5 text-teal-600 mx-auto mb-1" />
               <p className="text-xs text-teal-700 font-medium">Delivered</p>
               <p className="text-2xl font-bold text-teal-800">{summary.total_delivered || 0}</p>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-red-50 to-rose-50 border-red-200">
+            <CardContent className="p-3 text-center">
+              <XCircle className="w-5 h-5 text-red-600 mx-auto mb-1" />
+              <p className="text-xs text-red-700 font-medium">Cancelled</p>
+              <p className="text-2xl font-bold text-red-800">{summary.total_cancelled || 0}</p>
             </CardContent>
           </Card>
           <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
@@ -948,6 +989,7 @@ const OrderManagement = () => {
                         <SelectItem value="all">All Status</SelectItem>
                         <SelectItem value="pending">Pending</SelectItem>
                         <SelectItem value="delivered">Delivered</SelectItem>
+                        <SelectItem value="cancelled">Cancelled</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1031,7 +1073,7 @@ const OrderManagement = () => {
                       </thead>
                       <tbody>
                         {filteredOrders.map((o) => (
-                          <tr key={o.id} data-testid={`order-row-${o.id}`}>
+                          <tr key={o.id} data-testid={`order-row-${o.id}`} className={o.status === 'cancelled' ? 'bg-red-50/50 opacity-75' : ''}>
                             <td>{formatDate(o.order_date)}</td>
                             <td>
                               <Badge variant="outline" className="font-mono">
@@ -1053,6 +1095,13 @@ const OrderManagement = () => {
                             <td>
                               {updatingStatus === o.id ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : o.status === 'cancelled' ? (
+                                <div>
+                                  {getStatusBadge('cancelled')}
+                                  {o.cancellation_reason && (
+                                    <p className="text-xs text-red-500 mt-1 max-w-[120px] truncate" title={o.cancellation_reason}>{o.cancellation_reason}</p>
+                                  )}
+                                </div>
                               ) : (
                                 <Select 
                                   value={o.status || 'pending'} 
@@ -1074,6 +1123,11 @@ const OrderManagement = () => {
                                         <CheckCircle2 className="w-3 h-3 text-green-600" /> Delivered
                                       </div>
                                     </SelectItem>
+                                    <SelectItem value="cancelled">
+                                      <div className="flex items-center gap-2">
+                                        <XCircle className="w-3 h-3 text-red-600" /> Cancel Order
+                                      </div>
+                                    </SelectItem>
                                   </SelectContent>
                                 </Select>
                               )}
@@ -1090,16 +1144,18 @@ const OrderManagement = () => {
                                 >
                                   <Download className="w-4 h-4" />
                                 </Button>
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm"
-                                  onClick={() => handleEdit(o)}
-                                  className="text-blue-600 hover:text-blue-800"
-                                  title="Edit"
-                                  data-testid={`edit-order-${o.id}`}
-                                >
-                                  <Edit className="w-4 h-4" />
-                                </Button>
+                                {o.status !== 'cancelled' && (
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    onClick={() => handleEdit(o)}
+                                    className="text-blue-600 hover:text-blue-800"
+                                    title="Edit"
+                                    data-testid={`edit-order-${o.id}`}
+                                  >
+                                    <Edit className="w-4 h-4" />
+                                  </Button>
+                                )}
                                 {isAdmin && (
                                   <Button 
                                     variant="ghost" 
@@ -1309,6 +1365,7 @@ const OrderManagement = () => {
                     <SelectContent>
                       <SelectItem value="pending">Pending</SelectItem>
                       <SelectItem value="delivered">Delivered</SelectItem>
+                      <SelectItem value="cancelled">Cancelled</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1325,6 +1382,42 @@ const OrderManagement = () => {
               >
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
                 Save Changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Cancel Order Confirmation Dialog */}
+        <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-700">
+                <XCircle className="w-5 h-5" /> Cancel Order
+              </DialogTitle>
+              <DialogDescription>
+                Are you sure you want to cancel this order? This action will exclude it from sales data and reporting calculations.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <Label className="text-sm font-medium">Cancellation Reason (optional)</Label>
+              <Textarea
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="Enter reason for cancellation..."
+                className="mt-2"
+                data-testid="cancel-reason-input"
+              />
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => { setCancelDialogOpen(false); setCancellingOrder(null); }}>
+                Go Back
+              </Button>
+              <Button 
+                variant="destructive" 
+                onClick={handleConfirmCancel}
+                data-testid="confirm-cancel-btn"
+              >
+                <XCircle className="w-4 h-4 mr-2" /> Confirm Cancel
               </Button>
             </DialogFooter>
           </DialogContent>

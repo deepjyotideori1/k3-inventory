@@ -507,7 +507,7 @@ export const getOrder = (orderId) => api.get(`/orders/${orderId}`);
 export const createOrder = (data) => api.post('/orders', data);
 export const createOrderForWarehouse = (warehouseId, data) => api.post(`/orders/warehouse/${warehouseId}`, data);
 export const updateOrder = (orderId, data) => api.put(`/orders/${orderId}`, data);
-export const updateOrderStatus = (orderId, status) => api.patch(`/orders/${orderId}/status`, { status });
+export const updateOrderStatus = (orderId, status, cancellation_reason) => api.patch(`/orders/${orderId}/status`, { status, cancellation_reason });
 export const deleteOrder = (orderId) => api.delete(`/orders/${orderId}`);
 export const getOrderSummary = (params) => api.get('/orders/summary/stats', { params });
 export const getOrderAnalysis = (params) => api.get('/admin/order-analysis', { params });
