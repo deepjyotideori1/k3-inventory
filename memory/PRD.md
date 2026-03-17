@@ -214,6 +214,14 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] **Expandable Warehouse Breakdown** - Table showing per-warehouse stock with Plant Hollongi row and TOTAL row
 - [x] **Role-Based Access** - Only admin sees full warehouse-level details; managers see their own dashboard
 
+### Admin Order Analysis Dashboard (March 2026)
+- [x] **Order Analysis Tab** - New tab in Admin Dashboard between Warehouse Overview and Stock Discrepancies
+- [x] **Filters** - Warehouse dropdown, Status (All/Pending/Delivered/Cancelled), Date range (Today/Week/Month/Year/Custom), Search bar
+- [x] **Summary Cards** - Total Orders with Qty, Pending, Delivered, Warehouse-wise breakdown
+- [x] **Date-grouped Orders** - Orders grouped by date (descending) with headers showing count, full order details per row
+- [x] **Export** - PDF and Excel exports with date-wise grouping, warehouse label, and summary section
+- [x] **Admin-only Access** - All endpoints require admin role, non-admin gets 403
+
 ### Customer LPG Refill Tracking (March 2026)
 - [x] **Refill Status API** - Backend aggregates last refill date per customer from sales entries
 - [x] **Customer Dashboard** - "Last Refill" and "Days Since" columns with color-coded badges (Green <=15d, Yellow 16-30d, Red >30d)
