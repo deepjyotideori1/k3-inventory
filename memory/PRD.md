@@ -106,6 +106,7 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] **Fields Disabled After Selection** - Customer fields become read-only after selection to prevent accidental edits
 - [x] **Quick Refill Feature** - One-click refill for top 8 frequent customers with pre-filled data (amount, payment mode)
 - [x] **Payment Mode Support** - Cash, Online, Pending
+- [x] **Multiple Payment Modes** - Split payment support: separate Cash, Online, Credit/Pending amount fields per entry with auto-calculated total. Payment mode auto-detected as 'split' when multiple modes used. Backward compatible with legacy single-mode entries.
 - [x] **Summary Cards** - Cash Collection, Online Collection, Pending Collection, Accessory Sales, Grand Total (combined cylinder + accessory)
 - [x] **Accessory Sales Integration** - Accessory sales shown in summary card and merged into main sales table with "Accessory" badge
 - [x] **Combined Sales Table** - Unified view of cylinder and accessory sales sorted by date, with type badges
@@ -188,6 +189,7 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] PDF export using ReportLab
 - [x] Excel export using XlsxWriter
 - [x] Exports filtered by user role (managers see only their data)
+- [x] **Split Payment Exports** - PDF/Excel exports include Cash, Online, Credit columns with per-entry and total breakdowns. Summary exports correctly aggregate split amounts.
 - [x] **Indian Rupee Formatting** - All Sales exports display amounts in ₹XX,XX,XXX format
 - [x] **Clear Export Headers** - PDF and Excel exports have descriptive column headers
 - [x] **Export Date Range Filters** - Filter by Daily, Weekly, Monthly, Custom date ranges
@@ -387,6 +389,7 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 
 ### P0 (Complete)
 - [x] Integrate Accessory Sales into Main Sales Dashboard (March 13, 2026)
+- [x] Multiple Payment Modes in Single Sales Entry (March 18, 2026)
 
 ### P1 (Important)
 - [ ] Complete Dynamic Search Integration - Add SearchBar.jsx to SalesDashboard, Reports, and all remaining data tables
@@ -459,4 +462,4 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 
 ---
 
-*Last Updated: March 13, 2026*
+*Last Updated: March 18, 2026*
