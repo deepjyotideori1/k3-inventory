@@ -4357,7 +4357,10 @@ class SalesEntryCreate(BaseModel):
     amount: float = 0
     connection_type: str = "domestic"  # domestic, domestic_refill, commercial, commercial_refill
     cylinder_nos: str = ""  # Required for refill types
-    payment_mode: str = "cash"  # cash, online, pending
+    payment_mode: str = "cash"  # cash, online, pending, split
+    cash_amount: float = 0
+    online_amount: float = 0
+    credit_amount: float = 0
     no_of_refills: int = 0
     remarks: str = ""
 
@@ -4371,6 +4374,9 @@ class SalesEntryUpdate(BaseModel):
     connection_type: Optional[str] = None
     cylinder_nos: Optional[str] = None
     payment_mode: Optional[str] = None
+    cash_amount: Optional[float] = None
+    online_amount: Optional[float] = None
+    credit_amount: Optional[float] = None
     no_of_refills: Optional[int] = None
     remarks: Optional[str] = None
 
@@ -4431,7 +4437,7 @@ async def get_sales_entries(
     
     result = []
     for e in entries:
-        result.append({
+        entry_data = {
             'id': e['id'],
             'warehouse_id': e.get('warehouse_id', ''),
             'warehouse_name': warehouse_map.get(e.get('warehouse_id', ''), 'Unknown'),
@@ -4451,7 +4457,23 @@ async def get_sales_entries(
             'created_by_name': user_map.get(e.get('created_by', ''), 'Unknown'),
             'created_at': e.get('created_at', ''),
             'updated_at': e.get('updated_at')
-        })
+        }
+        
+        # Add split payment amounts with backward compat
+        cash_amt = e.get('cash_amount', 0) or 0
+        online_amt = e.get('online_amount', 0) or 0
+        credit_amt = e.get('credit_amount', 0) or 0
+        if cash_amt == 0 and online_amt == 0 and credit_amt == 0:
+            pm = e.get('payment_mode', 'cash')
+            amt = e.get('amount', 0) or 0
+            if pm == 'cash': cash_amt = amt
+            elif pm == 'online': online_amt = amt
+            elif pm == 'pending': credit_amt = amt
+        entry_data['cash_amount'] = cash_amt
+        entry_data['online_amount'] = online_amt
+        entry_data['credit_amount'] = credit_amt
+        
+        result.append(entry_data)
     
     return result
 
@@ -4487,11 +4509,35 @@ async def create_sales_entry(
         'connection_type': entry.connection_type,
         'cylinder_nos': entry.cylinder_nos,
         'payment_mode': entry.payment_mode,
+        'cash_amount': entry.cash_amount,
+        'online_amount': entry.online_amount,
+        'credit_amount': entry.credit_amount,
         'no_of_refills': entry.no_of_refills,
         'remarks': entry.remarks,
         'created_by': user['id'],
         'created_at': datetime.now(timezone.utc).isoformat()
     }
+    
+    # Normalize payment amounts
+    split_total = entry.cash_amount + entry.online_amount + entry.credit_amount
+    if split_total > 0:
+        entry_doc['amount'] = split_total
+        modes_used = sum(1 for a in [entry.cash_amount, entry.online_amount, entry.credit_amount] if a > 0)
+        if modes_used > 1:
+            entry_doc['payment_mode'] = 'split'
+        elif entry.cash_amount > 0:
+            entry_doc['payment_mode'] = 'cash'
+        elif entry.online_amount > 0:
+            entry_doc['payment_mode'] = 'online'
+        elif entry.credit_amount > 0:
+            entry_doc['payment_mode'] = 'pending'
+    else:
+        if entry.payment_mode == 'cash':
+            entry_doc['cash_amount'] = entry.amount
+        elif entry.payment_mode == 'online':
+            entry_doc['online_amount'] = entry.amount
+        elif entry.payment_mode == 'pending':
+            entry_doc['credit_amount'] = entry.amount
     
     await db.sales_entries.insert_one(entry_doc)
     
@@ -4556,11 +4602,35 @@ async def create_sales_entry_for_warehouse(
         'connection_type': entry.connection_type,
         'cylinder_nos': entry.cylinder_nos,
         'payment_mode': entry.payment_mode,
+        'cash_amount': entry.cash_amount,
+        'online_amount': entry.online_amount,
+        'credit_amount': entry.credit_amount,
         'no_of_refills': entry.no_of_refills,
         'remarks': entry.remarks,
         'created_by': user['id'],
         'created_at': datetime.now(timezone.utc).isoformat()
     }
+    
+    # Normalize payment amounts
+    split_total = entry.cash_amount + entry.online_amount + entry.credit_amount
+    if split_total > 0:
+        entry_doc['amount'] = split_total
+        modes_used = sum(1 for a in [entry.cash_amount, entry.online_amount, entry.credit_amount] if a > 0)
+        if modes_used > 1:
+            entry_doc['payment_mode'] = 'split'
+        elif entry.cash_amount > 0:
+            entry_doc['payment_mode'] = 'cash'
+        elif entry.online_amount > 0:
+            entry_doc['payment_mode'] = 'online'
+        elif entry.credit_amount > 0:
+            entry_doc['payment_mode'] = 'pending'
+    else:
+        if entry.payment_mode == 'cash':
+            entry_doc['cash_amount'] = entry.amount
+        elif entry.payment_mode == 'online':
+            entry_doc['online_amount'] = entry.amount
+        elif entry.payment_mode == 'pending':
+            entry_doc['credit_amount'] = entry.amount
     
     await db.sales_entries.insert_one(entry_doc)
     
@@ -4621,6 +4691,23 @@ async def update_sales_entry(
     update_data = {k: v for k, v in entry.dict().items() if v is not None}
     update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
     
+    # Normalize split amounts on update
+    cash_a = update_data.get('cash_amount', existing.get('cash_amount', 0)) or 0
+    online_a = update_data.get('online_amount', existing.get('online_amount', 0)) or 0
+    credit_a = update_data.get('credit_amount', existing.get('credit_amount', 0)) or 0
+    split_total = cash_a + online_a + credit_a
+    if split_total > 0:
+        update_data['amount'] = split_total
+        modes_used = sum(1 for a in [cash_a, online_a, credit_a] if a > 0)
+        if modes_used > 1:
+            update_data['payment_mode'] = 'split'
+        elif cash_a > 0:
+            update_data['payment_mode'] = 'cash'
+        elif online_a > 0:
+            update_data['payment_mode'] = 'online'
+        elif credit_a > 0:
+            update_data['payment_mode'] = 'pending'
+    
     await db.sales_entries.update_one({'id': entry_id}, {'$set': update_data})
     
     updated = await db.sales_entries.find_one({'id': entry_id}, {'_id': 0})
@@ -4676,55 +4763,16 @@ async def get_sales_summary(
             match_stage['date'] = {}
         match_stage['date']['$lte'] = end_date
     
-    pipeline = [
-        {'$match': match_stage},
-        {'$group': {
-            '_id': '$payment_mode',
-            'total_amount': {'$sum': '$amount'},
-            'count': {'$sum': 1},
-            # Only sum no_of_refills for refill-type entries
-            'total_refills': {'$sum': {
-                '$cond': [
-                    {'$in': ['$connection_type', ['domestic_refill', 'commercial_refill']]},
-                    {'$ifNull': ['$no_of_refills', 0]},
-                    0
-                ]
-            }},
-            # Count refill entries (transactions)
-            'refill_entries': {'$sum': {
-                '$cond': [
-                    {'$in': ['$connection_type', ['domestic_refill', 'commercial_refill']]},
-                    1,
-                    0
-                ]
-            }},
-            # Count new connection entries
-            'new_connection_entries': {'$sum': {
-                '$cond': [
-                    {'$in': ['$connection_type', ['domestic', 'commercial']]},
-                    1,
-                    0
-                ]
-            }}
-        }}
-    ]
-    
-    results = await db.sales_entries.aggregate(pipeline).to_list(100)
-    
-    # Calculate cylinders per category from actual data
-    all_entries = await db.sales_entries.find(match_stage, {'_id': 0, 'connection_type': 1, 'cylinder_nos': 1, 'no_of_refills': 1, 'payment_mode': 1}).to_list(5000)
+    # Calculate summary using per-entry split amounts for accuracy
+    all_entries = await db.sales_entries.find(match_stage, {'_id': 0, 'connection_type': 1, 'cylinder_nos': 1, 'no_of_refills': 1, 'payment_mode': 1, 'amount': 1, 'cash_amount': 1, 'online_amount': 1, 'credit_amount': 1}).to_list(5000)
     
     def get_new_conn_cylinders(entry):
-        """Get cylinder count for a new connection entry"""
         cn = _count_cylinders(entry.get('cylinder_nos', ''))
-        if cn > 0:
-            return cn
-        # Legacy fallback: some old entries stored count in no_of_refills
+        if cn > 0: return cn
         nr = int(entry.get('no_of_refills', 0) or 0)
         return nr if nr > 0 else 1
     
     def get_refill_cylinders(entry):
-        """Get cylinder count for a refill entry"""
         return int(entry.get('no_of_refills', 0) or 0)
     
     # Calculate per-category totals
@@ -4735,54 +4783,71 @@ async def get_sales_summary(
         'domestic_refill_count': 0, 'commercial_refill_count': 0
     }
     
+    # Calculate payment mode totals from split amounts
+    total_cash = 0
+    total_online = 0
+    total_credit = 0
+    total_amount = 0
+    entry_count = 0
+    total_refill_cyl = 0
+    total_new_cyl = 0
+    
     for e in all_entries:
         ct = e.get('connection_type', '')
+        amt = e.get('amount', 0) or 0
+        cash_a = e.get('cash_amount', 0) or 0
+        online_a = e.get('online_amount', 0) or 0
+        credit_a = e.get('credit_amount', 0) or 0
+        
+        # Backward compat: if no split amounts, derive from payment_mode
+        if cash_a == 0 and online_a == 0 and credit_a == 0:
+            pm = e.get('payment_mode', 'cash')
+            if pm == 'cash': cash_a = amt
+            elif pm == 'online': online_a = amt
+            elif pm == 'pending': credit_a = amt
+        
+        total_cash += cash_a
+        total_online += online_a
+        total_credit += credit_a
+        total_amount += amt
+        entry_count += 1
+        
         if ct == 'domestic':
             categories['domestic_new_count'] += 1
-            categories['domestic_new_cyl'] += get_new_conn_cylinders(e)
+            cyl = get_new_conn_cylinders(e)
+            categories['domestic_new_cyl'] += cyl
+            total_new_cyl += cyl
         elif ct == 'commercial':
             categories['commercial_new_count'] += 1
-            categories['commercial_new_cyl'] += get_new_conn_cylinders(e)
+            cyl = get_new_conn_cylinders(e)
+            categories['commercial_new_cyl'] += cyl
+            total_new_cyl += cyl
         elif ct == 'domestic_refill':
             categories['domestic_refill_count'] += 1
-            categories['domestic_refill_cyl'] += get_refill_cylinders(e)
+            cyl = get_refill_cylinders(e)
+            categories['domestic_refill_cyl'] += cyl
+            total_refill_cyl += cyl
         elif ct == 'commercial_refill':
             categories['commercial_refill_count'] += 1
-            categories['commercial_refill_cyl'] += get_refill_cylinders(e)
-    
-    total_new_cyl = categories['domestic_new_cyl'] + categories['commercial_new_cyl']
-    total_refill_cyl = categories['domestic_refill_cyl'] + categories['commercial_refill_cyl']
+            cyl = get_refill_cylinders(e)
+            categories['commercial_refill_cyl'] += cyl
+            total_refill_cyl += cyl
     
     summary = {
-        'cash': {'amount': 0, 'refills': 0, 'count': 0, 'cylinders': 0, 'new_connections': 0},
-        'online': {'amount': 0, 'refills': 0, 'count': 0, 'cylinders': 0, 'new_connections': 0},
-        'pending': {'amount': 0, 'refills': 0, 'count': 0, 'cylinders': 0, 'new_connections': 0},
-        'total': {'amount': 0, 'refills': 0, 'count': 0, 'cylinders': 0, 'new_connections': 0}
+        'cash': {'amount': total_cash, 'count': sum(1 for e in all_entries if (e.get('cash_amount', 0) or 0) > 0 or (e.get('cash_amount', 0) == 0 and e.get('online_amount', 0) == 0 and e.get('credit_amount', 0) == 0 and e.get('payment_mode') == 'cash'))},
+        'online': {'amount': total_online, 'count': sum(1 for e in all_entries if (e.get('online_amount', 0) or 0) > 0 or (e.get('cash_amount', 0) == 0 and e.get('online_amount', 0) == 0 and e.get('credit_amount', 0) == 0 and e.get('payment_mode') == 'online'))},
+        'pending': {'amount': total_credit, 'count': sum(1 for e in all_entries if (e.get('credit_amount', 0) or 0) > 0 or (e.get('cash_amount', 0) == 0 and e.get('online_amount', 0) == 0 and e.get('credit_amount', 0) == 0 and e.get('payment_mode') == 'pending'))},
+        'total': {
+            'amount': total_amount,
+            'count': entry_count,
+            'refills': total_refill_cyl,
+            'cylinders': total_new_cyl + total_refill_cyl,
+            'new_connections': categories['domestic_new_count'] + categories['commercial_new_count'],
+            'new_connection_cylinders': total_new_cyl,
+            'refill_cylinders': total_refill_cyl
+        },
+        'categories': categories
     }
-    
-    for r in results:
-        mode = r['_id'] or 'cash'
-        if mode in summary:
-            summary[mode] = {
-                'amount': r['total_amount'],
-                'refills': r['total_refills'],
-                'count': r['count'],
-                'cylinders': r['total_refills'],
-                'new_connections': r['new_connection_entries']
-            }
-        summary['total']['amount'] += r['total_amount']
-        summary['total']['refills'] += r['total_refills']
-        summary['total']['count'] += r['count']
-        summary['total']['cylinders'] += r['total_refills']
-        summary['total']['new_connections'] += r['new_connection_entries']
-    
-    # Override with accurate per-category cylinder counts
-    summary['total']['refills'] = total_refill_cyl
-    summary['total']['cylinders'] = total_new_cyl + total_refill_cyl
-    summary['total']['new_connections'] = categories['domestic_new_count'] + categories['commercial_new_count']
-    summary['total']['new_connection_cylinders'] = total_new_cyl
-    summary['total']['refill_cylinders'] = total_refill_cyl
-    summary['categories'] = categories
     
     return summary
 
@@ -4935,7 +5000,7 @@ async def export_sales_pdf(
     elements.append(Spacer(1, 5))
     
     # Table data - include Memo No, Cylinder Nos and Refills
-    data = [['SL', 'Date', 'Consumer', 'Address', 'Cons.No', 'Memo No', 'Type', 'Amount', 'Mode', 'New Cyl', 'Refill Cyl']]
+    data = [['SL', 'Date', 'Consumer', 'Address', 'Cons.No', 'Memo No', 'Type', 'Amount', 'Cash', 'Online', 'Credit', 'New Cyl', 'Refill Cyl']]
     
     total_amount = 0
     total_new_cyl = 0
@@ -4968,6 +5033,17 @@ async def export_sales_pdf(
             if conn_type == 'domestic': dom_new_cyl += cyl
             else: com_new_cyl += cyl
         
+        # Get split amounts with backward compat
+        cash_a = e.get('cash_amount', 0) or 0
+        online_a = e.get('online_amount', 0) or 0
+        credit_a = e.get('credit_amount', 0) or 0
+        if cash_a == 0 and online_a == 0 and credit_a == 0:
+            pm = e.get('payment_mode', 'cash')
+            amt_val = e.get('amount', 0) or 0
+            if pm == 'cash': cash_a = amt_val
+            elif pm == 'online': online_a = amt_val
+            elif pm == 'pending': credit_a = amt_val
+        
         data.append([
             str(i),
             e['date'],
@@ -4977,23 +5053,41 @@ async def export_sales_pdf(
             e.get('memo_no', ''),
             conn_type[:8].replace('_', ' ').title(),
             format_inr(e.get('amount', 0)),
-            e.get('payment_mode', 'cash')[:4].title(),
-            str(cyl) if not is_refill else '-',  # Show cylinder count for new connections
-            str(cyl) if is_refill else '-'  # Show refill cylinder count for refill types
+            format_inr(cash_a) if cash_a > 0 else '-',
+            format_inr(online_a) if online_a > 0 else '-',
+            format_inr(credit_a) if credit_a > 0 else '-',
+            str(cyl) if not is_refill else '-',
+            str(cyl) if is_refill else '-'
         ])
         total_amount += e.get('amount', 0)
     
-    # Add category summary row
-    data.append(['', '', '', '', '', '', 'CYL TOTAL:', format_inr(total_amount), '',
+    # Calculate payment mode totals for PDF
+    pdf_cash_total = sum(e.get('cash_amount', 0) or (e.get('amount', 0) if e.get('payment_mode') == 'cash' and not e.get('cash_amount') else 0) for e in entries)
+    pdf_online_total = sum(e.get('online_amount', 0) or (e.get('amount', 0) if e.get('payment_mode') == 'online' and not e.get('online_amount') else 0) for e in entries)
+    pdf_credit_total = sum(e.get('credit_amount', 0) or (e.get('amount', 0) if e.get('payment_mode') == 'pending' and not e.get('credit_amount') else 0) for e in entries)
+    
+    # Add cylinder total row
+    data.append(['', '', '', '', '', '', 'CYL TOTAL:', format_inr(total_amount),
+                 format_inr(pdf_cash_total), format_inr(pdf_online_total), format_inr(pdf_credit_total),
                  str(total_new_cyl), str(total_refill_cyl)])
     
     # Add accessory sales section
     acc_total_amount = 0
+    acc_cash_total = 0
+    acc_online_total = 0
+    acc_credit_total = 0
     if acc_sales:
-        data.append(['', '', '', '', '', '', '--- ACCESSORY SALES ---', '', '', '', ''])
+        data.append(['', '', '', '', '', '', '--- ACCESSORY SALES ---', '', '', '', '', '', ''])
         for j, s in enumerate(acc_sales, 1):
             items_desc = ', '.join([f"{i.get('accessory_name', '')} x{i.get('quantity', 0)}" for i in s.get('items', [])])
             amt = s.get('grand_total', 0)
+            acc_pm = s.get('payment_mode', 'cash')
+            acc_c = amt if acc_pm == 'cash' else 0
+            acc_o = amt if acc_pm == 'online' else 0
+            acc_cr = amt if acc_pm == 'pending' else 0
+            acc_cash_total += acc_c
+            acc_online_total += acc_o
+            acc_credit_total += acc_cr
             data.append([
                 str(len(entries) + j),
                 s.get('date', ''),
@@ -5003,24 +5097,31 @@ async def export_sales_pdf(
                 s.get('memo_no', ''),
                 'Accessory',
                 format_inr(amt),
-                (s.get('payment_mode', 'cash')[:4].title()),
+                format_inr(acc_c) if acc_c > 0 else '-',
+                format_inr(acc_o) if acc_o > 0 else '-',
+                format_inr(acc_cr) if acc_cr > 0 else '-',
                 '-',
                 '-'
             ])
             acc_total_amount += amt
-        data.append(['', '', '', '', '', '', 'ACC TOTAL:', format_inr(acc_total_amount), '', '', ''])
+        data.append(['', '', '', '', '', '', 'ACC TOTAL:', format_inr(acc_total_amount),
+                     format_inr(acc_cash_total), format_inr(acc_online_total), format_inr(acc_credit_total), '', ''])
     
     # Grand total row
     grand_total = total_amount + acc_total_amount
-    data.append(['', '', '', '', '', '', 'GRAND TOTAL:', format_inr(grand_total), '',
+    grand_cash = pdf_cash_total + acc_cash_total
+    grand_online = pdf_online_total + acc_online_total
+    grand_credit = pdf_credit_total + acc_credit_total
+    data.append(['', '', '', '', '', '', 'GRAND TOTAL:', format_inr(grand_total), 
+                 format_inr(grand_cash), format_inr(grand_online), format_inr(grand_credit),
                  str(total_new_cyl), str(total_refill_cyl)])
     
     # Add category breakdown row
     data.append(['', '', 'Dom New:', str(dom_new_cyl), 'Com New:', str(com_new_cyl),
-                 'Dom Refill:', str(dom_refill_cyl), 'Com Refill:', str(com_refill_cyl), ''])
+                 'Dom Refill:', str(dom_refill_cyl), 'Com Refill:', str(com_refill_cyl), '', '', '', '', ''])
     
-    # Create table - fit A4 landscape (11 columns now with Memo No)
-    col_widths = [22, 50, 80, 65, 52, 42, 48, 52, 36, 42, 36]
+    # Create table - fit A4 landscape (13 columns with Cash/Online/Credit)
+    col_widths = [18, 42, 62, 52, 42, 36, 40, 44, 38, 38, 38, 32, 32]
     table = Table(data, colWidths=col_widths, repeatRows=1)
     
     # Determine style rows
@@ -5133,7 +5234,7 @@ async def export_sales_excel(
     ws.title = "Sales Data"
     
     # Headers with clear form heads - include Memo No, Cylinder Nos and Refills
-    headers = ['SL No.', 'Date', 'Consumer Name', 'Address', 'Consumer No.', 'Memo No.', 'Type', 'Amount (Rs.)', 'Payment Mode', 'New Conn Cyl', 'Refill Cyl', 'Remarks']
+    headers = ['SL No.', 'Date', 'Consumer Name', 'Address', 'Consumer No.', 'Memo No.', 'Type', 'Amount (Rs.)', 'Cash (Rs.)', 'Online (Rs.)', 'Credit (Rs.)', 'New Conn Cyl', 'Refill Cyl', 'Remarks']
     ws.append(headers)
     
     # Style headers
@@ -5173,6 +5274,17 @@ async def export_sales_excel(
             if conn_type == 'domestic': dom_new_cyl += cyl
             else: com_new_cyl += cyl
         
+        # Get split amounts with backward compat
+        cash_a = e.get('cash_amount', 0) or 0
+        online_a = e.get('online_amount', 0) or 0
+        credit_a = e.get('credit_amount', 0) or 0
+        if cash_a == 0 and online_a == 0 and credit_a == 0:
+            pm = e.get('payment_mode', 'cash')
+            amt_val = e.get('amount', 0) or 0
+            if pm == 'cash': cash_a = amt_val
+            elif pm == 'online': online_a = amt_val
+            elif pm == 'pending': credit_a = amt_val
+        
         ws.append([
             i,
             e['date'],
@@ -5182,16 +5294,32 @@ async def export_sales_excel(
             e.get('memo_no', ''),
             conn_type.replace('_', ' ').title(),
             format_inr(e.get('amount', 0)),
-            e.get('payment_mode', 'cash').capitalize(),
-            cyl if not is_refill else '-',  # New conn cylinder count
-            cyl if is_refill else '-',  # Refill cylinder count
+            format_inr(cash_a) if cash_a > 0 else '-',
+            format_inr(online_a) if online_a > 0 else '-',
+            format_inr(credit_a) if credit_a > 0 else '-',
+            cyl if not is_refill else '-',
+            cyl if is_refill else '-',
             e.get('remarks', '')
         ])
         total_amount += e.get('amount', 0)
     
     # Add cylinder total row
     cyl_total_row = len(entries) + 2
-    ws.append(['', '', '', '', '', '', 'CYL TOTAL:', format_inr(total_amount), '',
+    # Calculate cash/online/credit totals for cylinder entries
+    excel_cash_total = sum(
+        (e.get('cash_amount', 0) or 0) or (e.get('amount', 0) if e.get('payment_mode') == 'cash' and not e.get('cash_amount') else 0)
+        for e in entries
+    )
+    excel_online_total = sum(
+        (e.get('online_amount', 0) or 0) or (e.get('amount', 0) if e.get('payment_mode') == 'online' and not e.get('online_amount') else 0)
+        for e in entries
+    )
+    excel_credit_total = sum(
+        (e.get('credit_amount', 0) or 0) or (e.get('amount', 0) if e.get('payment_mode') == 'pending' and not e.get('credit_amount') else 0)
+        for e in entries
+    )
+    ws.append(['', '', '', '', '', '', 'CYL TOTAL:', format_inr(total_amount),
+               format_inr(excel_cash_total), format_inr(excel_online_total), format_inr(excel_credit_total),
                total_new_cyl, total_refill_cyl, ''])
     
     # Style cylinder total row
@@ -5203,10 +5331,13 @@ async def export_sales_excel(
     
     # Add accessory sales section
     acc_total_amount_excel = 0
+    acc_cash_total_excel = 0
+    acc_online_total_excel = 0
+    acc_credit_total_excel = 0
     if acc_sales_excel:
         # Section header
         acc_header_row_num = cyl_total_row + 1
-        ws.append(['', '', '', '', '', '', '--- ACCESSORY SALES ---', '', '', '', '', ''])
+        ws.append(['', '', '', '', '', '', '--- ACCESSORY SALES ---', '', '', '', '', '', '', ''])
         acc_header_fill = PatternFill(start_color="fff7ed", end_color="fff7ed", fill_type="solid")
         for cell in ws[acc_header_row_num]:
             cell.fill = acc_header_fill
@@ -5215,6 +5346,13 @@ async def export_sales_excel(
         for j, s in enumerate(acc_sales_excel, 1):
             items_desc = ', '.join([f"{i.get('accessory_name', '')} x{i.get('quantity', 0)}" for i in s.get('items', [])])
             amt = s.get('grand_total', 0)
+            acc_pm = s.get('payment_mode', 'cash')
+            acc_c = amt if acc_pm == 'cash' else 0
+            acc_o = amt if acc_pm == 'online' else 0
+            acc_cr = amt if acc_pm == 'pending' else 0
+            acc_cash_total_excel += acc_c
+            acc_online_total_excel += acc_o
+            acc_credit_total_excel += acc_cr
             ws.append([
                 len(entries) + j,
                 s.get('date', ''),
@@ -5224,7 +5362,9 @@ async def export_sales_excel(
                 s.get('memo_no', ''),
                 'Accessory',
                 format_inr(amt),
-                s.get('payment_mode', 'cash').capitalize(),
+                format_inr(acc_c) if acc_c > 0 else '-',
+                format_inr(acc_o) if acc_o > 0 else '-',
+                format_inr(acc_cr) if acc_cr > 0 else '-',
                 '-',
                 '-',
                 items_desc
@@ -5233,7 +5373,9 @@ async def export_sales_excel(
         
         # Accessory total row
         acc_total_row_num = acc_header_row_num + len(acc_sales_excel) + 1
-        ws.append(['', '', '', '', '', '', 'ACC TOTAL:', format_inr(acc_total_amount_excel), '', '', '', ''])
+        ws.append(['', '', '', '', '', '', 'ACC TOTAL:', format_inr(acc_total_amount_excel),
+                   format_inr(acc_cash_total_excel), format_inr(acc_online_total_excel), format_inr(acc_credit_total_excel),
+                   '', '', ''])
         for cell in ws[acc_total_row_num]:
             cell.fill = acc_header_fill
             cell.font = Font(bold=True)
@@ -5241,7 +5383,11 @@ async def export_sales_excel(
     # Grand total row
     grand_total_row_num = ws.max_row + 1
     grand_total_excel = total_amount + acc_total_amount_excel
-    ws.append(['', '', '', '', '', '', 'GRAND TOTAL:', format_inr(grand_total_excel), '',
+    grand_cash_excel = excel_cash_total + acc_cash_total_excel
+    grand_online_excel = excel_online_total + acc_online_total_excel
+    grand_credit_excel = excel_credit_total + acc_credit_total_excel
+    ws.append(['', '', '', '', '', '', 'GRAND TOTAL:', format_inr(grand_total_excel),
+               format_inr(grand_cash_excel), format_inr(grand_online_excel), format_inr(grand_credit_excel),
                total_new_cyl, total_refill_cyl, ''])
     grand_fill = PatternFill(start_color="ede9fe", end_color="ede9fe", fill_type="solid")
     for cell in ws[grand_total_row_num]:
@@ -5251,16 +5397,17 @@ async def export_sales_excel(
     # Category breakdown row
     cat_row = ws.max_row + 1
     ws.append(['', '', 'Dom New Cyl:', dom_new_cyl, 'Com New Cyl:', com_new_cyl,
-               'Dom Refill Cyl:', dom_refill_cyl, 'Com Refill Cyl:', com_refill_cyl, '', ''])
+               'Dom Refill Cyl:', dom_refill_cyl, 'Com Refill Cyl:', com_refill_cyl, '', '', '', ''])
     cat_fill = PatternFill(start_color="e8f5e9", end_color="e8f5e9", fill_type="solid")
     for cell in ws[cat_row]:
         cell.fill = cat_fill
         cell.font = Font(bold=True)
     
     # Adjust column widths
-    column_widths = [8, 12, 25, 18, 14, 12, 14, 12, 14, 12, 12, 18]
+    column_widths = [8, 12, 25, 18, 14, 12, 14, 14, 12, 12, 12, 12, 12, 18]
     for i, width in enumerate(column_widths, 1):
-        ws.column_dimensions[chr(64 + i)].width = width
+        col_letter = chr(64 + i) if i <= 26 else chr(64 + (i - 1) // 26) + chr(65 + (i - 1) % 26)
+        ws.column_dimensions[col_letter].width = width
     
     buffer = BytesIO()
     wb.save(buffer)
@@ -5357,16 +5504,20 @@ async def export_sales_summary_pdf(
         summary_data[period_key]['total_entries'] += 1
         summary_data[period_key]['total_refills'] += refills
         
-        # Payment mode breakdown
-        if payment_mode == 'cash':
-            summary_data[period_key]['cash_amount'] += amount
-            summary_data[period_key]['cash_entries'] += 1
-        elif payment_mode == 'online':
-            summary_data[period_key]['online_amount'] += amount
-            summary_data[period_key]['online_entries'] += 1
-        else:  # pending
-            summary_data[period_key]['pending_amount'] += amount
-            summary_data[period_key]['pending_entries'] += 1
+        # Payment mode breakdown using split amounts with backward compat
+        cash_a = entry.get('cash_amount', 0) or 0
+        online_a = entry.get('online_amount', 0) or 0
+        credit_a = entry.get('credit_amount', 0) or 0
+        if cash_a == 0 and online_a == 0 and credit_a == 0:
+            if payment_mode == 'cash': cash_a = amount
+            elif payment_mode == 'online': online_a = amount
+            elif payment_mode == 'pending': credit_a = amount
+        summary_data[period_key]['cash_amount'] += cash_a
+        summary_data[period_key]['online_amount'] += online_a
+        summary_data[period_key]['pending_amount'] += credit_a
+        if cash_a > 0: summary_data[period_key]['cash_entries'] += 1
+        if online_a > 0: summary_data[period_key]['online_entries'] += 1
+        if credit_a > 0: summary_data[period_key]['pending_entries'] += 1
         
         # Connection type breakdown
         if connection_type == 'domestic':
@@ -5565,15 +5716,20 @@ async def export_sales_summary_excel(
         summary_data[period_key]['total_entries'] += 1
         summary_data[period_key]['total_refills'] += refills
         
-        if payment_mode == 'cash':
-            summary_data[period_key]['cash_amount'] += amount
-            summary_data[period_key]['cash_entries'] += 1
-        elif payment_mode == 'online':
-            summary_data[period_key]['online_amount'] += amount
-            summary_data[period_key]['online_entries'] += 1
-        else:
-            summary_data[period_key]['pending_amount'] += amount
-            summary_data[period_key]['pending_entries'] += 1
+        # Payment mode breakdown using split amounts with backward compat
+        cash_a = entry.get('cash_amount', 0) or 0
+        online_a = entry.get('online_amount', 0) or 0
+        credit_a = entry.get('credit_amount', 0) or 0
+        if cash_a == 0 and online_a == 0 and credit_a == 0:
+            if payment_mode == 'cash': cash_a = amount
+            elif payment_mode == 'online': online_a = amount
+            elif payment_mode == 'pending': credit_a = amount
+        summary_data[period_key]['cash_amount'] += cash_a
+        summary_data[period_key]['online_amount'] += online_a
+        summary_data[period_key]['pending_amount'] += credit_a
+        if cash_a > 0: summary_data[period_key]['cash_entries'] += 1
+        if online_a > 0: summary_data[period_key]['online_entries'] += 1
+        if credit_a > 0: summary_data[period_key]['pending_entries'] += 1
         
         if connection_type == 'domestic':
             summary_data[period_key]['domestic_new'] += 1

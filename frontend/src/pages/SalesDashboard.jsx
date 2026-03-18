@@ -83,6 +83,9 @@ const SalesDashboard = () => {
     no_of_refills: '1',
     amount: '',
     payment_mode: 'cash',
+    cash_amount: '',
+    online_amount: '',
+    credit_amount: '',
     remarks: ''
   });
   
@@ -129,6 +132,9 @@ const SalesDashboard = () => {
     connection_type: 'domestic',
     cylinder_nos: '',
     payment_mode: 'cash',
+    cash_amount: '',
+    online_amount: '',
+    credit_amount: '',
     no_of_refills: '',
     remarks: '',
     warehouse_id: ''
@@ -238,7 +244,10 @@ const SalesDashboard = () => {
       const data = {
         ...formData,
         amount: parseFloat(formData.amount) || 0,
-        no_of_refills: parseInt(formData.no_of_refills) || 0
+        no_of_refills: parseInt(formData.no_of_refills) || 0,
+        cash_amount: parseFloat(formData.cash_amount) || 0,
+        online_amount: parseFloat(formData.online_amount) || 0,
+        credit_amount: parseFloat(formData.credit_amount) || 0
       };
 
       if (isAdmin) {
@@ -266,6 +275,9 @@ const SalesDashboard = () => {
         connection_type: 'domestic',
         cylinder_nos: '',
         payment_mode: 'cash',
+        cash_amount: '',
+        online_amount: '',
+        credit_amount: '',
         no_of_refills: '',
         remarks: '',
         warehouse_id: ''
@@ -291,6 +303,9 @@ const SalesDashboard = () => {
       connection_type: entry.connection_type || 'domestic',
       cylinder_nos: entry.cylinder_nos || '',
       payment_mode: entry.payment_mode,
+      cash_amount: entry.cash_amount || 0,
+      online_amount: entry.online_amount || 0,
+      credit_amount: entry.credit_amount || 0,
       no_of_refills: entry.no_of_refills,
       remarks: entry.remarks || ''
     });
@@ -305,7 +320,10 @@ const SalesDashboard = () => {
       await updateSalesEntry(editingEntry.id, {
         ...editForm,
         amount: parseFloat(editForm.amount) || 0,
-        no_of_refills: parseInt(editForm.no_of_refills) || 0
+        no_of_refills: parseInt(editForm.no_of_refills) || 0,
+        cash_amount: parseFloat(editForm.cash_amount) || 0,
+        online_amount: parseFloat(editForm.online_amount) || 0,
+        credit_amount: parseFloat(editForm.credit_amount) || 0
       });
       toast.success('Entry updated successfully');
       setEditDialogOpen(false);
@@ -357,6 +375,9 @@ const SalesDashboard = () => {
         amount: parseFloat(quickRefillForm.amount) || 0,
         connection_type: quickRefillCustomer.connection_type || 'domestic_refill',
         payment_mode: quickRefillForm.payment_mode,
+        cash_amount: parseFloat(quickRefillForm.cash_amount) || 0,
+        online_amount: parseFloat(quickRefillForm.online_amount) || 0,
+        credit_amount: parseFloat(quickRefillForm.credit_amount) || 0,
         no_of_refills: parseInt(quickRefillForm.no_of_refills) || 1,
         remarks: quickRefillForm.remarks
       };
@@ -544,7 +565,14 @@ const SalesDashboard = () => {
     }
   };
 
-  const getPaymentBadge = (mode) => {
+  const getPaymentBadge = (mode, entry) => {
+    if (mode === 'split' && entry) {
+      const parts = [];
+      if (entry.cash_amount > 0) parts.push(`C:₹${entry.cash_amount}`);
+      if (entry.online_amount > 0) parts.push(`O:₹${entry.online_amount}`);
+      if (entry.credit_amount > 0) parts.push(`P:₹${entry.credit_amount}`);
+      return <Badge className="bg-purple-100 text-purple-800 text-[10px]">{parts.join(' + ')}</Badge>;
+    }
     switch(mode) {
       case 'cash':
         return <Badge className="bg-green-100 text-green-800"><Banknote className="w-3 h-3 mr-1" />Cash</Badge>;
@@ -1151,29 +1179,6 @@ const SalesDashboard = () => {
                       />
                     </div>
                     <div>
-                      <Label className="text-sm">Amount (₹) *</Label>
-                      <Input 
-                        type="number"
-                        value={formData.amount}
-                        onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                        placeholder="Enter amount"
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-sm">Mode of Payment</Label>
-                      <Select value={formData.payment_mode} onValueChange={(v) => setFormData({ ...formData, payment_mode: v })}>
-                        <SelectTrigger className="mt-1">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="cash">Cash</SelectItem>
-                          <SelectItem value="online">Online</SelectItem>
-                          <SelectItem value="pending">Pending</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
                       <Label className="text-sm">Remarks</Label>
                       <Input 
                         value={formData.remarks}
@@ -1181,6 +1186,70 @@ const SalesDashboard = () => {
                         placeholder="Enter any remarks"
                         className="mt-1"
                       />
+                    </div>
+                  </div>
+
+                  {/* Multi-Payment Mode Section */}
+                  <div className="border rounded-lg p-3 bg-slate-50/80 space-y-3" data-testid="payment-section">
+                    <Label className="text-sm font-semibold text-slate-700">Payment Breakdown</Label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <Label className="text-xs text-green-700">Cash (₹)</Label>
+                        <Input 
+                          type="number" min="0"
+                          value={formData.cash_amount}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const cash = parseFloat(val) || 0;
+                            const online = parseFloat(formData.online_amount) || 0;
+                            const credit = parseFloat(formData.credit_amount) || 0;
+                            setFormData({ ...formData, cash_amount: val, amount: (cash + online + credit).toString() });
+                          }}
+                          placeholder="0"
+                          className="mt-1 border-green-200 focus:border-green-400"
+                          data-testid="cash-amount-input"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-blue-700">Online / UPI (₹)</Label>
+                        <Input 
+                          type="number" min="0"
+                          value={formData.online_amount}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const cash = parseFloat(formData.cash_amount) || 0;
+                            const online = parseFloat(val) || 0;
+                            const credit = parseFloat(formData.credit_amount) || 0;
+                            setFormData({ ...formData, online_amount: val, amount: (cash + online + credit).toString() });
+                          }}
+                          placeholder="0"
+                          className="mt-1 border-blue-200 focus:border-blue-400"
+                          data-testid="online-amount-input"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-amber-700">Credit / Pending (₹)</Label>
+                        <Input 
+                          type="number" min="0"
+                          value={formData.credit_amount}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const cash = parseFloat(formData.cash_amount) || 0;
+                            const online = parseFloat(formData.online_amount) || 0;
+                            const credit = parseFloat(val) || 0;
+                            setFormData({ ...formData, credit_amount: val, amount: (cash + online + credit).toString() });
+                          }}
+                          placeholder="0"
+                          className="mt-1 border-amber-200 focus:border-amber-400"
+                          data-testid="credit-amount-input"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between text-sm bg-white rounded px-3 py-1.5 border">
+                      <span className="text-slate-500">Total Amount:</span>
+                      <span className="font-bold text-slate-800" data-testid="total-amount-display">
+                        ₹{((parseFloat(formData.cash_amount) || 0) + (parseFloat(formData.online_amount) || 0) + (parseFloat(formData.credit_amount) || 0)).toLocaleString('en-IN')}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -1324,6 +1393,7 @@ const SalesDashboard = () => {
                     <SelectItem value="cash">Cash</SelectItem>
                     <SelectItem value="online">Online</SelectItem>
                     <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="split">Split Payment</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1481,31 +1551,46 @@ const SalesDashboard = () => {
                       onChange={(e) => setQuickRefillForm({ ...quickRefillForm, amount: e.target.value })}
                       placeholder="Enter amount"
                       className="mt-1"
+                      readOnly
                     />
                   </div>
                 </div>
 
-                <div>
-                  <Label>Payment Mode</Label>
-                  <Select 
-                    value={quickRefillForm.payment_mode} 
-                    onValueChange={(v) => setQuickRefillForm({ ...quickRefillForm, payment_mode: v })}
-                  >
-                    <SelectTrigger className="mt-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="cash">
-                        <div className="flex items-center gap-2"><Banknote className="w-4 h-4 text-green-600" /> Cash</div>
-                      </SelectItem>
-                      <SelectItem value="online">
-                        <div className="flex items-center gap-2"><CreditCard className="w-4 h-4 text-blue-600" /> Online</div>
-                      </SelectItem>
-                      <SelectItem value="pending">
-                        <div className="flex items-center gap-2"><Clock className="w-4 h-4 text-amber-600" /> Pending</div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
+                {/* Multi-Payment for Quick Refill */}
+                <div className="border rounded-lg p-3 bg-slate-50/80 space-y-2">
+                  <Label className="text-xs font-semibold text-slate-600">Payment Breakdown</Label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <Label className="text-[10px] text-green-700">Cash (₹)</Label>
+                      <Input type="number" min="0" value={quickRefillForm.cash_amount} onChange={(e) => {
+                        const cash = parseFloat(e.target.value) || 0;
+                        const online = parseFloat(quickRefillForm.online_amount) || 0;
+                        const credit = parseFloat(quickRefillForm.credit_amount) || 0;
+                        setQuickRefillForm({ ...quickRefillForm, cash_amount: e.target.value, amount: (cash + online + credit).toString() });
+                      }} placeholder="0" className="mt-0.5 h-8 text-sm border-green-200" />
+                    </div>
+                    <div>
+                      <Label className="text-[10px] text-blue-700">Online (₹)</Label>
+                      <Input type="number" min="0" value={quickRefillForm.online_amount} onChange={(e) => {
+                        const cash = parseFloat(quickRefillForm.cash_amount) || 0;
+                        const online = parseFloat(e.target.value) || 0;
+                        const credit = parseFloat(quickRefillForm.credit_amount) || 0;
+                        setQuickRefillForm({ ...quickRefillForm, online_amount: e.target.value, amount: (cash + online + credit).toString() });
+                      }} placeholder="0" className="mt-0.5 h-8 text-sm border-blue-200" />
+                    </div>
+                    <div>
+                      <Label className="text-[10px] text-amber-700">Credit (₹)</Label>
+                      <Input type="number" min="0" value={quickRefillForm.credit_amount} onChange={(e) => {
+                        const cash = parseFloat(quickRefillForm.cash_amount) || 0;
+                        const online = parseFloat(quickRefillForm.online_amount) || 0;
+                        const credit = parseFloat(e.target.value) || 0;
+                        setQuickRefillForm({ ...quickRefillForm, credit_amount: e.target.value, amount: (cash + online + credit).toString() });
+                      }} placeholder="0" className="mt-0.5 h-8 text-sm border-amber-200" />
+                    </div>
+                  </div>
+                  <div className="text-xs text-right text-slate-600">
+                    Total: <span className="font-bold">₹{((parseFloat(quickRefillForm.cash_amount) || 0) + (parseFloat(quickRefillForm.online_amount) || 0) + (parseFloat(quickRefillForm.credit_amount) || 0)).toLocaleString('en-IN')}</span>
+                  </div>
                 </div>
 
                 <div>
@@ -1528,7 +1613,7 @@ const SalesDashboard = () => {
                   </Button>
                   <Button 
                     onClick={handleSubmitQuickRefill}
-                    disabled={submitting || !quickRefillForm.amount}
+                    disabled={submitting || !quickRefillForm.amount || parseFloat(quickRefillForm.amount) <= 0}
                     className="flex-1 bg-orange-600 hover:bg-orange-700 gap-2"
                   >
                     {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
@@ -1574,6 +1659,9 @@ const SalesDashboard = () => {
                     <th>Memo</th>
                     <th>Amount</th>
                     <th>Payment</th>
+                    <th title="Cash Amount">Cash</th>
+                    <th title="Online Amount">Online</th>
+                    <th title="Credit/Pending Amount">Credit</th>
                     <th>New Conn Cyl</th>
                     <th>Refill Cyl</th>
                     <th>Remarks</th>
@@ -1584,7 +1672,7 @@ const SalesDashboard = () => {
                 <tbody>
                   {combinedEntries.length === 0 ? (
                     <tr>
-                      <td colSpan={isAdmin ? 14 : 13} className="text-center py-8 text-slate-500">
+                      <td colSpan={isAdmin ? 17 : 16} className="text-center py-8 text-slate-500">
                         No sales entries found
                       </td>
                     </tr>
@@ -1602,7 +1690,10 @@ const SalesDashboard = () => {
                           </td>
                           <td>{entry.memo_no || '-'}</td>
                           <td className="font-semibold text-green-700">{formatINR(entry.amount)}</td>
-                          <td>{getPaymentBadge(entry.payment_mode)}</td>
+                          <td>{getPaymentBadge(entry.payment_mode, entry)}</td>
+                          <td className="text-center text-green-700">{entry.cash_amount > 0 ? formatINR(entry.cash_amount) : '-'}</td>
+                          <td className="text-center text-blue-700">{entry.online_amount > 0 ? formatINR(entry.online_amount) : '-'}</td>
+                          <td className="text-center text-amber-700">{entry.credit_amount > 0 ? formatINR(entry.credit_amount) : '-'}</td>
                           <td className="text-center">
                             {entry.sale_type === 'accessory' ? '-' : 
                               (!(entry.connection_type || '').includes('refill') ? 
@@ -1645,6 +1736,9 @@ const SalesDashboard = () => {
                         <td colSpan={7} className="text-right">TOTAL:</td>
                         <td className="text-green-800">{formatINR(combinedTotals.amount)}</td>
                         <td></td>
+                        <td className="text-center text-green-700">{formatINR(combinedEntries.reduce((s, e) => s + (e.cash_amount || 0), 0))}</td>
+                        <td className="text-center text-blue-700">{formatINR(combinedEntries.reduce((s, e) => s + (e.online_amount || 0), 0))}</td>
+                        <td className="text-center text-amber-700">{formatINR(combinedEntries.reduce((s, e) => s + (e.credit_amount || 0), 0))}</td>
                         <td className="text-center">{combinedTotals.newCyl}</td>
                         <td className="text-center">{combinedTotals.refills}</td>
                         <td colSpan={isAdmin ? 3 : 2}></td>
@@ -1756,34 +1850,70 @@ const SalesDashboard = () => {
                   />
                 </div>
                 <div>
-                  <Label className="text-sm">Amount (₹)</Label>
-                  <Input 
-                    type="number"
-                    value={editForm.amount || ''}
-                    onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label className="text-sm">Mode of Payment</Label>
-                  <Select value={editForm.payment_mode || 'cash'} onValueChange={(v) => setEditForm({ ...editForm, payment_mode: v })}>
-                    <SelectTrigger className="mt-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="cash">Cash</SelectItem>
-                      <SelectItem value="online">Online</SelectItem>
-                      <SelectItem value="pending">Pending</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
                   <Label className="text-sm">Remarks</Label>
                   <Input 
                     value={editForm.remarks || ''}
                     onChange={(e) => setEditForm({ ...editForm, remarks: e.target.value })}
                     className="mt-1"
                   />
+                </div>
+              </div>
+
+              {/* Multi-Payment Section */}
+              <div className="border rounded-lg p-3 bg-slate-50/80 space-y-3">
+                <Label className="text-sm font-semibold text-slate-700">Payment Breakdown</Label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <Label className="text-xs text-green-700">Cash (₹)</Label>
+                    <Input 
+                      type="number" min="0"
+                      value={editForm.cash_amount || ''}
+                      onChange={(e) => {
+                        const cash = parseFloat(e.target.value) || 0;
+                        const online = parseFloat(editForm.online_amount) || 0;
+                        const credit = parseFloat(editForm.credit_amount) || 0;
+                        setEditForm({ ...editForm, cash_amount: e.target.value, amount: cash + online + credit });
+                      }}
+                      placeholder="0"
+                      className="mt-1 border-green-200"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-blue-700">Online / UPI (₹)</Label>
+                    <Input 
+                      type="number" min="0"
+                      value={editForm.online_amount || ''}
+                      onChange={(e) => {
+                        const cash = parseFloat(editForm.cash_amount) || 0;
+                        const online = parseFloat(e.target.value) || 0;
+                        const credit = parseFloat(editForm.credit_amount) || 0;
+                        setEditForm({ ...editForm, online_amount: e.target.value, amount: cash + online + credit });
+                      }}
+                      placeholder="0"
+                      className="mt-1 border-blue-200"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-amber-700">Credit / Pending (₹)</Label>
+                    <Input 
+                      type="number" min="0"
+                      value={editForm.credit_amount || ''}
+                      onChange={(e) => {
+                        const cash = parseFloat(editForm.cash_amount) || 0;
+                        const online = parseFloat(editForm.online_amount) || 0;
+                        const credit = parseFloat(e.target.value) || 0;
+                        setEditForm({ ...editForm, credit_amount: e.target.value, amount: cash + online + credit });
+                      }}
+                      placeholder="0"
+                      className="mt-1 border-amber-200"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-sm bg-white rounded px-3 py-1.5 border">
+                  <span className="text-slate-500">Total Amount:</span>
+                  <span className="font-bold text-slate-800">
+                    ₹{((parseFloat(editForm.cash_amount) || 0) + (parseFloat(editForm.online_amount) || 0) + (parseFloat(editForm.credit_amount) || 0)).toLocaleString('en-IN')}
+                  </span>
                 </div>
               </div>
             </div>
