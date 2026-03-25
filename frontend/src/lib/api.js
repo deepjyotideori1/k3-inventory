@@ -406,6 +406,7 @@ export const createCustomer = (data) => api.post('/customers', data);
 export const createCustomerForWarehouse = (warehouseId, data) => api.post(`/customers/warehouse/${warehouseId}`, data);
 export const updateCustomer = (customerId, data) => api.put(`/customers/${customerId}`, data);
 export const deleteCustomer = (customerId) => api.delete(`/customers/${customerId}`);
+export const getCustomerLinkedRecords = (customerId) => api.get(`/customers/${customerId}/linked-records`);
 export const bulkUploadCustomers = (data) => api.post('/customers/bulk', data);
 export const bulkUploadCustomersForWarehouse = (warehouseId, data) => api.post(`/customers/bulk/warehouse/${warehouseId}`, data);
 export const getCustomerSummary = (params) => api.get('/customers/summary', { params });

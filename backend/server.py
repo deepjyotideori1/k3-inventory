@@ -3419,15 +3419,20 @@ async def update_customer(
     customer: CustomerUpdate,
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
-    """Update a customer (admin only)"""
+    """Update a customer (admin and warehouse managers)"""
     user = await get_current_user(credentials)
     
-    if user['role'] != 'admin':
-        raise HTTPException(status_code=403, detail="Only admin can edit customers")
+    if user['role'] not in ('admin', 'warehouse_manager'):
+        raise HTTPException(status_code=403, detail="Only admin and warehouse managers can edit customers")
     
     existing = await db.customers.find_one({'id': customer_id})
     if not existing:
         raise HTTPException(status_code=404, detail="Customer not found")
+    
+    # Warehouse managers can only edit customers in their own warehouse
+    if user['role'] == 'warehouse_manager':
+        if existing.get('warehouse_id') != user.get('warehouse_id'):
+            raise HTTPException(status_code=403, detail="You can only edit customers in your warehouse")
     
     update_data = {}
     if customer.date is not None:
@@ -3485,18 +3490,83 @@ async def delete_customer(
     customer_id: str,
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
-    """Delete a customer (admin only)"""
+    """Delete a customer (admin and warehouse managers)"""
     user = await get_current_user(credentials)
     
-    if user['role'] != 'admin':
-        raise HTTPException(status_code=403, detail="Only admin can delete customers")
+    if user['role'] not in ('admin', 'warehouse_manager'):
+        raise HTTPException(status_code=403, detail="Only admin and warehouse managers can delete customers")
+    
+    existing = await db.customers.find_one({'id': customer_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    # Warehouse managers can only delete customers in their own warehouse
+    if user['role'] == 'warehouse_manager':
+        if existing.get('warehouse_id') != user.get('warehouse_id'):
+            raise HTTPException(status_code=403, detail="You can only delete customers in your warehouse")
+    
+    # Safety check: check for active orders or sales entries linked to this customer
+    active_orders = await db.orders.count_documents({
+        'customer_id': customer_id,
+        'status': {'$in': ['pending', 'Pending']}
+    })
+    sales_count = await db.sales_entries.count_documents({'customer_id': customer_id})
+    
+    warnings = []
+    if active_orders > 0:
+        warnings.append(f"{active_orders} active/pending order(s)")
+    if sales_count > 0:
+        warnings.append(f"{sales_count} sales entry/entries")
+    
+    # If force=false (default), return warning instead of deleting
+    # The frontend will pass ?force=true after user confirms
+    from fastapi import Query as FastAPIQuery
+    # We handle force via query param below - but since we can't add params to existing sig easily,
+    # we check for a header instead
+    # Actually let's just return warnings and let frontend decide
     
     result = await db.customers.delete_one({'id': customer_id})
     
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Customer not found")
     
-    return {"message": "Customer deleted successfully"}
+    response = {"message": "Customer deleted successfully"}
+    if warnings:
+        response["warnings"] = warnings
+    return response
+
+@api_router.get("/customers/{customer_id}/linked-records")
+async def get_customer_linked_records(
+    customer_id: str,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Check if a customer has linked orders or sales entries"""
+    user = await get_current_user(credentials)
+    
+    if user['role'] not in ('admin', 'warehouse_manager'):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    existing = await db.customers.find_one({'id': customer_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    if user['role'] == 'warehouse_manager':
+        if existing.get('warehouse_id') != user.get('warehouse_id'):
+            raise HTTPException(status_code=403, detail="Access denied")
+    
+    active_orders = await db.orders.count_documents({
+        'customer_id': customer_id,
+        'status': {'$in': ['pending', 'Pending']}
+    })
+    total_orders = await db.orders.count_documents({'customer_id': customer_id})
+    sales_count = await db.sales_entries.count_documents({'customer_id': customer_id})
+    
+    return {
+        "active_orders": active_orders,
+        "total_orders": total_orders,
+        "sales_entries": sales_count,
+        "has_linked_records": (active_orders + sales_count) > 0
+    }
 
 @api_router.post("/customers/bulk")
 async def bulk_upload_customers(

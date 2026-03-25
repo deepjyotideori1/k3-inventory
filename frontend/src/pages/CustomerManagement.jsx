@@ -7,6 +7,7 @@ import {
   createCustomerForWarehouse,
   updateCustomer,
   deleteCustomer,
+  getCustomerLinkedRecords,
   bulkUploadCustomers,
   bulkUploadCustomersForWarehouse,
   getCustomerSummary,
@@ -57,6 +58,7 @@ import * as XLSX from 'xlsx';
 
 const CustomerManagement = () => {
   const { user, isAdmin } = useAuth();
+  const canEditDelete = isAdmin || user?.role === 'warehouse_manager';
   const fileInputRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [customers, setCustomers] = useState([]);
@@ -85,6 +87,13 @@ const CustomerManagement = () => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [editForm, setEditForm] = useState({});
+  
+  // Delete state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingCustomer, setDeletingCustomer] = useState(null);
+  const [linkedRecords, setLinkedRecords] = useState(null);
+  const [loadingLinked, setLoadingLinked] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   
   // Filters
   const [filterCategory, setFilterCategory] = useState('all');
@@ -267,16 +276,34 @@ const CustomerManagement = () => {
     }
   };
 
-  const handleDelete = async (customerId) => {
-    if (!window.confirm('Are you sure you want to delete this customer?')) return;
-    
+  const handleDeleteClick = async (customer) => {
+    setDeletingCustomer(customer);
+    setLinkedRecords(null);
+    setDeleteDialogOpen(true);
+    setLoadingLinked(true);
     try {
-      await deleteCustomer(customerId);
-      toast.success('Customer deleted');
+      const res = await getCustomerLinkedRecords(customer.id);
+      setLinkedRecords(res.data);
+    } catch {
+      setLinkedRecords({ active_orders: 0, total_orders: 0, sales_entries: 0, has_linked_records: false });
+    } finally {
+      setLoadingLinked(false);
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingCustomer) return;
+    setDeleting(true);
+    try {
+      await deleteCustomer(deletingCustomer.id);
+      toast.success('Customer deleted successfully');
+      setDeleteDialogOpen(false);
+      setDeletingCustomer(null);
       fetchData();
     } catch (error) {
-      console.error('Failed to delete customer:', error);
       toast.error(error.response?.data?.detail || 'Failed to delete customer');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -642,7 +669,7 @@ const CustomerManagement = () => {
                           <th>Gas Card</th>
                           <th>KYC</th>
                           {isAdmin && <th>Warehouse</th>}
-                          {isAdmin && <th>Actions</th>}
+                          {canEditDelete && <th>Actions</th>}
                         </tr>
                       </thead>
                       <tbody>
@@ -678,7 +705,7 @@ const CustomerManagement = () => {
                               }
                             </td>
                             {isAdmin && <td className="text-sm">{c.warehouse_name}</td>}
-                            {isAdmin && (
+                            {canEditDelete && (
                               <td>
                                 <div className="flex gap-1">
                                   <Button 
@@ -686,14 +713,16 @@ const CustomerManagement = () => {
                                     size="sm"
                                     onClick={() => handleEdit(c)}
                                     className="text-blue-600 hover:text-blue-800"
+                                    data-testid={`edit-customer-${c.id}`}
                                   >
                                     <Edit className="w-4 h-4" />
                                   </Button>
                                   <Button 
                                     variant="ghost" 
                                     size="sm"
-                                    onClick={() => handleDelete(c.id)}
+                                    onClick={() => handleDeleteClick(c)}
                                     className="text-red-600 hover:text-red-800"
+                                    data-testid={`delete-customer-${c.id}`}
                                   >
                                     <Trash2 className="w-4 h-4" />
                                   </Button>
@@ -1060,6 +1089,7 @@ const CustomerManagement = () => {
                     value={editForm.date || ''}
                     onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
                     className="mt-1"
+                    data-testid="edit-customer-date"
                   />
                 </div>
                 <div>
@@ -1068,7 +1098,7 @@ const CustomerManagement = () => {
                     value={editForm.connection_type || 'domestic'} 
                     onValueChange={(v) => setEditForm({ ...editForm, connection_type: v })}
                   >
-                    <SelectTrigger className="mt-1">
+                    <SelectTrigger className="mt-1" data-testid="edit-connection-type">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1079,11 +1109,12 @@ const CustomerManagement = () => {
                 </div>
               </div>
               <div>
-                <Label>Customer Name</Label>
+                <Label>Customer Name *</Label>
                 <Input 
                   value={editForm.customer_name || ''}
                   onChange={(e) => setEditForm({ ...editForm, customer_name: e.target.value })}
                   className="mt-1"
+                  data-testid="edit-customer-name"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -1098,6 +1129,7 @@ const CustomerManagement = () => {
                     placeholder="Enter 10 digit number"
                     maxLength={10}
                     className="mt-1"
+                    data-testid="edit-customer-phone"
                   />
                   {editForm.phone && editForm.phone.length !== 10 && (
                     <p className="text-xs text-red-500 mt-1">Must be 10 digits ({editForm.phone.length}/10)</p>
@@ -1114,6 +1146,7 @@ const CustomerManagement = () => {
                     placeholder="Enter 10 digit number"
                     maxLength={10}
                     className="mt-1"
+                    data-testid="edit-consumer-no"
                   />
                   {editForm.consumer_no && editForm.consumer_no.length !== 10 && (
                     <p className="text-xs text-red-500 mt-1">Must be 10 digits ({editForm.consumer_no.length}/10)</p>
@@ -1126,6 +1159,7 @@ const CustomerManagement = () => {
                   value={editForm.address || ''}
                   onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
                   className="mt-1"
+                  data-testid="edit-customer-address"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -1135,6 +1169,7 @@ const CustomerManagement = () => {
                     value={editForm.cash_memo_no || ''}
                     onChange={(e) => setEditForm({ ...editForm, cash_memo_no: e.target.value })}
                     className="mt-1"
+                    data-testid="edit-cash-memo-no"
                   />
                 </div>
                 <div>
@@ -1143,6 +1178,7 @@ const CustomerManagement = () => {
                     value={editForm.cylinder_nos || ''}
                     onChange={(e) => setEditForm({ ...editForm, cylinder_nos: e.target.value })}
                     className="mt-1"
+                    data-testid="edit-cylinder-nos"
                   />
                 </div>
               </div>
@@ -1152,6 +1188,7 @@ const CustomerManagement = () => {
                     id="edit_gas_card"
                     checked={editForm.gas_card_issued || false}
                     onCheckedChange={(checked) => setEditForm({ ...editForm, gas_card_issued: checked })}
+                    data-testid="edit-gas-card-checkbox"
                   />
                   <Label htmlFor="edit_gas_card" className="cursor-pointer">Gas Card Issued</Label>
                 </div>
@@ -1160,6 +1197,7 @@ const CustomerManagement = () => {
                     id="edit_kyc"
                     checked={editForm.kyc_done || false}
                     onCheckedChange={(checked) => setEditForm({ ...editForm, kyc_done: checked })}
+                    data-testid="edit-kyc-checkbox"
                   />
                   <Label htmlFor="edit_kyc" className="cursor-pointer">KYC Done</Label>
                 </div>
@@ -1170,6 +1208,7 @@ const CustomerManagement = () => {
                   value={editForm.remarks || ''}
                   onChange={(e) => setEditForm({ ...editForm, remarks: e.target.value })}
                   className="mt-1"
+                  data-testid="edit-remarks"
                 />
               </div>
             </div>
@@ -1181,9 +1220,79 @@ const CustomerManagement = () => {
                 onClick={handleEditSubmit} 
                 disabled={submitting}
                 className="bg-green-700 hover:bg-green-800"
+                data-testid="save-edit-customer-btn"
               >
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
                 Save Changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-700">
+                <AlertTriangle className="w-5 h-5" />
+                Delete Customer
+              </DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete <strong>{deletingCustomer?.customer_name}</strong>?
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4 space-y-3">
+              {loadingLinked ? (
+                <div className="flex items-center gap-2 text-slate-500">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Checking linked records...
+                </div>
+              ) : linkedRecords?.has_linked_records ? (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-1" data-testid="delete-warning-panel">
+                  <p className="text-sm font-medium text-amber-800 flex items-center gap-1">
+                    <AlertTriangle className="w-4 h-4" />
+                    Warning: This customer has linked records
+                  </p>
+                  {linkedRecords.active_orders > 0 && (
+                    <p className="text-sm text-amber-700">
+                      {linkedRecords.active_orders} active/pending order(s)
+                    </p>
+                  )}
+                  {linkedRecords.total_orders > 0 && (
+                    <p className="text-sm text-amber-700">
+                      {linkedRecords.total_orders} total order(s)
+                    </p>
+                  )}
+                  {linkedRecords.sales_entries > 0 && (
+                    <p className="text-sm text-amber-700">
+                      {linkedRecords.sales_entries} sales entry/entries
+                    </p>
+                  )}
+                  <p className="text-xs text-amber-600 mt-2">
+                    Deleting this customer will not remove linked orders or sales entries, but they will lose the customer reference.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-600">
+                  No linked orders or sales entries found. This customer can be safely deleted.
+                </p>
+              )}
+              <p className="text-sm text-red-600 font-medium">
+                This action cannot be undone.
+              </p>
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button variant="outline" data-testid="cancel-delete-btn">Cancel</Button>
+              </DialogClose>
+              <Button 
+                variant="destructive"
+                onClick={handleDeleteConfirm}
+                disabled={deleting}
+                data-testid="confirm-delete-customer-btn"
+              >
+                {deleting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Trash2 className="w-4 h-4 mr-2" />}
+                Delete Customer
               </Button>
             </DialogFooter>
           </DialogContent>
