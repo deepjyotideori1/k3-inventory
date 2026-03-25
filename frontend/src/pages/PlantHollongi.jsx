@@ -15,7 +15,8 @@ import {
   Calendar,
   RefreshCw,
   Truck,
-  ArrowDownToLine
+  ArrowDownToLine,
+  Send
 } from 'lucide-react';
 import { formatDate, getDateRange } from '../lib/utils';
 import { toast } from 'sonner';
@@ -104,6 +105,12 @@ const PlantHollongi = () => {
             <p className="text-slate-500 mt-1">View and manage plant operations</p>
           </div>
           <div className="flex gap-2">
+            <Link to="/plant-entry?tab=issuance">
+              <Button className="gap-2 bg-blue-700 hover:bg-blue-800" data-testid="issue-cylinders-link">
+                <Send className="w-4 h-4" />
+                Issue Cylinders
+              </Button>
+            </Link>
             <Button variant="outline" onClick={handleExportPDF} className="gap-2" data-testid="export-pdf-btn">
               <Download className="w-4 h-4" />
               PDF

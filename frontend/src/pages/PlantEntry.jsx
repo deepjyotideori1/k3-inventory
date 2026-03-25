@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
-import { getLatestPlantClosing, createPlantReport, getWarehouses } from '../lib/api';
+import { getLatestPlantClosing, createPlantReport, getWarehouses, getDealers, issueCylindersToDealer, getPlantIssuanceHistory, getPlantAvailableStock } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -11,6 +11,7 @@ import { Textarea } from '../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Separator } from '../components/ui/separator';
 import { Badge } from '../components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../components/ui/dialog';
 import { 
   Save,
   Loader2,
@@ -20,7 +21,11 @@ import {
   ArrowDownToLine,
   Plus,
   Trash2,
-  AlertCircle
+  AlertCircle,
+  Send,
+  Search,
+  CheckCircle2,
+  BarChart3
 } from 'lucide-react';
 import { getTodayDate, formatDate } from '../lib/utils';
 import { toast } from 'sonner';
@@ -28,9 +33,27 @@ import { toast } from 'sonner';
 const PlantEntry = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [warehouses, setWarehouses] = useState([]);
+  const [activeSection, setActiveSection] = useState(searchParams.get('tab') === 'issuance' ? 'issuance' : 'report');
+  
+  // Issuance state
+  const [dealers, setDealers] = useState([]);
+  const [dealerSearch, setDealerSearch] = useState('');
+  const [availableStock, setAvailableStock] = useState({ available_15kg: 0, available_21kg: 0 });
+  const [issuanceForm, setIssuanceForm] = useState({
+    date: getTodayDate(),
+    dealer_id: '',
+    qty_15kg: 0,
+    qty_21kg: 0,
+    remarks: ''
+  });
+  const [issuanceHistory, setIssuanceHistory] = useState([]);
+  const [issuingLoading, setIssuingLoading] = useState(false);
+  const [successDialogOpen, setSuccessDialogOpen] = useState(false);
+  const [lastIssuance, setLastIssuance] = useState(null);
   
   const [formData, setFormData] = useState({
     date: getTodayDate(),
@@ -60,13 +83,19 @@ const PlantEntry = () => {
 
   const fetchData = async () => {
     try {
-      const [openingRes, warehousesRes] = await Promise.all([
+      const [openingRes, warehousesRes, dealersRes, stockRes, historyRes] = await Promise.all([
         getLatestPlantClosing(),
-        getWarehouses()
+        getWarehouses(),
+        getDealers(),
+        getPlantAvailableStock(getTodayDate()),
+        getPlantIssuanceHistory({ start_date: getTodayDate(), end_date: getTodayDate() })
       ]);
       
       const nonPlantWarehouses = warehousesRes.data.filter(w => !w.is_plant);
       setWarehouses(nonPlantWarehouses);
+      setDealers(dealersRes.data || []);
+      setAvailableStock(stockRes.data || { available_15kg: 0, available_21kg: 0 });
+      setIssuanceHistory(historyRes.data || []);
       
       setFormData(prev => ({
         ...prev,
@@ -166,6 +195,67 @@ const PlantEntry = () => {
     }
   };
 
+  const handleIssuanceSubmit = async (e) => {
+    e.preventDefault();
+    if (!issuanceForm.dealer_id) {
+      toast.error('Please select a dealer');
+      return;
+    }
+    if (issuanceForm.qty_15kg <= 0 && issuanceForm.qty_21kg <= 0) {
+      toast.error('Enter at least one cylinder quantity');
+      return;
+    }
+    if (issuanceForm.qty_15kg > availableStock.available_15kg) {
+      toast.error(`Insufficient 15kg stock. Available: ${availableStock.available_15kg}`);
+      return;
+    }
+    if (issuanceForm.qty_21kg > availableStock.available_21kg) {
+      toast.error(`Insufficient 21kg stock. Available: ${availableStock.available_21kg}`);
+      return;
+    }
+    
+    setIssuingLoading(true);
+    try {
+      const res = await issueCylindersToDealer(issuanceForm);
+      setLastIssuance(res.data);
+      setSuccessDialogOpen(true);
+      
+      // Refresh stock and history
+      const [stockRes, historyRes] = await Promise.all([
+        getPlantAvailableStock(issuanceForm.date),
+        getPlantIssuanceHistory({ start_date: issuanceForm.date, end_date: issuanceForm.date })
+      ]);
+      setAvailableStock(stockRes.data);
+      setIssuanceHistory(historyRes.data || []);
+      
+      // Reset form
+      setIssuanceForm(prev => ({ ...prev, dealer_id: '', qty_15kg: 0, qty_21kg: 0, remarks: '' }));
+      setDealerSearch('');
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to issue cylinders');
+    } finally {
+      setIssuingLoading(false);
+    }
+  };
+
+  const refreshIssuanceData = async (date) => {
+    try {
+      const [stockRes, historyRes] = await Promise.all([
+        getPlantAvailableStock(date),
+        getPlantIssuanceHistory({ start_date: date, end_date: date })
+      ]);
+      setAvailableStock(stockRes.data);
+      setIssuanceHistory(historyRes.data || []);
+    } catch {}
+  };
+
+  const filteredDealers = dealers.filter(d => 
+    d.name.toLowerCase().includes(dealerSearch.toLowerCase()) ||
+    d.contact?.toLowerCase().includes(dealerSearch.toLowerCase())
+  );
+
+  const selectedDealer = dealers.find(d => d.id === issuanceForm.dealer_id);
+
   // Calculate totals from warehouse received
   const totalReceivedFromWarehouses = {
     '15kg': formData.received_empty_15kg.reduce((sum, r) => sum + (r.quantity || 0), 0),
@@ -205,6 +295,279 @@ const PlantEntry = () => {
           </div>
         </div>
 
+        {/* Section Tabs */}
+        <div className="flex gap-2 border-b border-slate-200 pb-1">
+          <Button
+            variant={activeSection === 'report' ? 'default' : 'ghost'}
+            size="sm"
+            className={activeSection === 'report' ? 'bg-green-700 hover:bg-green-800' : ''}
+            onClick={() => setActiveSection('report')}
+            data-testid="tab-daily-report"
+          >
+            <BarChart3 className="w-4 h-4 mr-1.5" />
+            Daily Report
+          </Button>
+          <Button
+            variant={activeSection === 'issuance' ? 'default' : 'ghost'}
+            size="sm"
+            className={activeSection === 'issuance' ? 'bg-blue-700 hover:bg-blue-800' : ''}
+            onClick={() => setActiveSection('issuance')}
+            data-testid="tab-cylinder-issuance"
+          >
+            <Send className="w-4 h-4 mr-1.5" />
+            Cylinder Issuance (Filled)
+          </Button>
+        </div>
+
+        {/* =========== CYLINDER ISSUANCE SECTION =========== */}
+        {activeSection === 'issuance' && (
+          <div className="space-y-6" data-testid="issuance-section">
+            {/* Available Stock Reference */}
+            <Card className="border-2 border-blue-200 bg-blue-50">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Package className="w-5 h-5 text-blue-700" />
+                  Current Available Filled Stock
+                </CardTitle>
+                <CardDescription className="text-blue-600">
+                  Reference stock available for issuance (as of latest report)
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 bg-white rounded-lg border border-blue-200 text-center" data-testid="stock-15kg">
+                    <p className="text-sm text-slate-500">15 Kg Filled</p>
+                    <p className="text-3xl font-bold text-blue-800">{availableStock.available_15kg}</p>
+                    {availableStock.issued_today_15kg > 0 && (
+                      <p className="text-xs text-amber-600 mt-1">Issued today: {availableStock.issued_today_15kg}</p>
+                    )}
+                  </div>
+                  <div className="p-3 bg-white rounded-lg border border-blue-200 text-center" data-testid="stock-21kg">
+                    <p className="text-sm text-slate-500">21 Kg Filled</p>
+                    <p className="text-3xl font-bold text-blue-800">{availableStock.available_21kg}</p>
+                    {availableStock.issued_today_21kg > 0 && (
+                      <p className="text-xs text-amber-600 mt-1">Issued today: {availableStock.issued_today_21kg}</p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Issuance Form */}
+            <Card className="border-2 border-green-200">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Send className="w-5 h-5 text-green-700" />
+                  New Cylinder Issuance (Filled)
+                </CardTitle>
+                <CardDescription>Issue filled LPG cylinders to dealers</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleIssuanceSubmit} className="space-y-5">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Date</Label>
+                      <Input
+                        type="date"
+                        value={issuanceForm.date}
+                        onChange={(e) => {
+                          setIssuanceForm(prev => ({ ...prev, date: e.target.value }));
+                          refreshIssuanceData(e.target.value);
+                        }}
+                        className="mt-1"
+                        data-testid="issuance-date"
+                      />
+                    </div>
+                    <div>
+                      <Label>Select Dealer *</Label>
+                      <div className="relative mt-1">
+                        <div className="flex items-center border rounded-md bg-white px-3">
+                          <Search className="w-4 h-4 text-slate-400 shrink-0" />
+                          <input
+                            type="text"
+                            placeholder="Search dealer..."
+                            value={selectedDealer ? selectedDealer.name : dealerSearch}
+                            onChange={(e) => {
+                              setDealerSearch(e.target.value);
+                              if (issuanceForm.dealer_id) {
+                                setIssuanceForm(prev => ({ ...prev, dealer_id: '' }));
+                              }
+                            }}
+                            onFocus={() => {
+                              if (selectedDealer) {
+                                setDealerSearch(selectedDealer.name);
+                                setIssuanceForm(prev => ({ ...prev, dealer_id: '' }));
+                              }
+                            }}
+                            className="w-full py-2 px-2 text-sm outline-none bg-transparent"
+                            data-testid="dealer-search-input"
+                          />
+                        </div>
+                        {dealerSearch && !issuanceForm.dealer_id && (
+                          <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-48 overflow-y-auto">
+                            {filteredDealers.length > 0 ? filteredDealers.map(d => (
+                              <button
+                                key={d.id}
+                                type="button"
+                                className="w-full text-left px-3 py-2 hover:bg-slate-100 text-sm border-b last:border-b-0"
+                                onClick={() => {
+                                  setIssuanceForm(prev => ({ ...prev, dealer_id: d.id }));
+                                  setDealerSearch('');
+                                }}
+                                data-testid={`dealer-option-${d.id}`}
+                              >
+                                <span className="font-medium">{d.name}</span>
+                                {d.contact && <span className="text-slate-400 ml-2">{d.contact}</span>}
+                              </button>
+                            )) : (
+                              <p className="px-3 py-2 text-sm text-slate-500">No dealers found</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {selectedDealer && (
+                        <Badge variant="outline" className="mt-1.5 text-green-700 border-green-300 bg-green-50">
+                          <CheckCircle2 className="w-3 h-3 mr-1" />{selectedDealer.name}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>15 Kg Cylinders</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={issuanceForm.qty_15kg}
+                        onChange={(e) => setIssuanceForm(prev => ({ ...prev, qty_15kg: parseInt(e.target.value) || 0 }))}
+                        className="mt-1"
+                        data-testid="issuance-qty-15kg"
+                      />
+                      <p className="text-xs text-slate-400 mt-1">Available: {availableStock.available_15kg}</p>
+                    </div>
+                    <div>
+                      <Label>21 Kg Cylinders</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={issuanceForm.qty_21kg}
+                        onChange={(e) => setIssuanceForm(prev => ({ ...prev, qty_21kg: parseInt(e.target.value) || 0 }))}
+                        className="mt-1"
+                        data-testid="issuance-qty-21kg"
+                      />
+                      <p className="text-xs text-slate-400 mt-1">Available: {availableStock.available_21kg}</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label>Remarks</Label>
+                    <Input
+                      value={issuanceForm.remarks}
+                      onChange={(e) => setIssuanceForm(prev => ({ ...prev, remarks: e.target.value }))}
+                      placeholder="Optional remarks..."
+                      className="mt-1"
+                      data-testid="issuance-remarks"
+                    />
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className="w-full bg-green-700 hover:bg-green-800"
+                    disabled={issuingLoading || !issuanceForm.dealer_id}
+                    data-testid="submit-issuance-btn"
+                  >
+                    {issuingLoading ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Issuing...</>
+                    ) : (
+                      <><Send className="w-4 h-4 mr-2" />Issue Cylinders to Dealer</>
+                    )}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+
+            {/* Today's Issuance History */}
+            <Card data-testid="issuance-history-card">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Truck className="w-5 h-5 text-slate-600" />
+                  Today's Issuance History
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {issuanceHistory.length === 0 ? (
+                  <div className="text-center py-6">
+                    <AlertCircle className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <p className="text-slate-400 text-sm">No issuances recorded today</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-slate-50">
+                          <th className="text-left p-2 font-medium text-slate-600">Dealer</th>
+                          <th className="text-center p-2 font-medium text-slate-600">15 Kg</th>
+                          <th className="text-center p-2 font-medium text-slate-600">21 Kg</th>
+                          <th className="text-left p-2 font-medium text-slate-600">Remarks</th>
+                          <th className="text-left p-2 font-medium text-slate-600">By</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {issuanceHistory.map(entry => (
+                          <tr key={entry.id} className="border-b hover:bg-slate-50">
+                            <td className="p-2 font-medium">{entry.dealer_name}</td>
+                            <td className="p-2 text-center">{entry.qty_15kg}</td>
+                            <td className="p-2 text-center">{entry.qty_21kg}</td>
+                            <td className="p-2 text-slate-500">{entry.remarks || '-'}</td>
+                            <td className="p-2 text-slate-500">{entry.submitted_by}</td>
+                          </tr>
+                        ))}
+                        <tr className="bg-slate-100 font-semibold">
+                          <td className="p-2">Total</td>
+                          <td className="p-2 text-center">{issuanceHistory.reduce((s, e) => s + e.qty_15kg, 0)}</td>
+                          <td className="p-2 text-center">{issuanceHistory.reduce((s, e) => s + e.qty_21kg, 0)}</td>
+                          <td className="p-2" colSpan={2}></td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Success Dialog */}
+            <Dialog open={successDialogOpen} onOpenChange={setSuccessDialogOpen}>
+              <DialogContent className="max-w-sm">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 text-green-700">
+                    <CheckCircle2 className="w-5 h-5" />
+                    Cylinders Issued Successfully
+                  </DialogTitle>
+                  <DialogDescription>
+                    Entry has been created for the dealer automatically.
+                  </DialogDescription>
+                </DialogHeader>
+                {lastIssuance && (
+                  <div className="py-3 space-y-2 text-sm">
+                    <p><strong>Dealer:</strong> {lastIssuance.dealer_name}</p>
+                    <p><strong>Date:</strong> {formatDate(lastIssuance.date)}</p>
+                    {lastIssuance.qty_15kg > 0 && <p><strong>15 Kg:</strong> {lastIssuance.qty_15kg} cylinders</p>}
+                    {lastIssuance.qty_21kg > 0 && <p><strong>21 Kg:</strong> {lastIssuance.qty_21kg} cylinders</p>}
+                  </div>
+                )}
+                <DialogFooter>
+                  <DialogClose asChild>
+                    <Button className="bg-green-700 hover:bg-green-800" data-testid="close-success-dialog">OK</Button>
+                  </DialogClose>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+        )}
+
+        {/* =========== DAILY REPORT SECTION =========== */}
+        {activeSection === 'report' && (
         <form onSubmit={handleSubmit}>
           {/* Opening Stock */}
           <Card className="mb-6" data-testid="plant-opening-section">
@@ -652,6 +1015,7 @@ const PlantEntry = () => {
             </Button>
           </div>
         </form>
+        )}
       </div>
     </Layout>
   );

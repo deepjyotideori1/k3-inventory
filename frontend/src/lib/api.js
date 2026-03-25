@@ -76,6 +76,9 @@ export const getWarehousesReceivedSummary = (date) => api.get(`/reports/warehous
 // Stock Update
 export const updateStock = (data) => api.post('/stock/update', data);
 export const updatePlantStock = (data) => api.post('/stock/plant-update', data);
+export const issueCylindersToDealer = (data) => api.post('/plant/issue-to-dealer', data);
+export const getPlantIssuanceHistory = (params) => api.get('/plant/issuance-history', { params });
+export const getPlantAvailableStock = (date) => api.get('/plant/available-stock', { params: { date } });
 
 // Dashboard
 export const getDashboardStats = () => api.get('/dashboard/stats');
