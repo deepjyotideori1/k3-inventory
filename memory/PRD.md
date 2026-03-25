@@ -92,6 +92,9 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] **View Customers** - List with search, category filter, date range filter
 - [x] **Warehouse Isolation** - Managers only see their own warehouse customers
 - [x] **Admin Full Access** - Admin sees all warehouses with edit/delete
+- [x] **Manager Edit/Delete Access** - Warehouse managers can edit/delete customers in their own warehouse
+- [x] **Delete Safety Check** - Delete confirmation dialog shows linked orders and sales entries count before deletion
+- [x] **Role-Based Actions Column** - Actions column visible for admin and warehouse managers only; sales executives have no edit/delete access
 - [x] **PDF Export** - Category-wise customer list
 - [x] **Excel Export** - Category-wise customer list
 - [x] **Summary Cards** - Total, Domestic, Commercial, Gas Card Issued, KYC Done
