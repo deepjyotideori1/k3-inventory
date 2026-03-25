@@ -662,7 +662,7 @@ const SalesDashboard = () => {
       sale_type: 'accessory'
     }));
     // Sort combined by date descending
-    return [...cylinderRows, ...accessoryRows].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    return [...cylinderRows, ...accessoryRows].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   }, [entries, accessorySales]);
 
   const combinedTotals = useMemo(() => {

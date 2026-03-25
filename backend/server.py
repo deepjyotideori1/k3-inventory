@@ -4638,7 +4638,7 @@ async def get_sales_entries(
             {'address': {'$regex': search, '$options': 'i'}}
         ]
     
-    entries = await db.sales_entries.find(query, {'_id': 0}).sort('date', -1).to_list(5000)
+    entries = await db.sales_entries.find(query, {'_id': 0}).sort('date', 1).to_list(5000)
     
     # Get warehouse names
     warehouse_ids = list(set(e.get('warehouse_id') for e in entries if e.get('warehouse_id')))
@@ -5166,7 +5166,7 @@ async def export_sales_pdf(
     if connection_type and connection_type != 'all':
         query['connection_type'] = connection_type
     
-    entries = await db.sales_entries.find(query, {'_id': 0}).sort('date', -1).to_list(5000)
+    entries = await db.sales_entries.find(query, {'_id': 0}).sort('date', 1).to_list(5000)
     
     # Also fetch accessory sales with same filters
     acc_query = {}
@@ -5184,7 +5184,7 @@ async def export_sales_pdf(
     
     acc_sales = []
     if not connection_type or connection_type == 'all':
-        acc_sales = await db.accessory_sales.find(acc_query, {'_id': 0}).sort('date', -1).to_list(5000)
+        acc_sales = await db.accessory_sales.find(acc_query, {'_id': 0}).sort('date', 1).to_list(5000)
     
     warehouse_name = "All Warehouses"
     if query.get('warehouse_id'):
@@ -5417,7 +5417,7 @@ async def export_sales_excel(
     if connection_type and connection_type != 'all':
         query['connection_type'] = connection_type
     
-    entries = await db.sales_entries.find(query, {'_id': 0}).sort('date', -1).to_list(5000)
+    entries = await db.sales_entries.find(query, {'_id': 0}).sort('date', 1).to_list(5000)
     
     # Also fetch accessory sales with same filters
     acc_query_excel = {}
@@ -5435,7 +5435,7 @@ async def export_sales_excel(
     
     acc_sales_excel = []
     if not connection_type or connection_type == 'all':
-        acc_sales_excel = await db.accessory_sales.find(acc_query_excel, {'_id': 0}).sort('date', -1).to_list(5000)
+        acc_sales_excel = await db.accessory_sales.find(acc_query_excel, {'_id': 0}).sort('date', 1).to_list(5000)
     
     # Get warehouse name
     warehouse_name = "All_Warehouses"
