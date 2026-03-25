@@ -2714,6 +2714,7 @@ async def delete_accessory_sale(sale_id: str, user: dict = Depends(require_admin
 async def get_accessory_sales_summary(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    warehouse_id: Optional[str] = None,
     user: dict = Depends(get_current_user)
 ):
     """Get summary of accessory sales"""
@@ -2729,6 +2730,8 @@ async def get_accessory_sales_summary(
     
     if user['role'] != 'admin':
         query['warehouse_id'] = user.get('warehouse_id', '')
+    elif warehouse_id:
+        query['warehouse_id'] = warehouse_id
     
     sales = await db.accessory_sales.find(query, {'_id': 0}).to_list(1000)
     

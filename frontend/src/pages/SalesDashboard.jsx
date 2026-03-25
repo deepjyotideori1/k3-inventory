@@ -207,7 +207,7 @@ const SalesDashboard = () => {
         getCustomers(),
         getFrequentCustomers(8),
         getAccessorySales({ start_date: startDate, end_date: endDate, warehouse_id: isAdmin && filterWarehouse !== 'all' ? filterWarehouse : undefined }),
-        getAccessorySalesSummary({ start_date: startDate, end_date: endDate })
+        getAccessorySalesSummary({ start_date: startDate, end_date: endDate, warehouse_id: isAdmin && filterWarehouse !== 'all' ? filterWarehouse : undefined })
       ]);
       
       setEntries(entriesRes.data);
@@ -1310,6 +1310,11 @@ const SalesDashboard = () => {
                 </p>
                 <p className="text-2xl font-bold text-orange-800">{formatINR(accessorySummary.total_amount)}</p>
                 <p className="text-xs text-orange-600">{accessorySummary.total_sales} sales · {accessorySummary.total_quantity || 0} items</p>
+                <div className="flex gap-2 mt-1.5 text-xs">
+                  <span className="text-green-700" data-testid="acc-cash-total">C: {formatINR(accessorySummary.cash_amount || 0)}</span>
+                  <span className="text-blue-700" data-testid="acc-online-total">O: {formatINR(accessorySummary.online_amount || 0)}</span>
+                  <span className="text-amber-700" data-testid="acc-pending-total">P: {formatINR(accessorySummary.pending_amount || 0)}</span>
+                </div>
               </div>
             </CardContent>
           </Card>
