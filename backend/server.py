@@ -519,6 +519,10 @@ async def init_default_data():
 @app.on_event("startup")
 async def startup_event():
     await init_default_data()
+    # Create indexes for search performance
+    await db.sales_entries.create_index([("consumer_name", 1)])
+    await db.sales_entries.create_index([("date", 1)])
+    await db.sales_entries.create_index([("warehouse_id", 1)])
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
@@ -4629,13 +4633,19 @@ async def get_sales_entries(
     if payment_mode and payment_mode != 'all':
         query['payment_mode'] = payment_mode
     
-    # Search
+    # Search - strip extra whitespace, support flexible matching
     if search:
+        search = search.strip()
+        search = ' '.join(search.split())  # collapse multiple spaces
+        # Escape regex special chars for safe search
+        import re as re_module
+        escaped = re_module.escape(search)
         query['$or'] = [
-            {'consumer_name': {'$regex': search, '$options': 'i'}},
-            {'consumer_no': {'$regex': search, '$options': 'i'}},
-            {'memo_no': {'$regex': search, '$options': 'i'}},
-            {'address': {'$regex': search, '$options': 'i'}}
+            {'consumer_name': {'$regex': escaped, '$options': 'i'}},
+            {'consumer_no': {'$regex': escaped, '$options': 'i'}},
+            {'memo_no': {'$regex': escaped, '$options': 'i'}},
+            {'address': {'$regex': escaped, '$options': 'i'}},
+            {'remarks': {'$regex': escaped, '$options': 'i'}}
         ]
     
     entries = await db.sales_entries.find(query, {'_id': 0}).sort('date', 1).to_list(5000)

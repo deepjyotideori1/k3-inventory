@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -107,6 +107,7 @@ const SalesDashboard = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [exportConnectionType, setExportConnectionType] = useState('all');
   const [exportDateRange, setExportDateRange] = useState('all');
@@ -144,7 +145,15 @@ const SalesDashboard = () => {
 
   useEffect(() => {
     fetchData();
-  }, [filterWarehouse, filterPaymentMode, startDate, endDate]);
+  }, [filterWarehouse, filterPaymentMode, startDate, endDate, debouncedSearch]);
+
+  // Debounce search input - waits 400ms after user stops typing
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const getDateRange = (range) => {
     const today = new Date();
@@ -199,7 +208,7 @@ const SalesDashboard = () => {
       }
       if (startDate) params.start_date = startDate;
       if (endDate) params.end_date = endDate;
-      if (searchQuery) params.search = searchQuery;
+      if (searchQuery) params.search = searchQuery.trim();
 
       const [entriesRes, summaryRes, customersRes, frequentRes, accSalesRes, accSummaryRes] = await Promise.all([
         getSalesEntries(params),
@@ -227,10 +236,6 @@ const SalesDashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleSearch = () => {
-    fetchData();
   };
 
   const handleAddEntry = async () => {
@@ -645,7 +650,21 @@ const SalesDashboard = () => {
   // Combined entries: merge cylinder + accessory sales for unified table
   const combinedEntries = useMemo(() => {
     const cylinderRows = entries.map(e => ({ ...e, sale_type: 'cylinder' }));
-    const accessoryRows = accessorySales.map(s => ({
+    
+    // Filter accessory sales client-side when search is active
+    let filteredAccSales = accessorySales;
+    if (debouncedSearch) {
+      const q = debouncedSearch.toLowerCase().trim();
+      filteredAccSales = accessorySales.filter(s => 
+        (s.customer_name || '').toLowerCase().includes(q) ||
+        (s.customer_phone || '').toLowerCase().includes(q) ||
+        (s.customer_address || '').toLowerCase().includes(q) ||
+        (s.memo_no || '').toLowerCase().includes(q) ||
+        (s.items || []).some(i => (i.accessory_name || '').toLowerCase().includes(q))
+      );
+    }
+    
+    const accessoryRows = filteredAccSales.map(s => ({
       id: s.id,
       date: s.date,
       consumer_name: s.customer_name || '',
@@ -663,7 +682,7 @@ const SalesDashboard = () => {
     }));
     // Sort combined by date descending
     return [...cylinderRows, ...accessoryRows].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-  }, [entries, accessorySales]);
+  }, [entries, accessorySales, debouncedSearch]);
 
   const combinedTotals = useMemo(() => {
     return combinedEntries.reduce((acc, e) => {
@@ -1445,16 +1464,19 @@ const SalesDashboard = () => {
 
               <div className="flex-1 min-w-[200px]">
                 <Label className="text-xs">Search</Label>
-                <div className="flex gap-2 mt-1">
+                <div className="flex gap-1 mt-1 items-center">
                   <Input 
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search consumer, memo..."
-                    onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                    placeholder="Search consumer, memo, address..."
+                    className="w-56"
+                    data-testid="sales-search-input"
                   />
-                  <Button onClick={handleSearch} variant="outline" size="icon">
-                    <Search className="w-4 h-4" />
-                  </Button>
+                  {searchQuery && (
+                    <Button onClick={() => setSearchQuery('')} variant="ghost" size="icon" className="text-slate-400 hover:text-slate-600 shrink-0" data-testid="clear-search-btn">
+                      <span className="text-lg">&times;</span>
+                    </Button>
+                  )}
                 </div>
               </div>
 
