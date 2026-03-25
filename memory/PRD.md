@@ -112,6 +112,7 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] **Multiple Payment Modes** - Split payment support: separate Cash, Online, Credit/Pending amount fields per entry with auto-calculated total. Payment mode auto-detected as 'split' when multiple modes used. Backward compatible with legacy single-mode entries.
 - [x] **Summary Cards** - Cash Collection, Online Collection, Pending Collection, Accessory Sales, Grand Total (combined cylinder + accessory)
 - [x] **Accessory Sales Integration** - Accessory sales shown in summary card and merged into main sales table with "Accessory" badge
+- [x] **Accessory Sales Warehouse Filter** - Accessory sales summary correctly filters by warehouse_id for admin, shows Cash/Online/Pending breakdown
 - [x] **Combined Sales Table** - Unified view of cylinder and accessory sales sorted by date, with type badges
 - [x] **Grand Total Card** - Shows combined total (Cylinder + Accessory amounts) with breakdown
 - [x] **Filtering** - By warehouse (admin), payment mode, date range (Today/Week/Month/Year/Custom)
