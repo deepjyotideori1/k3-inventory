@@ -4605,6 +4605,7 @@ async def get_sales_entries(
     start_date: str = None,
     end_date: str = None,
     payment_mode: str = None,
+    connection_type: str = None,
     search: str = None,
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
@@ -4632,6 +4633,10 @@ async def get_sales_entries(
     # Filter by payment mode
     if payment_mode and payment_mode != 'all':
         query['payment_mode'] = payment_mode
+    
+    # Filter by connection type
+    if connection_type and connection_type != 'all':
+        query['connection_type'] = connection_type
     
     # Search - strip extra whitespace, support flexible matching
     if search:

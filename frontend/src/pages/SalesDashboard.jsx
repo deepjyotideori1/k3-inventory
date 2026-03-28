@@ -115,6 +115,13 @@ const SalesDashboard = () => {
   const [exportDateRange, setExportDateRange] = useState('all');
   const [exportStartDate, setExportStartDate] = useState('');
   const [exportEndDate, setExportEndDate] = useState('');
+
+  // Sync export connection type with dashboard filter when dialog opens
+  useEffect(() => {
+    if (exportDialogOpen) {
+      setExportConnectionType(filterConnectionType);
+    }
+  }, [exportDialogOpen, filterConnectionType]);
   const [summaryExportOpen, setSummaryExportOpen] = useState(false);
   const [summaryGroupBy, setSummaryGroupBy] = useState('daily');
   const [summaryDateRange, setSummaryDateRange] = useState('all');
@@ -147,7 +154,7 @@ const SalesDashboard = () => {
 
   useEffect(() => {
     fetchData();
-  }, [filterWarehouse, filterPaymentMode, startDate, endDate, debouncedSearch]);
+  }, [filterWarehouse, filterPaymentMode, filterConnectionType, startDate, endDate, debouncedSearch]);
 
   // Debounce search input - waits 400ms after user stops typing
   useEffect(() => {
@@ -211,6 +218,9 @@ const SalesDashboard = () => {
       if (startDate) params.start_date = startDate;
       if (endDate) params.end_date = endDate;
       if (searchQuery) params.search = searchQuery.trim();
+      if (filterConnectionType !== 'all' && filterConnectionType !== 'accessory') {
+        params.connection_type = filterConnectionType;
+      }
 
       const [entriesRes, summaryRes, customersRes, frequentRes, accSalesRes, accSummaryRes] = await Promise.all([
         getSalesEntries(params),
@@ -657,6 +667,30 @@ const SalesDashboard = () => {
 
   // Combined entries: merge cylinder + accessory sales for unified table
   const combinedEntries = useMemo(() => {
+    // When 'accessory' filter is active, only show accessory entries
+    if (filterConnectionType === 'accessory') {
+      let filteredAccSales = accessorySales;
+      if (debouncedSearch) {
+        const q = debouncedSearch.toLowerCase().trim();
+        filteredAccSales = accessorySales.filter(s => 
+          (s.customer_name || '').toLowerCase().includes(q) ||
+          (s.customer_phone || '').toLowerCase().includes(q) ||
+          (s.customer_address || '').toLowerCase().includes(q) ||
+          (s.memo_no || '').toLowerCase().includes(q) ||
+          (s.items || []).some(i => (i.accessory_name || '').toLowerCase().includes(q))
+        );
+      }
+      return filteredAccSales.map(s => ({
+        ...s,
+        sale_type: 'accessory',
+        consumer_name: s.customer_name,
+        consumer_no: s.customer_phone,
+        address: s.customer_address,
+        connection_type: 'accessory',
+        amount: s.grand_total,
+      })).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    }
+    
     const cylinderRows = entries.map(e => ({ ...e, sale_type: 'cylinder' }));
     
     // Filter accessory sales client-side when search is active
@@ -690,7 +724,7 @@ const SalesDashboard = () => {
     }));
     // Sort combined by date descending
     return [...cylinderRows, ...accessoryRows].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-  }, [entries, accessorySales, debouncedSearch]);
+  }, [entries, accessorySales, debouncedSearch, filterConnectionType]);
 
   const combinedTotals = useMemo(() => {
     return combinedEntries.reduce((acc, e) => {
@@ -1430,6 +1464,23 @@ const SalesDashboard = () => {
                     <SelectItem value="online">Online</SelectItem>
                     <SelectItem value="pending">Pending</SelectItem>
                     <SelectItem value="split">Split Payment</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label className="text-xs">Connection Type</Label>
+                <Select value={filterConnectionType} onValueChange={setFilterConnectionType}>
+                  <SelectTrigger className="w-48 mt-1" data-testid="filter-connection-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Types</SelectItem>
+                    <SelectItem value="domestic">Domestic New Conn.</SelectItem>
+                    <SelectItem value="commercial">Commercial New Conn.</SelectItem>
+                    <SelectItem value="domestic_refill">Domestic Refill</SelectItem>
+                    <SelectItem value="commercial_refill">Commercial Refill</SelectItem>
+                    <SelectItem value="accessory">Accessory Sales</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
