@@ -2835,7 +2835,7 @@ async def get_accessory_sales(
     elif warehouse_id and warehouse_id != 'all':
         query['warehouse_id'] = warehouse_id
     
-    sales = await db.accessory_sales.find(query, {'_id': 0}).sort('date', -1).to_list(1000)
+    sales = await db.accessory_sales.find(query, {'_id': 0}).sort('date', 1).to_list(1000)
     return sales
 
 @api_router.get("/accessory-sales/{sale_id}")
@@ -2939,7 +2939,7 @@ async def export_accessory_sales_pdf(
     elif warehouse_id and warehouse_id != 'all':
         query['warehouse_id'] = warehouse_id
     
-    sales = await db.accessory_sales.find(query, {'_id': 0}).sort('date', -1).to_list(1000)
+    sales = await db.accessory_sales.find(query, {'_id': 0}).sort('date', 1).to_list(1000)
     
     # Flatten items for table - include Memo No
     data = [['SL', 'Date', 'Memo No', 'Customer', 'Phone', 'Accessory', 'Qty', 'Unit Price', 'Total', 'Payment', 'Warehouse', 'Created By']]
@@ -3024,7 +3024,7 @@ async def export_accessory_sales_excel(
     elif warehouse_id and warehouse_id != 'all':
         query['warehouse_id'] = warehouse_id
     
-    sales = await db.accessory_sales.find(query, {'_id': 0}).sort('date', -1).to_list(1000)
+    sales = await db.accessory_sales.find(query, {'_id': 0}).sort('date', 1).to_list(1000)
     
     # Worksheet - include Memo No
     ws = workbook.add_worksheet('Accessory Sales')

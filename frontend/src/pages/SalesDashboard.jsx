@@ -12,6 +12,8 @@ import {
   exportSalesExcel,
   exportSalesSummaryPdf,
   exportSalesSummaryExcel,
+  exportAccessorySalesPDF,
+  exportAccessorySalesExcel,
   getWarehouses,
   getCustomers,
   getFrequentCustomers,
@@ -454,11 +456,14 @@ const SalesDashboard = () => {
       if (start) params.start_date = start;
       if (end) params.end_date = end;
       
-      if (connectionType !== 'all') {
-        params.connection_type = connectionType;
+      if (connectionType === 'accessory') {
+        await exportAccessorySalesPDF(params);
+      } else {
+        if (connectionType !== 'all') {
+          params.connection_type = connectionType;
+        }
+        await exportSalesPdf(params);
       }
-
-      await exportSalesPdf(params);
       toast.success('PDF exported successfully');
       setExportDialogOpen(false);
     } catch (error) {
@@ -480,11 +485,14 @@ const SalesDashboard = () => {
       if (start) params.start_date = start;
       if (end) params.end_date = end;
       
-      if (connectionType !== 'all') {
-        params.connection_type = connectionType;
+      if (connectionType === 'accessory') {
+        await exportAccessorySalesExcel(params);
+      } else {
+        if (connectionType !== 'all') {
+          params.connection_type = connectionType;
+        }
+        await exportSalesExcel(params);
       }
-
-      await exportSalesExcel(params);
       toast.success('Excel exported successfully');
       setExportDialogOpen(false);
     } catch (error) {
@@ -825,14 +833,18 @@ const SalesDashboard = () => {
                         <SelectItem value="commercial_refill">
                           <div className="flex items-center gap-2"><Building2 className="w-4 h-4 text-orange-600" /> Commercial Refill</div>
                         </SelectItem>
+                        <SelectItem value="accessory">
+                          <div className="flex items-center gap-2"><ShoppingBag className="w-4 h-4 text-violet-600" /> Accessory Sales</div>
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   
                   <p className="text-sm text-slate-500 bg-slate-50 p-2 rounded">
                     Export filters: {exportDateRange === 'all' ? 'All Time' : exportDateRange === 'custom' ? `${exportStartDate || 'Start'} to ${exportEndDate || 'End'}` : exportDateRange.charAt(0).toUpperCase() + exportDateRange.slice(1)}
-                    {exportConnectionType !== 'all' && ` · ${exportConnectionType.replace('_', ' ')}`}
+                    {exportConnectionType !== 'all' && ` · ${exportConnectionType === 'accessory' ? 'Accessory Sales' : exportConnectionType.replace('_', ' ')}`}
                     {filterWarehouse !== 'all' && ' · Filtered Warehouse'}
+                    {exportConnectionType === 'accessory' && <span className="block text-xs text-violet-600 mt-1">Only accessory sales will be exported with item-level details.</span>}
                   </p>
 
                   <div className="grid grid-cols-2 gap-3 pt-2">
