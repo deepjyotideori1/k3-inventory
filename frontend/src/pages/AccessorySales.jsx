@@ -23,6 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '../components/ui/dialog';
 import { RadioGroup, RadioGroupItem } from '../components/ui/radio-group';
 import SearchBar from '../components/SearchBar';
+import { HighlightMatch } from '../components/SearchBar';
 import SearchableSelect from '../components/SearchableSelect';
 import { 
   ShoppingBag,
@@ -60,6 +61,7 @@ const AccessorySales = () => {
   const [customers, setCustomers] = useState([]);
   const [sales, setSales] = useState([]);
   const [filteredSales, setFilteredSales] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [summary, setSummary] = useState({});
   const [warehouses, setWarehouses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -127,8 +129,13 @@ const AccessorySales = () => {
         params.warehouse_id = filterWarehouse;
       }
       const response = await getAccessorySales(params);
-      setSales(response.data);
-      setFilteredSales(response.data);
+      // Preprocess: add flat items_text for searching accessory item names
+      const processed = response.data.map(s => ({
+        ...s,
+        items_text: (s.items || []).map(i => i.accessory_name || '').join(', ')
+      }));
+      setSales(processed);
+      setFilteredSales(processed);
     } catch (error) {
       console.error('Failed to fetch sales:', error);
     }
@@ -461,11 +468,12 @@ const AccessorySales = () => {
                 <Label className="text-purple-800 font-medium mb-2 block">Quick Search</Label>
                 <SearchBar
                   data={sales}
-                  searchFields={['customer_name', 'customer_phone', 'memo_no', 'warehouse_name', 'payment_mode']}
-                  onFilter={setFilteredSales}
-                  placeholder="Search by customer name, phone, memo no, warehouse..."
+                  searchFields={['customer_name', 'customer_phone', 'memo_no', 'warehouse_name', 'items_text']}
+                  onFilter={(results) => { setFilteredSales(results); }}
+                  onQueryChange={setSearchQuery}
+                  placeholder="Search by customer, accessory, phone, memo..."
                   showSuggestions={true}
-                  maxSuggestions={6}
+                  maxSuggestions={1}
                   suggestionLabelField="customer_name"
                   className="max-w-2xl"
                 />
@@ -505,13 +513,17 @@ const AccessorySales = () => {
                           <tr key={sale.id}>
                             <td>{formatDate(sale.date)}</td>
                             <td className="font-medium text-purple-700">{sale.memo_no || '-'}</td>
-                            <td className="font-medium">{sale.customer_name}</td>
-                            <td>{sale.customer_phone || '-'}</td>
+                            <td className="font-medium">
+                              <HighlightMatch text={sale.customer_name} query={searchQuery} />
+                            </td>
+                            <td>
+                              <HighlightMatch text={sale.customer_phone || '-'} query={searchQuery} />
+                            </td>
                             <td>
                               <div className="text-xs">
                                 {sale.items?.map((item, i) => (
                                   <div key={i} className="text-slate-600">
-                                    {item.accessory_name} x{item.quantity}
+                                    <HighlightMatch text={`${item.accessory_name} x${item.quantity}`} query={searchQuery} />
                                   </div>
                                 ))}
                               </div>
@@ -550,7 +562,9 @@ const AccessorySales = () => {
                 ) : (
                   <div className="text-center py-12">
                     <ShoppingBag className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                    <p className="text-slate-500">No sales records found</p>
+                    <p className="text-slate-500">
+                      {searchQuery ? 'No matching accessory sales found.' : 'No sales records found'}
+                    </p>
                   </div>
                 )}
               </CardContent>

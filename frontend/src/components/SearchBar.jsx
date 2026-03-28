@@ -20,6 +20,7 @@ const SearchBar = ({
   data = [],
   searchFields = [],
   onFilter,
+  onQueryChange,
   placeholder = 'Search...',
   className = '',
   showSuggestions = false,
@@ -55,7 +56,7 @@ const SearchBar = ({
         setIsOpen(true);
       }
       setIsSearching(false);
-    }, 150); // Small debounce for performance
+    }, 350);
 
     return () => clearTimeout(timer);
   }, [query, data, searchFields]);
@@ -112,6 +113,7 @@ const SearchBar = ({
     setIsOpen(false);
     setSelectedIndex(-1);
     onFilter?.(data);
+    onQueryChange?.('');
     inputRef.current?.focus();
   };
 
@@ -123,7 +125,7 @@ const SearchBar = ({
           ref={inputRef}
           type="text"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => { setQuery(e.target.value); onQueryChange?.(e.target.value); }}
           onKeyDown={handleKeyDown}
           onFocus={() => showSuggestions && suggestions.length > 0 && setIsOpen(true)}
           placeholder={placeholder}
