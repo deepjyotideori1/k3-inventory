@@ -110,6 +110,12 @@ const SalesDashboard = () => {
   const [endDate, setEndDate] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalEntries, setTotalEntries] = useState(0);
+  const pageSize = 50;
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [exportConnectionType, setExportConnectionType] = useState('all');
   const [exportDateRange, setExportDateRange] = useState('all');
@@ -153,8 +159,12 @@ const SalesDashboard = () => {
   const [editForm, setEditForm] = useState({});
 
   useEffect(() => {
-    fetchData();
+    setCurrentPage(1);
   }, [filterWarehouse, filterPaymentMode, filterConnectionType, startDate, endDate, debouncedSearch]);
+
+  useEffect(() => {
+    fetchData();
+  }, [filterWarehouse, filterPaymentMode, filterConnectionType, startDate, endDate, debouncedSearch, currentPage]);
 
   // Debounce search input - waits 400ms after user stops typing
   useEffect(() => {
@@ -221,6 +231,8 @@ const SalesDashboard = () => {
       if (filterConnectionType !== 'all' && filterConnectionType !== 'accessory') {
         params.connection_type = filterConnectionType;
       }
+      params.page = currentPage;
+      params.limit = pageSize;
 
       const [entriesRes, summaryRes, customersRes, frequentRes, accSalesRes, accSummaryRes] = await Promise.all([
         getSalesEntries(params),
@@ -231,7 +243,10 @@ const SalesDashboard = () => {
         getAccessorySalesSummary({ start_date: startDate, end_date: endDate, warehouse_id: isAdmin && filterWarehouse !== 'all' ? filterWarehouse : undefined })
       ]);
       
-      setEntries(entriesRes.data);
+      const entriesData = entriesRes.data.entries || entriesRes.data;
+      setEntries(entriesData);
+      setTotalPages(entriesRes.data.pages || 1);
+      setTotalEntries(entriesRes.data.total || entriesData.length);
       setSummary(summaryRes.data);
       setCustomers(customersRes.data);
       setFrequentCustomers(frequentRes.data);
@@ -1770,7 +1785,7 @@ const SalesDashboard = () => {
                     <>
                       {combinedEntries.map((entry, index) => (
                         <tr key={entry.id} className={entry.sale_type === 'accessory' ? 'bg-orange-50/40' : ''}>
-                          <td className="text-center font-medium">{index + 1}</td>
+                          <td className="text-center font-medium">{((currentPage - 1) * pageSize) + index + 1}</td>
                           <td>{entry.date}</td>
                           <td className="font-medium">{entry.consumer_name}</td>
                           <td className="max-w-[150px] truncate">{entry.address || '-'}</td>
@@ -1840,6 +1855,48 @@ const SalesDashboard = () => {
             </div>
           </CardContent>
         </Card>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-2" data-testid="pagination-controls">
+            <p className="text-sm text-slate-500">
+              Showing {((currentPage - 1) * pageSize) + 1}–{Math.min(currentPage * pageSize, totalEntries)} of {totalEntries} entries
+            </p>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(1)}
+                data-testid="page-first"
+              >First</Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(p => p - 1)}
+                data-testid="page-prev"
+              >Prev</Button>
+              <span className="px-3 py-1 text-sm font-medium bg-slate-100 rounded">
+                {currentPage} / {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage(p => p + 1)}
+                data-testid="page-next"
+              >Next</Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage(totalPages)}
+                data-testid="page-last"
+              >Last</Button>
+            </div>
+          </div>
+        )}
 
         {/* Edit Dialog */}
         <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>

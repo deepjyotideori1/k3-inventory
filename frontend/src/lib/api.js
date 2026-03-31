@@ -80,6 +80,12 @@ export const issueCylindersToDealer = (data) => api.post('/plant/issue-to-dealer
 export const getPlantIssuanceHistory = (params) => api.get('/plant/issuance-history', { params });
 export const getPlantAvailableStock = (date) => api.get('/plant/available-stock', { params: { date } });
 
+// Dashboard Charts
+export const getDashboardChartData = (params) => api.get('/dashboard/chart-data', { params });
+
+// Audit Logs
+export const getAuditLogs = (params) => api.get('/audit-logs', { params });
+
 // Dashboard
 export const getDashboardStats = () => api.get('/dashboard/stats');
 

@@ -663,6 +663,7 @@ const DealerReports = () => {
                           <th>21kg Issued</th>
                           <th>15kg Refilled</th>
                           <th>21kg Refilled</th>
+                          <th>Source</th>
                           <th>Remarks</th>
                         </tr>
                       </thead>
@@ -675,6 +676,13 @@ const DealerReports = () => {
                             <td>{e.issued_21kg}</td>
                             <td>{e.refilled_15kg}</td>
                             <td>{e.refilled_21kg}</td>
+                            <td>
+                              {e.source === 'plant_issuance' ? (
+                                <Badge className="bg-blue-100 text-blue-700 text-xs">Hollongi Plant</Badge>
+                              ) : (
+                                <span className="text-xs text-slate-400">Manual</span>
+                              )}
+                            </td>
                             <td className="text-sm text-slate-600">{e.remarks || '-'}</td>
                           </tr>
                         ))}
@@ -863,6 +871,7 @@ const DealerReports = () => {
                           <th>21kg Issued</th>
                           <th>15kg Refilled</th>
                           <th>21kg Refilled</th>
+                          <th>Source</th>
                           <th>Remarks</th>
                         </tr>
                       </thead>
@@ -875,6 +884,13 @@ const DealerReports = () => {
                             <td>{e.issued_21kg}</td>
                             <td>{e.refilled_15kg}</td>
                             <td>{e.refilled_21kg}</td>
+                            <td>
+                              {e.source === 'plant_issuance' ? (
+                                <Badge className="bg-blue-100 text-blue-700 text-xs">Hollongi Plant</Badge>
+                              ) : (
+                                <span className="text-xs text-slate-400">Manual</span>
+                              )}
+                            </td>
                             <td className="text-sm text-slate-600">{e.remarks || '-'}</td>
                           </tr>
                         ))}

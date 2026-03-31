@@ -1355,6 +1355,142 @@ async def get_plant_available_stock(
         'issued_today_21kg': issued_21
     }
 
+# ============ DASHBOARD CHART DATA ============
+
+@api_router.get("/dashboard/chart-data")
+async def get_dashboard_chart_data(
+    period: str = "30d",
+    warehouse_id: Optional[str] = None,
+    user: dict = Depends(get_current_user)
+):
+    """Get aggregated chart data for dashboard"""
+    from datetime import datetime, timezone, timedelta
+    
+    now = datetime.now(timezone.utc)
+    if period == "7d":
+        start = (now - timedelta(days=7)).strftime('%Y-%m-%d')
+    elif period == "30d":
+        start = (now - timedelta(days=30)).strftime('%Y-%m-%d')
+    elif period == "90d":
+        start = (now - timedelta(days=90)).strftime('%Y-%m-%d')
+    else:
+        start = (now - timedelta(days=30)).strftime('%Y-%m-%d')
+    
+    end = now.strftime('%Y-%m-%d')
+    
+    query = {'date': {'$gte': start, '$lte': end}}
+    if user['role'] != 'admin':
+        query['warehouse_id'] = user.get('warehouse_id', '')
+    elif warehouse_id and warehouse_id != 'all':
+        query['warehouse_id'] = warehouse_id
+    
+    entries = await db.sales_entries.find(query, {'_id': 0}).to_list(5000)
+    
+    # 1. Daily sales trend
+    daily_sales = {}
+    for e in entries:
+        d = e.get('date', '')
+        if d not in daily_sales:
+            daily_sales[d] = {'date': d, 'amount': 0, 'count': 0}
+        daily_sales[d]['amount'] += e.get('amount', 0) or 0
+        daily_sales[d]['count'] += 1
+    daily_trend = sorted(daily_sales.values(), key=lambda x: x['date'])
+    
+    # 2. Payment mode breakdown
+    payment_breakdown = {'cash': 0, 'online': 0, 'pending': 0}
+    for e in entries:
+        cash_a = e.get('cash_amount', 0) or 0
+        online_a = e.get('online_amount', 0) or 0
+        credit_a = e.get('credit_amount', 0) or 0
+        pm = e.get('payment_mode', 'cash')
+        if cash_a == 0 and online_a == 0 and credit_a == 0:
+            if pm == 'cash': cash_a = e.get('amount', 0) or 0
+            elif pm == 'online': online_a = e.get('amount', 0) or 0
+            elif pm == 'pending': credit_a = e.get('amount', 0) or 0
+        payment_breakdown['cash'] += cash_a
+        payment_breakdown['online'] += online_a
+        payment_breakdown['pending'] += credit_a
+    
+    payment_pie = [
+        {'name': 'Cash', 'value': payment_breakdown['cash']},
+        {'name': 'Online', 'value': payment_breakdown['online']},
+        {'name': 'Pending', 'value': payment_breakdown['pending']}
+    ]
+    
+    # 3. Connection type breakdown
+    conn_types = {}
+    for e in entries:
+        ct = e.get('connection_type', 'unknown')
+        label = {'domestic': 'Dom. New', 'commercial': 'Com. New', 'domestic_refill': 'Dom. Refill', 'commercial_refill': 'Com. Refill'}.get(ct, ct)
+        conn_types[label] = conn_types.get(label, 0) + 1
+    conn_bar = [{'name': k, 'count': v} for k, v in conn_types.items()]
+    
+    # 4. Warehouse-wise totals (admin only)
+    warehouse_bar = []
+    if user['role'] == 'admin' and not warehouse_id:
+        wh_totals = {}
+        for e in entries:
+            wid = e.get('warehouse_id', '')
+            wname = e.get('warehouse_name', wid)
+            if wid not in wh_totals:
+                wh_totals[wid] = {'name': wname, 'amount': 0, 'count': 0}
+            wh_totals[wid]['amount'] += e.get('amount', 0) or 0
+            wh_totals[wid]['count'] += 1
+        # Resolve warehouse names
+        warehouses = await db.warehouses.find({}, {'_id': 0}).to_list(100)
+        wh_names = {w['id']: w['name'] for w in warehouses}
+        warehouse_bar = [{'name': wh_names.get(k, v['name']), 'amount': v['amount'], 'count': v['count']} for k, v in wh_totals.items()]
+    
+    return {
+        'daily_trend': daily_trend,
+        'payment_breakdown': payment_pie,
+        'connection_types': conn_bar,
+        'warehouse_totals': warehouse_bar,
+        'total_amount': sum(e.get('amount', 0) or 0 for e in entries),
+        'total_entries': len(entries)
+    }
+
+# ============ AUDIT LOGGING ============
+
+async def log_audit(user_id: str, user_name: str, action: str, resource_type: str, resource_id: str = None, details: str = None):
+    """Log an audit event"""
+    await db.audit_logs.insert_one({
+        'id': str(uuid.uuid4()),
+        'user_id': user_id,
+        'user_name': user_name,
+        'action': action,
+        'resource_type': resource_type,
+        'resource_id': resource_id or '',
+        'details': details or '',
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+        '_id': None
+    })
+    # Remove MongoDB _id
+    await db.audit_logs.update_many({'_id': None}, {'$unset': {'_id': ''}})
+
+@api_router.get("/audit-logs")
+async def get_audit_logs(
+    limit: int = 100,
+    page: int = 1,
+    resource_type: Optional[str] = None,
+    user: dict = Depends(require_admin)
+):
+    """Get audit logs (admin only)"""
+    query = {}
+    if resource_type:
+        query['resource_type'] = resource_type
+    
+    skip = (page - 1) * limit
+    total = await db.audit_logs.count_documents(query)
+    logs = await db.audit_logs.find(query, {'_id': 0}).sort('timestamp', -1).skip(skip).limit(limit).to_list(limit)
+    
+    return {
+        'logs': logs,
+        'total': total,
+        'page': page,
+        'pages': (total + limit - 1) // limit
+    }
+
 # ============ STOCK UPDATE (Admin) ============
 
 @api_router.post("/stock/update")
@@ -3610,6 +3746,7 @@ async def update_customer(
     update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
     
     await db.customers.update_one({'id': customer_id}, {'$set': update_data})
+    await log_audit(user['id'], user['name'], 'update', 'customer', customer_id, f"Updated fields: {', '.join(update_data.keys())}")
     
     updated = await db.customers.find_one({'id': customer_id})
     warehouse = await db.warehouses.find_one({'id': updated.get('warehouse_id')})
@@ -3680,6 +3817,7 @@ async def delete_customer(
         raise HTTPException(status_code=404, detail="Customer not found")
     
     response = {"message": "Customer deleted successfully"}
+    await log_audit(user['id'], user['name'], 'delete', 'customer', customer_id, f"Deleted customer: {existing.get('customer_name', '')}")
     if warnings:
         response["warnings"] = warnings
     return response
@@ -4607,6 +4745,8 @@ async def get_sales_entries(
     payment_mode: str = None,
     connection_type: str = None,
     search: str = None,
+    page: int = 1,
+    limit: int = 50,
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Get sales entries with filters"""
@@ -4653,7 +4793,8 @@ async def get_sales_entries(
             {'remarks': {'$regex': escaped, '$options': 'i'}}
         ]
     
-    entries = await db.sales_entries.find(query, {'_id': 0}).sort('date', 1).to_list(5000)
+    entries = await db.sales_entries.find(query, {'_id': 0}).sort('date', 1).skip((page - 1) * limit).limit(limit).to_list(limit)
+    total_count = await db.sales_entries.count_documents(query)
     
     # Get warehouse names
     warehouse_ids = list(set(e.get('warehouse_id') for e in entries if e.get('warehouse_id')))
@@ -4705,7 +4846,13 @@ async def get_sales_entries(
         
         result.append(entry_data)
     
-    return result
+    return {
+        'entries': result,
+        'total': total_count,
+        'page': page,
+        'limit': limit,
+        'pages': (total_count + limit - 1) // limit
+    }
 
 @api_router.post("/sales-entries")
 async def create_sales_entry(

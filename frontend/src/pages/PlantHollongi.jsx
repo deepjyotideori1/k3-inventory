@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { getPlantReports, getWarehouses, exportPDF, exportExcel } from '../lib/api';
+import { getPlantReports, getWarehouses, exportPDF, exportExcel, getPlantIssuanceHistory } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -16,7 +16,8 @@ import {
   RefreshCw,
   Truck,
   ArrowDownToLine,
-  Send
+  Send,
+  Package
 } from 'lucide-react';
 import { formatDate, getDateRange } from '../lib/utils';
 import { toast } from 'sonner';
@@ -26,6 +27,7 @@ const PlantHollongi = () => {
   const [reports, setReports] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [selectedReport, setSelectedReport] = useState(null);
+  const [issuanceHistory, setIssuanceHistory] = useState([]);
   
   const [filters, setFilters] = useState({
     start_date: '',
@@ -41,8 +43,31 @@ const PlantHollongi = () => {
   useEffect(() => {
     if (filters.start_date && filters.end_date) {
       fetchReports();
+      fetchIssuanceHistory();
     }
   }, [filters]);
+
+  const fetchIssuanceHistory = async () => {
+    try {
+      const response = await getPlantIssuanceHistory({ start_date: filters.start_date, end_date: filters.end_date });
+      setIssuanceHistory(response.data || []);
+    } catch (error) {
+      console.error('Failed to fetch issuance history:', error);
+    }
+  };
+
+  // Group issuance history by dealer
+  const dealerIssuanceSummary = issuanceHistory.reduce((acc, entry) => {
+    const key = entry.dealer_name || entry.dealer_id;
+    if (!acc[key]) acc[key] = { dealer_name: key, total_15kg: 0, total_21kg: 0, entries: [] };
+    acc[key].total_15kg += entry.qty_15kg || 0;
+    acc[key].total_21kg += entry.qty_21kg || 0;
+    acc[key].entries.push(entry);
+    return acc;
+  }, {});
+
+  const grandIssuance15 = issuanceHistory.reduce((s, e) => s + (e.qty_15kg || 0), 0);
+  const grandIssuance21 = issuanceHistory.reduce((s, e) => s + (e.qty_21kg || 0), 0);
 
   const fetchWarehouses = async () => {
     try {
@@ -348,6 +373,79 @@ const PlantHollongi = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* Dealer-wise Issuance Breakdown */}
+        <Card data-testid="issuance-breakdown-card">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Send className="w-5 h-5 text-blue-600" />
+              Dealer-wise Cylinder Issuance
+              {issuanceHistory.length > 0 && (
+                <Badge className="ml-2 bg-blue-100 text-blue-700">{issuanceHistory.length} entries</Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {issuanceHistory.length > 0 ? (
+              <div className="space-y-4">
+                {/* Grand Totals */}
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div className="p-3 bg-blue-50 rounded-lg text-center border border-blue-200">
+                    <p className="text-xs text-blue-600 font-medium">Total 15kg Issued</p>
+                    <p className="text-2xl font-bold text-blue-800">{grandIssuance15}</p>
+                  </div>
+                  <div className="p-3 bg-blue-50 rounded-lg text-center border border-blue-200">
+                    <p className="text-xs text-blue-600 font-medium">Total 21kg Issued</p>
+                    <p className="text-2xl font-bold text-blue-800">{grandIssuance21}</p>
+                  </div>
+                </div>
+
+                {/* Dealer-wise breakdown */}
+                {Object.values(dealerIssuanceSummary).map((dealer) => (
+                  <div key={dealer.dealer_name} className="border rounded-lg overflow-hidden">
+                    <div className="bg-slate-50 p-3 flex items-center justify-between">
+                      <span className="font-medium text-slate-800 flex items-center gap-2">
+                        <Package className="w-4 h-4 text-slate-500" />
+                        {dealer.dealer_name}
+                      </span>
+                      <div className="flex gap-3 text-sm">
+                        <span className="text-blue-700">15kg: <strong>{dealer.total_15kg}</strong></span>
+                        <span className="text-blue-700">21kg: <strong>{dealer.total_21kg}</strong></span>
+                      </div>
+                    </div>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-white">
+                          <th className="text-left p-2 font-medium text-slate-500">Date</th>
+                          <th className="text-center p-2 font-medium text-slate-500">15 Kg</th>
+                          <th className="text-center p-2 font-medium text-slate-500">21 Kg</th>
+                          <th className="text-left p-2 font-medium text-slate-500">Remarks</th>
+                          <th className="text-left p-2 font-medium text-slate-500">By</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dealer.entries.sort((a, b) => a.date.localeCompare(b.date)).map((e) => (
+                          <tr key={e.id} className="border-b hover:bg-slate-50">
+                            <td className="p-2">{formatDate(e.date)}</td>
+                            <td className="p-2 text-center">{e.qty_15kg}</td>
+                            <td className="p-2 text-center">{e.qty_21kg}</td>
+                            <td className="p-2 text-slate-500">{e.remarks || '-'}</td>
+                            <td className="p-2 text-slate-500">{e.submitted_by}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <Send className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                <p className="text-slate-400 text-sm">No cylinder issuances recorded for this period</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </Layout>
   );

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { getDashboardStats, getDailyReports, getOrderAnalysis, getWarehouses, exportOrderAnalysisPDF, exportOrderAnalysisExcel, getConnectionRefillAnalytics, exportConnectionRefillPDF, exportConnectionRefillExcel } from '../lib/api';
+import { getDashboardStats, getDailyReports, getOrderAnalysis, getWarehouses, exportOrderAnalysisPDF, exportOrderAnalysisExcel, getConnectionRefillAnalytics, exportConnectionRefillPDF, exportConnectionRefillExcel, getDashboardChartData } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -78,6 +78,12 @@ const Dashboard = () => {
   const [analyticsWarehouse, setAnalyticsWarehouse] = useState('all');
   const [analyticsStartDate, setAnalyticsStartDate] = useState('');
   const [analyticsEndDate, setAnalyticsEndDate] = useState('');
+
+  // Charts state
+  const [chartData, setChartData] = useState(null);
+  const [chartLoading, setChartLoading] = useState(false);
+  const [chartPeriod, setChartPeriod] = useState('30d');
+  const [chartWarehouse, setChartWarehouse] = useState('all');
 
   useEffect(() => {
     fetchStats();
@@ -228,6 +234,25 @@ const Dashboard = () => {
   useEffect(() => {
     if (activeTab === 'analytics') fetchAnalytics();
   }, [activeTab, fetchAnalytics]);
+
+  // Fetch chart data
+  const fetchChartData = useCallback(async () => {
+    setChartLoading(true);
+    try {
+      const params = { period: chartPeriod };
+      if (chartWarehouse !== 'all') params.warehouse_id = chartWarehouse;
+      const res = await getDashboardChartData(params);
+      setChartData(res.data);
+    } catch (error) {
+      console.error('Failed to fetch chart data:', error);
+    } finally {
+      setChartLoading(false);
+    }
+  }, [chartPeriod, chartWarehouse]);
+
+  useEffect(() => {
+    if (activeTab === 'charts') fetchChartData();
+  }, [activeTab, fetchChartData]);
 
   const getAnalyticsExportParams = () => {
     const params = { period: analyticsPeriod };
@@ -639,6 +664,7 @@ const Dashboard = () => {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList>
             <TabsTrigger value="overview" data-testid="overview-tab">Warehouse Overview</TabsTrigger>
+            <TabsTrigger value="charts" data-testid="charts-tab">Sales Charts</TabsTrigger>
             <TabsTrigger value="analytics" data-testid="analytics-tab">
               <BarChart3 className="w-4 h-4 mr-1" /> Analytics
             </TabsTrigger>
@@ -809,6 +835,112 @@ const Dashboard = () => {
                   </CardContent>
                 </Card>
               </div>
+            </div>
+          </TabsContent>
+
+
+          {/* Sales Charts Tab */}
+          <TabsContent value="charts">
+            <div className="space-y-4" data-testid="charts-section">
+              {/* Chart Filters */}
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <div>
+                      <label className="text-xs text-slate-500 block mb-1">Period</label>
+                      <Select value={chartPeriod} onValueChange={setChartPeriod}>
+                        <SelectTrigger className="w-36" data-testid="chart-period">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="7d">Last 7 Days</SelectItem>
+                          <SelectItem value="30d">Last 30 Days</SelectItem>
+                          <SelectItem value="90d">Last 90 Days</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-500 block mb-1">Warehouse</label>
+                      <Select value={chartWarehouse} onValueChange={setChartWarehouse}>
+                        <SelectTrigger className="w-44" data-testid="chart-warehouse">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Warehouses</SelectItem>
+                          {allWarehouses.filter(w => !w.is_plant).map(w => (
+                            <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {chartData && (
+                      <div className="ml-auto text-right">
+                        <p className="text-xs text-slate-500">Total Sales</p>
+                        <p className="text-lg font-bold text-green-700">Rs.{(chartData.total_amount || 0).toLocaleString('en-IN')}</p>
+                        <p className="text-xs text-slate-400">{chartData.total_entries} entries</p>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {chartLoading ? (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 className="w-8 h-8 animate-spin text-green-600" />
+                </div>
+              ) : chartData ? (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {/* Daily Sales Trend */}
+                  <Card className="lg:col-span-2">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <TrendingUp className="w-4 h-4 text-green-600" />
+                        Daily Sales Trend
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <DailySalesTrendChart data={chartData.daily_trend || []} />
+                    </CardContent>
+                  </Card>
+
+                  {/* Payment Mode Breakdown */}
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base">Payment Mode Breakdown</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <PaymentPieChart data={chartData.payment_breakdown || []} />
+                    </CardContent>
+                  </Card>
+
+                  {/* Connection Types */}
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base">Connection Type Distribution</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ConnectionTypeChart data={chartData.connection_types || []} />
+                    </CardContent>
+                  </Card>
+
+                  {/* Warehouse-wise Totals */}
+                  {chartData.warehouse_totals?.length > 0 && (
+                    <Card className="lg:col-span-2">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <Warehouse className="w-4 h-4 text-blue-600" />
+                          Warehouse-wise Sales
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <WarehouseBarChart data={chartData.warehouse_totals || []} />
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-16 text-slate-400">No chart data available</div>
+              )}
             </div>
           </TabsContent>
 
@@ -1404,3 +1536,80 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
+
+// ---- Chart Components ----
+import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+
+const COLORS = ['#16a34a', '#2563eb', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+
+const DailySalesTrendChart = ({ data }) => {
+  if (!data || data.length === 0) return <p className="text-slate-400 text-center py-8 text-sm">No data for this period</p>;
+  const formatted = data.map(d => ({
+    ...d,
+    label: d.date?.slice(5) || '',
+    amt: Math.round(d.amount)
+  }));
+  return (
+    <ResponsiveContainer width="100%" height={260}>
+      <AreaChart data={formatted}>
+        <defs>
+          <linearGradient id="colorAmt" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="#16a34a" stopOpacity={0.3}/>
+            <stop offset="95%" stopColor="#16a34a" stopOpacity={0}/>
+          </linearGradient>
+        </defs>
+        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+        <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+        <YAxis tick={{ fontSize: 11 }} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
+        <Tooltip formatter={(v) => [`Rs.${v.toLocaleString('en-IN')}`, 'Amount']} />
+        <Area type="monotone" dataKey="amt" stroke="#16a34a" fill="url(#colorAmt)" strokeWidth={2} />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+};
+
+const PaymentPieChart = ({ data }) => {
+  const nonZero = (data || []).filter(d => d.value > 0);
+  if (nonZero.length === 0) return <p className="text-slate-400 text-center py-8 text-sm">No payment data</p>;
+  return (
+    <ResponsiveContainer width="100%" height={260}>
+      <PieChart>
+        <Pie data={nonZero} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label={({name, percent}) => `${name} ${(percent*100).toFixed(0)}%`}>
+          {nonZero.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+        </Pie>
+        <Tooltip formatter={v => `Rs.${v.toLocaleString('en-IN')}`} />
+        <Legend />
+      </PieChart>
+    </ResponsiveContainer>
+  );
+};
+
+const ConnectionTypeChart = ({ data }) => {
+  if (!data || data.length === 0) return <p className="text-slate-400 text-center py-8 text-sm">No connection data</p>;
+  return (
+    <ResponsiveContainer width="100%" height={260}>
+      <BarChart data={data} layout="vertical">
+        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+        <XAxis type="number" tick={{ fontSize: 11 }} />
+        <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={90} />
+        <Tooltip />
+        <Bar dataKey="count" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+};
+
+const WarehouseBarChart = ({ data }) => {
+  if (!data || data.length === 0) return null;
+  return (
+    <ResponsiveContainer width="100%" height={260}>
+      <BarChart data={data}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+        <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+        <YAxis tick={{ fontSize: 11 }} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
+        <Tooltip formatter={v => `Rs.${v.toLocaleString('en-IN')}`} />
+        <Bar dataKey="amount" fill="#2563eb" radius={[4, 4, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+};
