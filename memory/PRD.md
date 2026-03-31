@@ -394,6 +394,25 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 ### P0 (Complete)
 - [x] Integrate Accessory Sales into Main Sales Dashboard (March 13, 2026)
 - [x] Multiple Payment Modes in Single Sales Entry (March 18, 2026)
+- [x] Customer Edit/Delete for Warehouse Managers (March 18, 2026)
+- [x] Accessory Sales Warehouse Filter Fix (March 18, 2026)
+
+### P1 (Complete)
+- [x] Plant Reports — Dealer-wise Cylinder Issuance Breakdown (March 31, 2026)
+- [x] Dealer Reports — Source column showing Hollongi Plant badge (March 31, 2026)
+- [x] Connection Type Filter in Sales Dashboard (March 28, 2026)
+- [x] Accessory Sales Export Filter (March 28, 2026)
+- [x] Sales Search Enhancement — Debounced real-time search (March 28, 2026)
+- [x] Sales Data Sorting — Ascending date order (March 28, 2026)
+
+### P2 (In Progress)
+- [x] Backend Modular Infrastructure — Created database.py, deps.py shared modules (March 31, 2026)
+- [ ] Route extraction from server.py into APIRouter modules (incremental)
+
+### P3 (Complete)
+- [x] Dashboard Charts — Daily Sales Trend, Payment Pie, Connection Type Bar, Warehouse Bar (March 31, 2026)
+- [x] Server-side Pagination — Sales entries with page/limit params (March 31, 2026)
+- [x] Audit Logging — Customer edit/delete actions logged to audit_logs collection (March 31, 2026)
 
 ### P1 (Important)
 - [ ] Complete Dynamic Search Integration - Add SearchBar.jsx to SalesDashboard, Reports, and all remaining data tables
