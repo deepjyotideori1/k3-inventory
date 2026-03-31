@@ -2,28 +2,36 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "./components/ui/sonner";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import React, { Suspense, lazy } from "react";
 
-// Pages
-import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
-import ManagerDashboard from "./pages/ManagerDashboard";
-import SalesExecutiveDashboard from "./pages/SalesExecutiveDashboard";
-import SalesDashboard from "./pages/SalesDashboard";
-import DailyEntry from "./pages/DailyEntry";
-import PlantEntry from "./pages/PlantEntry";
-import Reports from "./pages/Reports";
-import Warehouses from "./pages/Warehouses";
-import UsersPage from "./pages/Users";
-import SettingsPage from "./pages/Settings";
-import PlantHollongi from "./pages/PlantHollongi";
-import AdminEditReport from "./pages/AdminEditReport";
-import DealerReports from "./pages/DealerReports";
-import AccessoryReports from "./pages/AccessoryReports";
-import AccessorySales from "./pages/AccessorySales";
-import CustomerManagement from "./pages/CustomerManagement";
-import OrderManagement from "./pages/OrderManagement";
-import CustomerOrderReport from "./pages/CustomerOrderReport";
-import BulkMessaging from "./pages/BulkMessaging";
+// Lazy-loaded Pages for code splitting
+const Login = lazy(() => import("./pages/Login"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const ManagerDashboard = lazy(() => import("./pages/ManagerDashboard"));
+const SalesExecutiveDashboard = lazy(() => import("./pages/SalesExecutiveDashboard"));
+const SalesDashboard = lazy(() => import("./pages/SalesDashboard"));
+const DailyEntry = lazy(() => import("./pages/DailyEntry"));
+const PlantEntry = lazy(() => import("./pages/PlantEntry"));
+const Reports = lazy(() => import("./pages/Reports"));
+const Warehouses = lazy(() => import("./pages/Warehouses"));
+const UsersPage = lazy(() => import("./pages/Users"));
+const SettingsPage = lazy(() => import("./pages/Settings"));
+const PlantHollongi = lazy(() => import("./pages/PlantHollongi"));
+const AdminEditReport = lazy(() => import("./pages/AdminEditReport"));
+const DealerReports = lazy(() => import("./pages/DealerReports"));
+const AccessoryReports = lazy(() => import("./pages/AccessoryReports"));
+const AccessorySales = lazy(() => import("./pages/AccessorySales"));
+const CustomerManagement = lazy(() => import("./pages/CustomerManagement"));
+const OrderManagement = lazy(() => import("./pages/OrderManagement"));
+const CustomerOrderReport = lazy(() => import("./pages/CustomerOrderReport"));
+const BulkMessaging = lazy(() => import("./pages/BulkMessaging"));
+
+// Loading fallback
+const PageLoader = () => (
+  <div className="min-h-screen flex items-center justify-center bg-slate-50">
+    <div className="w-12 h-12 border-4 border-green-200 border-t-green-700 rounded-full animate-spin"></div>
+  </div>
+);
 
 // Protected Route Component
 const ProtectedRoute = ({ children, adminOnly = false, allowSalesExecutive = false }) => {
@@ -82,6 +90,7 @@ const RoleBasedRedirect = () => {
 
 function AppRoutes() {
   return (
+    <Suspense fallback={<PageLoader />}>
     <Routes>
       {/* Public */}
       <Route path="/login" element={<Login />} />
@@ -256,6 +265,7 @@ function AppRoutes() {
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </Suspense>
   );
 }
 
