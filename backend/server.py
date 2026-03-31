@@ -1454,7 +1454,7 @@ async def get_dashboard_chart_data(
 
 async def log_audit(user_id: str, user_name: str, action: str, resource_type: str, resource_id: str = None, details: str = None):
     """Log an audit event"""
-    await db.audit_logs.insert_one({
+    entry = {
         'id': str(uuid.uuid4()),
         'user_id': user_id,
         'user_name': user_name,
@@ -1462,11 +1462,9 @@ async def log_audit(user_id: str, user_name: str, action: str, resource_type: st
         'resource_type': resource_type,
         'resource_id': resource_id or '',
         'details': details or '',
-        'timestamp': datetime.now(timezone.utc).isoformat(),
-        '_id': None
-    })
-    # Remove MongoDB _id
-    await db.audit_logs.update_many({'_id': None}, {'$unset': {'_id': ''}})
+        'timestamp': datetime.now(timezone.utc).isoformat()
+    }
+    await db.audit_logs.insert_one(entry)
 
 @api_router.get("/audit-logs")
 async def get_audit_logs(
