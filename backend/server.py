@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 from pathlib import Path
@@ -45,66 +44,83 @@ logger = logging.getLogger(__name__)
 # Create the main app
 app = FastAPI(title="K3 GAS SERVICE API", version="1.0.0")
 
+# ============ CORS MIDDLEWARE (must be before routes) ============
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=True,
+    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 # ============ INITIALIZATION ============
 
 async def init_default_data():
     """Initialize default warehouses, users, and settings"""
-    settings = await db.settings.find_one({'key': 'app_settings'}, {'_id': 0})
-    if settings:
-        return
+    try:
+        settings = await db.settings.find_one({'key': 'app_settings'}, {'_id': 0})
+        if settings:
+            return
 
-    logger.info("Initializing default data...")
+        logger.info("Initializing default data...")
 
-    await db.settings.insert_one({
-        'key': 'app_settings',
-        'maintenance_mode': False,
-        'maintenance_message': 'System is under maintenance. Please check back later.',
-        'app_version': '1.0.0'
-    })
+        await db.settings.insert_one({
+            'key': 'app_settings',
+            'maintenance_mode': False,
+            'maintenance_message': 'System is under maintenance. Please check back later.',
+            'app_version': '1.0.0'
+        })
 
-    warehouses = [
-        {'id': str(uuid.uuid4()), 'name': 'Jullang', 'location': 'Jullang, Arunachal Pradesh', 'is_plant': False, 'is_active': True, 'created_at': datetime.now(timezone.utc).isoformat()},
-        {'id': str(uuid.uuid4()), 'name': 'Naharlagun', 'location': 'Naharlagun, Arunachal Pradesh', 'is_plant': False, 'is_active': True, 'created_at': datetime.now(timezone.utc).isoformat()},
-        {'id': str(uuid.uuid4()), 'name': 'Doimukh', 'location': 'Doimukh, Arunachal Pradesh', 'is_plant': False, 'is_active': True, 'created_at': datetime.now(timezone.utc).isoformat()},
-        {'id': str(uuid.uuid4()), 'name': 'Plant Hollongi', 'location': 'Hollongi, Arunachal Pradesh', 'is_plant': True, 'is_active': True, 'created_at': datetime.now(timezone.utc).isoformat()},
-    ]
-    await db.warehouses.insert_many(warehouses)
+        warehouses = [
+            {'id': str(uuid.uuid4()), 'name': 'Jullang', 'location': 'Jullang, Arunachal Pradesh', 'is_plant': False, 'is_active': True, 'created_at': datetime.now(timezone.utc).isoformat()},
+            {'id': str(uuid.uuid4()), 'name': 'Naharlagun', 'location': 'Naharlagun, Arunachal Pradesh', 'is_plant': False, 'is_active': True, 'created_at': datetime.now(timezone.utc).isoformat()},
+            {'id': str(uuid.uuid4()), 'name': 'Doimukh', 'location': 'Doimukh, Arunachal Pradesh', 'is_plant': False, 'is_active': True, 'created_at': datetime.now(timezone.utc).isoformat()},
+            {'id': str(uuid.uuid4()), 'name': 'Plant Hollongi', 'location': 'Hollongi, Arunachal Pradesh', 'is_plant': True, 'is_active': True, 'created_at': datetime.now(timezone.utc).isoformat()},
+        ]
+        await db.warehouses.insert_many(warehouses)
 
-    admin_user = {
-        'id': str(uuid.uuid4()),
-        'email': 'admin@k3gas.com',
-        'password': hash_password('Admin@123'),
-        'name': 'Master Admin',
-        'role': 'admin',
-        'warehouse_id': None,
-        'created_at': datetime.now(timezone.utc).isoformat()
-    }
-    await db.users.insert_one(admin_user)
+        admin_user = {
+            'id': str(uuid.uuid4()),
+            'email': 'admin@k3gas.com',
+            'password': hash_password('Admin@123'),
+            'name': 'Master Admin',
+            'role': 'admin',
+            'warehouse_id': None,
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+        await db.users.insert_one(admin_user)
 
-    warehouse_users = [
-        {'id': str(uuid.uuid4()), 'email': 'jullang@k3gas.com', 'password': hash_password('Jullang@123'), 'name': 'Jullang Manager', 'role': 'warehouse_manager', 'warehouse_id': warehouses[0]['id'], 'created_at': datetime.now(timezone.utc).isoformat()},
-        {'id': str(uuid.uuid4()), 'email': 'naharlagun@k3gas.com', 'password': hash_password('Naharlagun@123'), 'name': 'Naharlagun Manager', 'role': 'warehouse_manager', 'warehouse_id': warehouses[1]['id'], 'created_at': datetime.now(timezone.utc).isoformat()},
-        {'id': str(uuid.uuid4()), 'email': 'doimukh@k3gas.com', 'password': hash_password('Doimukh@123'), 'name': 'Doimukh Manager', 'role': 'warehouse_manager', 'warehouse_id': warehouses[2]['id'], 'created_at': datetime.now(timezone.utc).isoformat()},
-        {'id': str(uuid.uuid4()), 'email': 'hollongi@k3gas.com', 'password': hash_password('Hollongi@123'), 'name': 'Plant Hollongi Manager', 'role': 'warehouse_manager', 'warehouse_id': warehouses[3]['id'], 'created_at': datetime.now(timezone.utc).isoformat()},
-    ]
-    await db.users.insert_many(warehouse_users)
+        warehouse_users = [
+            {'id': str(uuid.uuid4()), 'email': 'jullang@k3gas.com', 'password': hash_password('Jullang@123'), 'name': 'Jullang Manager', 'role': 'warehouse_manager', 'warehouse_id': warehouses[0]['id'], 'created_at': datetime.now(timezone.utc).isoformat()},
+            {'id': str(uuid.uuid4()), 'email': 'naharlagun@k3gas.com', 'password': hash_password('Naharlagun@123'), 'name': 'Naharlagun Manager', 'role': 'warehouse_manager', 'warehouse_id': warehouses[1]['id'], 'created_at': datetime.now(timezone.utc).isoformat()},
+            {'id': str(uuid.uuid4()), 'email': 'doimukh@k3gas.com', 'password': hash_password('Doimukh@123'), 'name': 'Doimukh Manager', 'role': 'warehouse_manager', 'warehouse_id': warehouses[2]['id'], 'created_at': datetime.now(timezone.utc).isoformat()},
+            {'id': str(uuid.uuid4()), 'email': 'hollongi@k3gas.com', 'password': hash_password('Hollongi@123'), 'name': 'Plant Hollongi Manager', 'role': 'warehouse_manager', 'warehouse_id': warehouses[3]['id'], 'created_at': datetime.now(timezone.utc).isoformat()},
+        ]
+        await db.users.insert_many(warehouse_users)
 
-    items = [
-        {'id': str(uuid.uuid4()), 'name': '15kg Cylinder', 'unit': 'units', 'category': 'LPG Cylinder', 'created_at': datetime.now(timezone.utc).isoformat()},
-        {'id': str(uuid.uuid4()), 'name': '21kg Cylinder', 'unit': 'units', 'category': 'LPG Cylinder', 'created_at': datetime.now(timezone.utc).isoformat()},
-    ]
-    await db.inventory_items.insert_many(items)
+        items = [
+            {'id': str(uuid.uuid4()), 'name': '15kg Cylinder', 'unit': 'units', 'category': 'LPG Cylinder', 'created_at': datetime.now(timezone.utc).isoformat()},
+            {'id': str(uuid.uuid4()), 'name': '21kg Cylinder', 'unit': 'units', 'category': 'LPG Cylinder', 'created_at': datetime.now(timezone.utc).isoformat()},
+        ]
+        await db.inventory_items.insert_many(items)
 
-    logger.info("Default data initialized successfully")
+        logger.info("Default data initialized successfully")
+    except Exception as e:
+        logger.error(f"Error initializing default data: {e}")
 
 
 @app.on_event("startup")
 async def startup_event():
-    await init_default_data()
-    await db.sales_entries.create_index([("consumer_name", 1)])
-    await db.sales_entries.create_index([("date", 1)])
-    await db.sales_entries.create_index([("warehouse_id", 1)])
+    try:
+        await init_default_data()
+        await db.sales_entries.create_index([("consumer_name", 1)])
+        await db.sales_entries.create_index([("date", 1)])
+        await db.sales_entries.create_index([("warehouse_id", 1)])
+        logger.info("Startup complete - all indexes created")
+    except Exception as e:
+        logger.error(f"Startup error (non-fatal): {e}")
 
 
 @app.on_event("shutdown")
@@ -136,14 +152,3 @@ app.include_router(messaging_router, prefix="/api")
 @app.get("/api/health")
 async def health():
     return {"status": "healthy"}
-
-
-# ============ CORS MIDDLEWARE ============
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
