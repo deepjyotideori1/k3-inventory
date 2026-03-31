@@ -405,9 +405,9 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] Sales Search Enhancement — Debounced real-time search (March 28, 2026)
 - [x] Sales Data Sorting — Ascending date order (March 28, 2026)
 
-### P2 (In Progress)
+### P2 (Complete)
 - [x] Backend Modular Infrastructure — Created database.py, deps.py shared modules (March 31, 2026)
-- [ ] Route extraction from server.py into APIRouter modules (incremental)
+- [x] Route extraction from server.py into 15 APIRouter modules (April 2026) — server.py reduced from 8771 to 149 lines
 
 ### P3 (Complete)
 - [x] Dashboard Charts — Daily Sales Trend, Payment Pie, Connection Type Bar, Warehouse Bar (March 31, 2026)
@@ -421,7 +421,7 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [ ] Sync warehouse 'refilling at plant' to Plant Hollongi's received empties
 
 ### P2 (Nice to Have)
-- [ ] Refactor backend/server.py into smaller modules using FastAPI APIRouter
+- [x] Refactor backend/server.py into smaller modules using FastAPI APIRouter (April 2026)
 - [ ] Migrate client-side search to server-side for scalability
 - [ ] Integrate real SMS/WhatsApp provider (Twilio, MSG91, Meta) with Bulk Messaging
 - [ ] Weekly, Monthly, Yearly aggregated reports for dashboard
@@ -439,12 +439,30 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 ├── backend/
 │   ├── .env
 │   ├── requirements.txt
-│   ├── server.py
+│   ├── server.py              # Slim orchestrator (149 lines) - includes routers
+│   ├── models.py              # All Pydantic models (528 lines)
+│   ├── helpers.py             # Shared helpers: format_inr, hash_password, log_audit, etc.
+│   ├── deps.py                # Auth dependencies: get_current_user, require_admin
+│   ├── database.py            # MongoDB connection
+│   ├── routes/
+│   │   ├── auth.py            # Auth, Settings, User Management
+│   │   ├── warehouses.py      # Warehouse + Inventory CRUD
+│   │   ├── reports.py         # Daily + Plant Reports
+│   │   ├── plant.py           # Plant Cylinder Issuance
+│   │   ├── dashboard.py       # Dashboard Charts + Stats
+│   │   ├── stock.py           # Admin Stock Updates
+│   │   ├── audit.py           # Audit Logs
+│   │   ├── exports.py         # Daily Report PDF/Excel Exports
+│   │   ├── dealers.py         # Dealer Management + Entries + Exports
+│   │   ├── accessories.py     # Accessory Mgmt + Sales + Exports
+│   │   ├── customers.py       # Customer Management + Exports
+│   │   ├── sales.py           # Sales Dashboard + Summary + Exports
+│   │   ├── orders.py          # Order Management + Exports
+│   │   ├── analytics.py       # Connection & Refill Analytics + Exports
+│   │   └── messaging.py       # Bulk Messaging (Simulated)
 │   └── tests/
-│       ├── test_dealer_reports.py
-│       ├── test_customer_management.py
-│       ├── test_order_management.py
-│       └── test_bulk_messaging.py (NEW)
+│       ├── test_refactored_routes.py
+│       └── ... (other test files)
 ├── frontend/
 │   ├── .env
 │   ├── package.json
@@ -457,6 +475,7 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 │       ├── lib/utils.js
 │       ├── components/
 │       │   ├── Layout.jsx
+│       │   ├── SearchBar.jsx
 │       │   └── ui/ (Shadcn components)
 │       └── pages/
 │           ├── Dashboard.jsx
@@ -469,7 +488,10 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 │           ├── AccessoryReports.jsx
 │           ├── CustomerManagement.jsx
 │           ├── OrderManagement.jsx
-│           ├── BulkMessaging.jsx (NEW)
+│           ├── BulkMessaging.jsx
+│           ├── SalesDashboard.jsx
+│           ├── AccessorySales.jsx
+│           ├── CustomerOrderReport.jsx
 │           ├── Warehouses.jsx
 │           ├── Users.jsx
 │           ├── Settings.jsx
@@ -477,12 +499,9 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 ├── memory/
 │   └── PRD.md
 └── test_reports/
-    ├── iteration_1.json
-    ├── iteration_2.json
-    ├── iteration_3.json
-    └── iteration_4.json
+    └── iteration_*.json
 ```
 
 ---
 
-*Last Updated: March 18, 2026*
+*Last Updated: April 2026*
