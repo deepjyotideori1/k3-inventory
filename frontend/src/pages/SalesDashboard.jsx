@@ -105,7 +105,7 @@ const SalesDashboard = () => {
   const [filterWarehouse, setFilterWarehouse] = useState('all');
   const [filterPaymentMode, setFilterPaymentMode] = useState('all');
   const [filterConnectionType, setFilterConnectionType] = useState('all');
-  const [filterDateRange, setFilterDateRange] = useState('all');
+  const [filterDateRange, setFilterDateRange] = useState('this_month');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -158,6 +158,33 @@ const SalesDashboard = () => {
 
   const [editForm, setEditForm] = useState({});
 
+  // Helper: format date for display
+  const formatDateDisplay = (dateStr) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr + 'T00:00:00');
+    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+
+  const getActiveRangeLabel = () => {
+    if (filterDateRange === 'custom' && startDate && endDate) {
+      return `Custom: ${formatDateDisplay(startDate)} – ${formatDateDisplay(endDate)}`;
+    }
+    if (filterDateRange === 'custom') return 'Custom Range';
+    const labels = {
+      this_month: 'Current Month',
+      last_month: 'Last Month',
+      today: 'Today',
+      week: 'Last 7 Days',
+      year: 'This Year',
+      all: 'All Time'
+    };
+    const label = labels[filterDateRange] || filterDateRange;
+    if (startDate && endDate) {
+      return `${label}: ${formatDateDisplay(startDate)} – ${formatDateDisplay(endDate)}`;
+    }
+    return label;
+  };
+
   useEffect(() => {
     setCurrentPage(1);
   }, [filterWarehouse, filterPaymentMode, filterConnectionType, startDate, endDate, debouncedSearch]);
@@ -188,6 +215,18 @@ const SalesDashboard = () => {
         weekAgo.setDate(today.getDate() - 7);
         start = weekAgo.toISOString().split('T')[0];
         break;
+      case 'this_month': {
+        const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        start = startOfMonth.toISOString().split('T')[0];
+        break;
+      }
+      case 'last_month': {
+        const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+        start = lastMonthStart.toISOString().split('T')[0];
+        end = lastMonthEnd.toISOString().split('T')[0];
+        break;
+      }
       case 'month':
         const monthAgo = new Date(today);
         monthAgo.setMonth(today.getMonth() - 1);
@@ -446,6 +485,18 @@ const SalesDashboard = () => {
         weekAgo.setDate(today.getDate() - 7);
         start = weekAgo.toISOString().split('T')[0];
         break;
+      case 'this_month': {
+        const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        start = startOfMonth.toISOString().split('T')[0];
+        break;
+      }
+      case 'last_month': {
+        const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+        start = lastMonthStart.toISOString().split('T')[0];
+        end = lastMonthEnd.toISOString().split('T')[0];
+        break;
+      }
       case 'monthly':
         const monthAgo = new Date(today);
         monthAgo.setMonth(today.getMonth() - 1);
@@ -540,6 +591,18 @@ const SalesDashboard = () => {
         weekAgo.setDate(today.getDate() - 7);
         start = weekAgo.toISOString().split('T')[0];
         break;
+      case 'this_month': {
+        const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        start = startOfMonth.toISOString().split('T')[0];
+        break;
+      }
+      case 'last_month': {
+        const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+        start = lastMonthStart.toISOString().split('T')[0];
+        end = lastMonthEnd.toISOString().split('T')[0];
+        break;
+      }
       case 'monthly':
         const monthAgo = new Date(today);
         monthAgo.setDate(today.getDate() - 30);
@@ -815,20 +878,23 @@ const SalesDashboard = () => {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="this_month">
+                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-blue-600" /> This Month</div>
+                        </SelectItem>
+                        <SelectItem value="last_month">
+                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-indigo-600" /> Last Month</div>
+                        </SelectItem>
                         <SelectItem value="all">
                           <div className="flex items-center gap-2"><Calendar className="w-4 h-4" /> All Time</div>
                         </SelectItem>
                         <SelectItem value="daily">
-                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-blue-600" /> Daily (Today)</div>
+                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-green-600" /> Today</div>
                         </SelectItem>
                         <SelectItem value="weekly">
-                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-green-600" /> Weekly (Last 7 days)</div>
-                        </SelectItem>
-                        <SelectItem value="monthly">
-                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-purple-600" /> Monthly (Last 30 days)</div>
+                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-purple-600" /> Last 7 Days</div>
                         </SelectItem>
                         <SelectItem value="yearly">
-                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-orange-600" /> Yearly (Last 365 days)</div>
+                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-orange-600" /> This Year</div>
                         </SelectItem>
                         <SelectItem value="custom">
                           <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-slate-600" /> Custom Range</div>
@@ -973,17 +1039,20 @@ const SalesDashboard = () => {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="this_month">
+                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-blue-600" /> This Month</div>
+                        </SelectItem>
+                        <SelectItem value="last_month">
+                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-indigo-600" /> Last Month</div>
+                        </SelectItem>
                         <SelectItem value="all">
                           <div className="flex items-center gap-2"><Calendar className="w-4 h-4" /> All Time</div>
                         </SelectItem>
                         <SelectItem value="weekly">
                           <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-green-600" /> Last 7 Days</div>
                         </SelectItem>
-                        <SelectItem value="monthly">
-                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-purple-600" /> Last 30 Days</div>
-                        </SelectItem>
                         <SelectItem value="yearly">
-                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-orange-600" /> Last Year</div>
+                          <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-orange-600" /> This Year</div>
                         </SelectItem>
                         <SelectItem value="custom">
                           <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-slate-600" /> Custom Range</div>
@@ -1446,6 +1515,21 @@ const SalesDashboard = () => {
           </div>
         )}
 
+        {/* Active Date Range Indicator */}
+        <div className="flex items-center gap-2 text-sm" data-testid="active-date-range">
+          <Calendar className="h-4 w-4 text-slate-500" />
+          <span className="text-slate-500">Showing:</span>
+          <Badge variant="outline" className={`font-medium ${filterDateRange === 'custom' ? 'border-purple-300 bg-purple-50 text-purple-700' : 'border-blue-300 bg-blue-50 text-blue-700'}`}>
+            {filterDateRange === 'custom' ? 'Custom Range' : filterDateRange === 'this_month' ? 'Current Month' : filterDateRange === 'last_month' ? 'Last Month' : filterDateRange === 'today' ? 'Today' : filterDateRange === 'week' ? 'Last 7 Days' : filterDateRange === 'year' ? 'This Year' : 'All Time'}
+          </Badge>
+          {startDate && endDate && (
+            <span className="text-slate-600 font-medium">{formatDateDisplay(startDate)} – {formatDateDisplay(endDate)}</span>
+          )}
+          {filterDateRange === 'all' && (
+            <span className="text-slate-400 text-xs">(no date filter applied)</span>
+          )}
+        </div>
+
         {/* Filters */}
         <Card>
           <CardContent className="p-4">
@@ -1503,16 +1587,17 @@ const SalesDashboard = () => {
               <div>
                 <Label className="text-xs">Date Range</Label>
                 <Select value={filterDateRange} onValueChange={setFilterDateRange}>
-                  <SelectTrigger className="w-36 mt-1">
+                  <SelectTrigger className="w-40 mt-1" data-testid="filter-date-range">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Time</SelectItem>
+                    <SelectItem value="this_month">This Month</SelectItem>
+                    <SelectItem value="last_month">Last Month</SelectItem>
                     <SelectItem value="today">Today</SelectItem>
                     <SelectItem value="week">Last 7 Days</SelectItem>
-                    <SelectItem value="month">Last 30 Days</SelectItem>
-                    <SelectItem value="year">Last Year</SelectItem>
-                    <SelectItem value="custom">Custom</SelectItem>
+                    <SelectItem value="year">This Year</SelectItem>
+                    <SelectItem value="all">All Time</SelectItem>
+                    <SelectItem value="custom">Custom Range</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
