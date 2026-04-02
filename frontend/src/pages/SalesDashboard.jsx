@@ -102,12 +102,19 @@ const SalesDashboard = () => {
   });
 
   // Compute current month start/end for default initialization
+  const toLocalDateStr = (d) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const getThisMonthRange = () => {
     const today = new Date();
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     return {
-      start: startOfMonth.toISOString().split('T')[0],
-      end: today.toISOString().split('T')[0]
+      start: toLocalDateStr(startOfMonth),
+      end: toLocalDateStr(today)
     };
   };
 
@@ -145,7 +152,7 @@ const SalesDashboard = () => {
   const [summaryEndDate, setSummaryEndDate] = useState('');
 
   // Form state
-  const getTodayDate = () => new Date().toISOString().split('T')[0];
+  const getTodayDate = () => toLocalDateStr(new Date());
   
   const [formData, setFormData] = useState({
     date: getTodayDate(),
@@ -214,7 +221,7 @@ const SalesDashboard = () => {
   const getDateRange = (range) => {
     const today = new Date();
     let start = '';
-    let end = today.toISOString().split('T')[0];
+    let end = toLocalDateStr(today);
 
     switch(range) {
       case 'today':
@@ -223,29 +230,29 @@ const SalesDashboard = () => {
       case 'week':
         const weekAgo = new Date(today);
         weekAgo.setDate(today.getDate() - 7);
-        start = weekAgo.toISOString().split('T')[0];
+        start = toLocalDateStr(weekAgo);
         break;
       case 'this_month': {
         const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-        start = startOfMonth.toISOString().split('T')[0];
+        start = toLocalDateStr(startOfMonth);
         break;
       }
       case 'last_month': {
         const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
         const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
-        start = lastMonthStart.toISOString().split('T')[0];
-        end = lastMonthEnd.toISOString().split('T')[0];
+        start = toLocalDateStr(lastMonthStart);
+        end = toLocalDateStr(lastMonthEnd);
         break;
       }
       case 'month':
         const monthAgo = new Date(today);
         monthAgo.setMonth(today.getMonth() - 1);
-        start = monthAgo.toISOString().split('T')[0];
+        start = toLocalDateStr(monthAgo);
         break;
       case 'year':
         const yearAgo = new Date(today);
         yearAgo.setFullYear(today.getFullYear() - 1);
-        start = yearAgo.toISOString().split('T')[0];
+        start = toLocalDateStr(yearAgo);
         break;
       default:
         start = '';
@@ -448,7 +455,7 @@ const SalesDashboard = () => {
     setSubmitting(true);
     try {
       const entryData = {
-        date: new Date().toISOString().split('T')[0],
+        date: toLocalDateStr(new Date()),
         consumer_name: quickRefillCustomer.consumer_name,
         address: quickRefillCustomer.address,
         consumer_no: quickRefillCustomer.consumer_no,
@@ -484,7 +491,7 @@ const SalesDashboard = () => {
   const getExportDateRange = () => {
     const today = new Date();
     let start = '';
-    let end = today.toISOString().split('T')[0];
+    let end = toLocalDateStr(today);
     
     switch(exportDateRange) {
       case 'daily':
@@ -493,29 +500,29 @@ const SalesDashboard = () => {
       case 'weekly':
         const weekAgo = new Date(today);
         weekAgo.setDate(today.getDate() - 7);
-        start = weekAgo.toISOString().split('T')[0];
+        start = toLocalDateStr(weekAgo);
         break;
       case 'this_month': {
         const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-        start = startOfMonth.toISOString().split('T')[0];
+        start = toLocalDateStr(startOfMonth);
         break;
       }
       case 'last_month': {
         const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
         const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
-        start = lastMonthStart.toISOString().split('T')[0];
-        end = lastMonthEnd.toISOString().split('T')[0];
+        start = toLocalDateStr(lastMonthStart);
+        end = toLocalDateStr(lastMonthEnd);
         break;
       }
       case 'monthly':
         const monthAgo = new Date(today);
         monthAgo.setMonth(today.getMonth() - 1);
-        start = monthAgo.toISOString().split('T')[0];
+        start = toLocalDateStr(monthAgo);
         break;
       case 'yearly':
         const yearAgo = new Date(today);
         yearAgo.setFullYear(today.getFullYear() - 1);
-        start = yearAgo.toISOString().split('T')[0];
+        start = toLocalDateStr(yearAgo);
         break;
       case 'custom':
         start = exportStartDate;
@@ -590,7 +597,7 @@ const SalesDashboard = () => {
   const getSummaryDateRange = () => {
     const today = new Date();
     let start = '';
-    let end = today.toISOString().split('T')[0];
+    let end = toLocalDateStr(today);
     
     switch(summaryDateRange) {
       case 'daily':
@@ -599,29 +606,29 @@ const SalesDashboard = () => {
       case 'weekly':
         const weekAgo = new Date(today);
         weekAgo.setDate(today.getDate() - 7);
-        start = weekAgo.toISOString().split('T')[0];
+        start = toLocalDateStr(weekAgo);
         break;
       case 'this_month': {
         const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-        start = startOfMonth.toISOString().split('T')[0];
+        start = toLocalDateStr(startOfMonth);
         break;
       }
       case 'last_month': {
         const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
         const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
-        start = lastMonthStart.toISOString().split('T')[0];
-        end = lastMonthEnd.toISOString().split('T')[0];
+        start = toLocalDateStr(lastMonthStart);
+        end = toLocalDateStr(lastMonthEnd);
         break;
       }
       case 'monthly':
         const monthAgo = new Date(today);
         monthAgo.setDate(today.getDate() - 30);
-        start = monthAgo.toISOString().split('T')[0];
+        start = toLocalDateStr(monthAgo);
         break;
       case 'yearly':
         const yearAgo = new Date(today);
         yearAgo.setFullYear(today.getFullYear() - 1);
-        start = yearAgo.toISOString().split('T')[0];
+        start = toLocalDateStr(yearAgo);
         break;
       case 'custom':
         start = summaryStartDate;
