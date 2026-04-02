@@ -409,6 +409,7 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] Backend Modular Infrastructure — Created database.py, deps.py shared modules (March 31, 2026)
 - [x] Route extraction from server.py into 15 APIRouter modules (April 2026) — server.py reduced from 8771 to 149 lines
 - [x] Sales Dashboard Date Display Logic Enhancement (April 2026) — Default view shows current month (1st to today), quick filters: This Month, Last Month, Last 7 Days, date range indicator badge, consistent across exports and summary reports
+- [x] Fix Current Month View race condition (April 2026) — startDate/endDate now initialized with computed values, added "Reset to Current Month" button, indicator shows "01 [Month] – Today" format
 
 ### P3 (Complete)
 - [x] Dashboard Charts — Daily Sales Trend, Payment Pie, Connection Type Bar, Warehouse Bar (March 31, 2026)
