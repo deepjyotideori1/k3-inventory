@@ -101,13 +101,23 @@ const SalesDashboard = () => {
     online_amount: 0
   });
 
-  // Filters
+  // Compute current month start/end for default initialization
+  const getThisMonthRange = () => {
+    const today = new Date();
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    return {
+      start: startOfMonth.toISOString().split('T')[0],
+      end: today.toISOString().split('T')[0]
+    };
+  };
+
+  // Filters — initialize with current month dates
   const [filterWarehouse, setFilterWarehouse] = useState('all');
   const [filterPaymentMode, setFilterPaymentMode] = useState('all');
   const [filterConnectionType, setFilterConnectionType] = useState('all');
   const [filterDateRange, setFilterDateRange] = useState('this_month');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState(() => getThisMonthRange().start);
+  const [endDate, setEndDate] = useState(() => getThisMonthRange().end);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   
@@ -1523,7 +1533,9 @@ const SalesDashboard = () => {
             {filterDateRange === 'custom' ? 'Custom Range' : filterDateRange === 'this_month' ? 'Current Month' : filterDateRange === 'last_month' ? 'Last Month' : filterDateRange === 'today' ? 'Today' : filterDateRange === 'week' ? 'Last 7 Days' : filterDateRange === 'year' ? 'This Year' : 'All Time'}
           </Badge>
           {startDate && endDate && (
-            <span className="text-slate-600 font-medium">{formatDateDisplay(startDate)} – {formatDateDisplay(endDate)}</span>
+            <span className="text-slate-600 font-medium">
+              {formatDateDisplay(startDate)} – {filterDateRange === 'this_month' ? 'Today' : formatDateDisplay(endDate)}
+            </span>
           )}
           {filterDateRange === 'all' && (
             <span className="text-slate-400 text-xs">(no date filter applied)</span>
@@ -1643,10 +1655,27 @@ const SalesDashboard = () => {
                 </div>
               </div>
 
-              <Button onClick={fetchData} variant="outline" className="gap-2">
+              <Button onClick={fetchData} variant="outline" className="gap-2" data-testid="refresh-btn">
                 <RefreshCw className="w-4 h-4" />
                 Refresh
               </Button>
+              {filterDateRange !== 'this_month' && (
+                <Button 
+                  onClick={() => {
+                    setFilterDateRange('this_month');
+                    setFilterWarehouse('all');
+                    setFilterPaymentMode('all');
+                    setFilterConnectionType('all');
+                    setSearchQuery('');
+                  }} 
+                  variant="outline" 
+                  className="gap-2 border-blue-300 text-blue-700 hover:bg-blue-50"
+                  data-testid="reset-current-month-btn"
+                >
+                  <Calendar className="w-4 h-4" />
+                  Reset to Current Month
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
