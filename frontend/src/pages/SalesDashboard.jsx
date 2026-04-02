@@ -60,9 +60,13 @@ import {
 } from 'lucide-react';
 import { formatDate, formatINR } from '../lib/utils';
 import { toast } from 'sonner';
+import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
+import ShortcutHelpModal from '../components/ShortcutHelpModal';
+import ShortcutBar from '../components/ShortcutBar';
 
 const SalesDashboard = () => {
   const { user, isAdmin } = useAuth();
+  const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const [entries, setEntries] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -842,6 +846,31 @@ const SalesDashboard = () => {
     }, { amount: 0, refills: 0, newCyl: 0 });
   }, [combinedEntries]);
 
+  // Keyboard Shortcuts
+  useKeyboardShortcuts({
+    onNewConnection: () => { setCustomerMode('new'); setAddDialogOpen(true); },
+    onExistingCustomer: () => { setCustomerMode('existing'); setAddDialogOpen(true); },
+    onExport: () => setExportDialogOpen(true),
+    onSummary: () => setSummaryExportOpen(true),
+    onNextPage: () => setCurrentPage(p => Math.min(p + 1, totalPages)),
+    onPrevPage: () => setCurrentPage(p => Math.max(p - 1, 1)),
+    onFirstPage: () => setCurrentPage(1),
+    onLastPage: () => setCurrentPage(totalPages),
+    onRefresh: fetchData,
+    onHelp: () => setShortcutHelpOpen(true),
+    onEscape: () => setShortcutHelpOpen(false),
+  }, { enabled: true, userRole: user?.role || 'admin' });
+
+  const shortcutBarItems = [
+    { key: 'F1', label: 'New' },
+    { key: 'F2', label: 'Existing' },
+    { key: 'Ctrl+S', label: 'Save' },
+    { key: 'F10', label: 'Export' },
+    { key: 'F11', label: 'Summary' },
+    { key: 'Alt+→', label: 'Next Pg' },
+    { key: 'Alt+←', label: 'Prev Pg' },
+  ];
+
   if (loading) {
     return (
       <Layout>
@@ -854,8 +883,11 @@ const SalesDashboard = () => {
 
   return (
     <Layout>
-      <div className="space-y-6" data-testid="sales-dashboard">
-        {/* Header */}
+      <div className="space-y-6 pb-10" data-testid="sales-dashboard">
+        {/* Shortcut Help Modal */}
+        <ShortcutHelpModal open={shortcutHelpOpen} onOpenChange={setShortcutHelpOpen} />
+        {/* Floating Shortcut Bar */}
+        <ShortcutBar shortcuts={shortcutBarItems} onHelpOpen={() => setShortcutHelpOpen(true)} />
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-2">
