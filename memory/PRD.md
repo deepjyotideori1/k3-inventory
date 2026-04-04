@@ -434,6 +434,7 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] HRMS Phase 2: Performance Management (KPIs, Appraisals) - April 2026
 - [x] HRMS Phase 2: Hire Analytics (Recruitment pipeline) - April 2026
 - [x] HRMS Reports: A4/Arial PDF/Excel with Company Logo - April 2026
+- [x] Salary Certificate & Experience Certificate PDF generation per employee - April 2026
 - [x] Seed data populated: 17 employees, 4 departments, attendance/payroll/reviews/hiring data - April 2026
 
 ### P2 (Nice to Have)
