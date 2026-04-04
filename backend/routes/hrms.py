@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, Response
 from database import db
-from deps import get_current_user, require_admin
+from deps import get_current_user, require_admin, require_hrms_access
 from helpers import format_inr, log_audit, hash_password
 from datetime import datetime, timezone
 from typing import Optional, List
@@ -856,7 +856,7 @@ async def add_increment(employee_id: str, data: dict, user: dict = Depends(get_c
 # ============ DASHBOARD STATS ============
 
 @router.get("/hrms/dashboard/stats")
-async def get_hrms_dashboard_stats(user: dict = Depends(get_current_user)):
+async def get_hrms_dashboard_stats(user: dict = Depends(require_hrms_access)):
     total_employees = await db.hrms_employees.count_documents({'is_active': True})
     total_inactive = await db.hrms_employees.count_documents({'is_active': False})
     total_departments = await db.hrms_departments.count_documents({})

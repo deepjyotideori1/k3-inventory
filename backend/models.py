@@ -17,6 +17,7 @@ class UserCreate(BaseModel):
     name: str
     role: str
     warehouse_id: Optional[str] = None
+    linked_employee_id: Optional[str] = None
 
 class UserLogin(BaseModel):
     email: str
@@ -29,6 +30,8 @@ class UserResponse(BaseModel):
     role: str
     warehouse_id: Optional[str] = None
     warehouse_name: Optional[str] = None
+    allowed_dashboards: Optional[list] = None
+    linked_employee_id: Optional[str] = None
     created_at: str
     visible_password: Optional[str] = None
 

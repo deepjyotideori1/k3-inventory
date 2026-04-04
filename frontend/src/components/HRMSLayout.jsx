@@ -13,17 +13,17 @@ import HRMSSearch from './HRMSSearch';
 
 const navItems = [
   { path: '/hrms', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/hrms/employees', label: 'Employees', icon: Users },
-  { path: '/hrms/departments', label: 'Departments', icon: Building2 },
+  { path: '/hrms/employees', label: 'Employees', icon: Users, roles: ['admin', 'hr_admin'] },
+  { path: '/hrms/departments', label: 'Departments', icon: Building2, roles: ['admin', 'hr_admin'] },
   { path: '/hrms/attendance', label: 'Attendance', icon: CalendarDays },
   { path: '/hrms/payroll', label: 'Payroll', icon: DollarSign },
-  { path: '/hrms/performance', label: 'Performance', icon: Target },
-  { path: '/hrms/hiring', label: 'Hire Analytics', icon: Briefcase },
+  { path: '/hrms/performance', label: 'Performance', icon: Target, roles: ['admin', 'hr_admin'] },
+  { path: '/hrms/hiring', label: 'Hire Analytics', icon: Briefcase, roles: ['admin', 'hr_admin'] },
   { path: '/hrms/settings', label: 'Company Settings', icon: Settings, roles: ['admin', 'hr_admin'] },
 ];
 
 const HRMSLayout = ({ children }) => {
-  const { user, logout } = useAuth();
+  const { user, logout, canAccessInventory } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -97,6 +97,7 @@ const HRMSLayout = ({ children }) => {
             })}
 
             <div className="pt-4 mt-4 border-t border-slate-700">
+              {canAccessInventory && (
               <button
                 onClick={handleSwitchDashboard}
                 className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-amber-300 hover:bg-slate-800 transition-colors"
@@ -105,6 +106,7 @@ const HRMSLayout = ({ children }) => {
                 <ArrowLeftRight className="w-4 h-4" />
                 Switch to Inventory
               </button>
+              )}
             </div>
           </nav>
 
@@ -116,7 +118,12 @@ const HRMSLayout = ({ children }) => {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{user?.name}</p>
-                <p className="text-xs text-slate-400 truncate">{user?.role}</p>
+                <p className="text-xs text-slate-400 truncate">{
+                  user?.role === 'admin' ? 'Super Admin' :
+                  user?.role === 'hr_admin' ? 'HR Admin' :
+                  user?.role === 'hrms_employee' ? 'Employee' :
+                  user?.role
+                }</p>
               </div>
             </div>
             <Button

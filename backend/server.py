@@ -106,6 +106,35 @@ async def init_default_data():
         ]
         await db.users.insert_many(warehouse_users)
 
+        # HRMS-specific users
+        hr_admin_user = {
+            'id': str(uuid.uuid4()),
+            'email': 'hr@k3gas.com',
+            'password': hash_password('Hr@123'),
+            'name': 'HR Admin',
+            'role': 'hr_admin',
+            'warehouse_id': None,
+            'linked_employee_id': '',
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+        existing_hr = await db.users.find_one({'email': 'hr@k3gas.com'})
+        if not existing_hr:
+            await db.users.insert_one(hr_admin_user)
+
+        hrms_employee_user = {
+            'id': str(uuid.uuid4()),
+            'email': 'employee@k3gas.com',
+            'password': hash_password('Employee@123'),
+            'name': 'Ankit Sharma',
+            'role': 'hrms_employee',
+            'warehouse_id': None,
+            'linked_employee_id': '',
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+        existing_emp = await db.users.find_one({'email': 'employee@k3gas.com'})
+        if not existing_emp:
+            await db.users.insert_one(hrms_employee_user)
+
         items = [
             {'id': str(uuid.uuid4()), 'name': '15kg Cylinder', 'unit': 'units', 'category': 'LPG Cylinder', 'created_at': datetime.now(timezone.utc).isoformat()},
             {'id': str(uuid.uuid4()), 'name': '21kg Cylinder', 'unit': 'units', 'category': 'LPG Cylinder', 'created_at': datetime.now(timezone.utc).isoformat()},

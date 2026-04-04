@@ -115,9 +115,16 @@ async def get_attendance(
     user: dict = Depends(get_current_user)
 ):
     query = {}
+    # Employee role: restrict to own records
+    if user.get('role') == 'hrms_employee':
+        linked = user.get('linked_employee_id', '')
+        if linked:
+            query['employee_id'] = linked
+        else:
+            return {'records': [], 'total': 0, 'page': 1, 'total_pages': 1}
     if date:
         query['date'] = date
-    if employee_id:
+    if employee_id and user.get('role') != 'hrms_employee':
         query['employee_id'] = employee_id
     if start_date and end_date:
         query['date'] = {'$gte': start_date, '$lte': end_date}

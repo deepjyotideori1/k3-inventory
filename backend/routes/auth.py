@@ -40,6 +40,15 @@ async def login(data: UserLogin):
         if warehouse:
             warehouse_name = warehouse['name']
     
+    # Determine allowed dashboards based on role
+    role = user['role']
+    if role == 'admin':
+        allowed_dashboards = ['inventory', 'hrms']
+    elif role in ('hr_admin', 'hrms_employee'):
+        allowed_dashboards = ['hrms']
+    else:
+        allowed_dashboards = ['inventory']
+
     return LoginResponse(
         token=token,
         user=UserResponse(
@@ -49,6 +58,8 @@ async def login(data: UserLogin):
             role=user['role'],
             warehouse_id=user.get('warehouse_id'),
             warehouse_name=warehouse_name,
+            allowed_dashboards=allowed_dashboards,
+            linked_employee_id=user.get('linked_employee_id'),
             created_at=user['created_at']
         )
     )
@@ -61,6 +72,14 @@ async def get_me(user: dict = Depends(get_current_user)):
         if warehouse:
             warehouse_name = warehouse['name']
     
+    role = user['role']
+    if role == 'admin':
+        allowed_dashboards = ['inventory', 'hrms']
+    elif role in ('hr_admin', 'hrms_employee'):
+        allowed_dashboards = ['hrms']
+    else:
+        allowed_dashboards = ['inventory']
+
     return UserResponse(
         id=user['id'],
         email=user['email'],
@@ -68,6 +87,8 @@ async def get_me(user: dict = Depends(get_current_user)):
         role=user['role'],
         warehouse_id=user.get('warehouse_id'),
         warehouse_name=warehouse_name,
+        allowed_dashboards=allowed_dashboards,
+        linked_employee_id=user.get('linked_employee_id'),
         created_at=user['created_at']
     )
 
@@ -132,6 +153,8 @@ async def get_users(user: dict = Depends(require_admin)):
             role=u['role'],
             warehouse_id=u.get('warehouse_id'),
             warehouse_name=warehouse_name,
+            allowed_dashboards=(['inventory', 'hrms'] if u['role'] == 'admin' else ['hrms'] if u['role'] in ('hr_admin', 'hrms_employee') else ['inventory']),
+            linked_employee_id=u.get('linked_employee_id'),
             created_at=u['created_at'],
             visible_password=u.get('visible_password')
         ))
@@ -161,10 +184,11 @@ async def create_user(data: UserCreate, user: dict = Depends(require_admin)):
         'id': str(uuid.uuid4()),
         'email': data.email,
         'password': hash_password(data.password),
-        'visible_password': data.password,  # Store visible password for admin reference
+        'visible_password': data.password,
         'name': data.name,
         'role': data.role,
         'warehouse_id': data.warehouse_id,
+        'linked_employee_id': getattr(data, 'linked_employee_id', '') or '',
         'created_at': datetime.now(timezone.utc).isoformat()
     }
     await db.users.insert_one(new_user)
@@ -182,6 +206,8 @@ async def create_user(data: UserCreate, user: dict = Depends(require_admin)):
         role=new_user['role'],
         warehouse_id=new_user.get('warehouse_id'),
         warehouse_name=warehouse_name,
+        allowed_dashboards=(['inventory', 'hrms'] if new_user['role'] == 'admin' else ['hrms'] if new_user['role'] in ('hr_admin', 'hrms_employee') else ['inventory']),
+        linked_employee_id=new_user.get('linked_employee_id'),
         created_at=new_user['created_at'],
         visible_password=new_user['visible_password']
     )

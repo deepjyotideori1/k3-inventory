@@ -77,8 +77,12 @@ export const AuthProvider = ({ children }) => {
     maintenanceMessage,
     refreshSettings,
     isAdmin: user?.role === 'admin',
+    isHRAdmin: user?.role === 'hr_admin',
+    isHRMSEmployee: user?.role === 'hrms_employee',
     isWarehouseManager: user?.role === 'warehouse_manager',
     isSalesExecutive: user?.role === 'sales_executive',
+    canAccessHRMS: ['admin', 'hr_admin', 'hrms_employee'].includes(user?.role),
+    canAccessInventory: ['admin', 'warehouse_manager', 'sales_executive'].includes(user?.role),
   };
 
   return (

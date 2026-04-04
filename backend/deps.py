@@ -28,3 +28,15 @@ async def require_admin(user: dict = Depends(get_current_user)):
     if user['role'] != 'admin':
         raise HTTPException(status_code=403, detail="Admin access required")
     return user
+
+
+async def require_hrms_access(user: dict = Depends(get_current_user)):
+    if user['role'] not in ('admin', 'hr_admin', 'hrms_employee'):
+        raise HTTPException(status_code=403, detail="HRMS access required")
+    return user
+
+
+async def require_hrms_admin(user: dict = Depends(get_current_user)):
+    if user['role'] not in ('admin', 'hr_admin'):
+        raise HTTPException(status_code=403, detail="Admin or HR Admin access required")
+    return user
