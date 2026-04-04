@@ -9,7 +9,7 @@ import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { Plus, Search, Edit, Trash2, Eye, Upload, ChevronLeft, ChevronRight, UserCircle, IndianRupee, History, Download, FileText } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Eye, Upload, ChevronLeft, ChevronRight, UserCircle, IndianRupee, History, Download, FileText, AlertCircle, CheckCircle2, XCircle, FileSpreadsheet, Loader2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatINR } from '../lib/utils';
 
@@ -41,6 +41,16 @@ const EmployeeManagement = () => {
   const [incrementDialogOpen, setIncrementDialogOpen] = useState(false);
   const [incrementForm, setIncrementForm] = useState({ new_salary: '', reason: '', date: '' });
   const [saving, setSaving] = useState(false);
+
+  // Bulk upload state
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkStep, setBulkStep] = useState(1); // 1=upload, 2=preview, 3=result
+  const [bulkFile, setBulkFile] = useState(null);
+  const [bulkValidating, setBulkValidating] = useState(false);
+  const [bulkData, setBulkData] = useState(null);
+  const [bulkMode, setBulkMode] = useState('skip');
+  const [bulkConfirming, setBulkConfirming] = useState(false);
+  const [bulkResult, setBulkResult] = useState(null);
 
   const fetchDepartments = useCallback(async () => {
     try {
@@ -172,6 +182,86 @@ const EmployeeManagement = () => {
     } catch (e) { toast.error(`Failed to export ${format.toUpperCase()}`); }
   };
 
+  // ===== BULK UPLOAD HANDLERS =====
+  const openBulkUpload = () => {
+    setBulkStep(1);
+    setBulkFile(null);
+    setBulkData(null);
+    setBulkResult(null);
+    setBulkMode('skip');
+    setBulkOpen(true);
+  };
+
+  const downloadTemplate = async () => {
+    try {
+      const res = await api.get('/hrms/employees/bulk-upload/template', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'Employee_Upload_Template.xlsx';
+      a.click();
+      window.URL.revokeObjectURL(url);
+      toast.success('Template downloaded');
+    } catch (e) { toast.error('Failed to download template'); }
+  };
+
+  const handleBulkFileChange = (e) => {
+    const f = e.target.files[0];
+    if (f) {
+      if (!f.name.endsWith('.xlsx')) {
+        toast.error('Only .xlsx files are accepted');
+        return;
+      }
+      setBulkFile(f);
+    }
+  };
+
+  const validateBulkFile = async () => {
+    if (!bulkFile) { toast.error('Select a file first'); return; }
+    setBulkValidating(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', bulkFile);
+      const res = await api.post('/hrms/employees/bulk-upload/validate', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setBulkData(res.data);
+      setBulkStep(2);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Validation failed');
+    }
+    setBulkValidating(false);
+  };
+
+  const confirmBulkUpload = async () => {
+    if (!bulkData) return;
+    setBulkConfirming(true);
+    try {
+      const res = await api.post('/hrms/employees/bulk-upload/confirm', {
+        rows: bulkData.rows.filter(r => !r.has_errors),
+        mode: bulkMode,
+      });
+      setBulkResult(res.data);
+      setBulkStep(3);
+      fetchEmployees();
+      toast.success(res.data.message);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Import failed');
+    }
+    setBulkConfirming(false);
+  };
+
+  const downloadErrorReport = async () => {
+    if (!bulkData?.errors?.length) return;
+    try {
+      const res = await api.post('/hrms/employees/bulk-upload/error-report', { errors: bulkData.errors }, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'Upload_Error_Report.xlsx';
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (e) { toast.error('Failed to download error report'); }
+  };
+
   return (
     <HRMSLayout>
       <div className="space-y-4" data-testid="employee-management">
@@ -181,9 +271,12 @@ const EmployeeManagement = () => {
             <h1 className="text-2xl font-bold text-slate-800">Employees</h1>
             <p className="text-slate-500 text-sm">{total} total employees</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button variant="outline" size="sm" onClick={() => downloadReport('pdf')} data-testid="export-employees-pdf"><FileText className="w-4 h-4 mr-1" /> PDF</Button>
             <Button variant="outline" size="sm" onClick={() => downloadReport('excel')} data-testid="export-employees-excel"><Download className="w-4 h-4 mr-1" /> Excel</Button>
+            <Button variant="outline" size="sm" onClick={openBulkUpload} className="gap-1 border-blue-300 text-blue-700 hover:bg-blue-50" data-testid="bulk-upload-btn">
+              <FileSpreadsheet className="w-4 h-4" /> Bulk Upload
+            </Button>
             <Button onClick={openAdd} className="gap-2 bg-blue-600 hover:bg-blue-700" data-testid="add-employee-btn">
               <Plus className="w-4 h-4" /> Add Employee
             </Button>
@@ -292,7 +385,6 @@ const EmployeeManagement = () => {
                 </TableBody>
               </Table>
             </div>
-            {/* Pagination */}
             {totalPages > 1 && (
               <div className="flex items-center justify-between px-4 py-3 border-t">
                 <span className="text-sm text-slate-500">Page {page} of {totalPages} ({total} total)</span>
@@ -305,6 +397,221 @@ const EmployeeManagement = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* ===== BULK UPLOAD DIALOG ===== */}
+      <Dialog open={bulkOpen} onOpenChange={(open) => { if (!open) setBulkOpen(false); }}>
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto" data-testid="bulk-upload-dialog">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="w-5 h-5 text-blue-600" />
+              Upload Employees (Bulk)
+            </DialogTitle>
+          </DialogHeader>
+
+          {/* Step indicators */}
+          <div className="flex items-center gap-2 mb-2">
+            {[
+              { n: 1, label: 'Upload File' },
+              { n: 2, label: 'Preview & Validate' },
+              { n: 3, label: 'Result' },
+            ].map((s, i) => (
+              <React.Fragment key={s.n}>
+                {i > 0 && <div className="flex-1 h-px bg-slate-200" />}
+                <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${bulkStep >= s.n ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-400'}`}>
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${bulkStep >= s.n ? 'bg-blue-600 text-white' : 'bg-slate-300 text-white'}`}>{s.n}</span>
+                  {s.label}
+                </div>
+              </React.Fragment>
+            ))}
+          </div>
+
+          {/* Step 1: Upload */}
+          {bulkStep === 1 && (
+            <div className="space-y-4 py-2">
+              <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 text-center">
+                <FileSpreadsheet className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                <p className="text-sm text-slate-600 mb-3">Upload your .xlsx file with employee data</p>
+                <div className="flex items-center justify-center gap-3">
+                  <label className="cursor-pointer">
+                    <input type="file" accept=".xlsx" className="hidden" onChange={handleBulkFileChange} data-testid="bulk-file-input" />
+                    <span className="inline-flex items-center gap-1 px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 transition cursor-pointer">
+                      <Upload className="w-4 h-4" /> Choose File
+                    </span>
+                  </label>
+                  {bulkFile && <span className="text-sm text-slate-600">{bulkFile.name}</span>}
+                </div>
+              </div>
+
+              <div className="bg-slate-50 rounded-lg p-4">
+                <p className="text-sm font-medium text-slate-700 mb-2">First time? Download the template</p>
+                <Button variant="outline" size="sm" onClick={downloadTemplate} className="gap-1" data-testid="download-template-btn">
+                  <Download className="w-4 h-4" /> Download Sample Excel Template
+                </Button>
+                <ul className="text-xs text-slate-500 mt-3 space-y-1 list-disc list-inside">
+                  <li>Required fields: Employee_ID, Full_Name, Date_of_Joining, Basic_Salary</li>
+                  <li>Date format: DD-MM-YYYY</li>
+                  <li>PAN format: ABCDE1234F | Aadhaar: 12 digits</li>
+                  <li>Department names must match existing departments in system</li>
+                </ul>
+              </div>
+
+              <div className="flex justify-end gap-3">
+                <Button variant="outline" onClick={() => setBulkOpen(false)}>Cancel</Button>
+                <Button onClick={validateBulkFile} disabled={!bulkFile || bulkValidating} className="bg-blue-600 hover:bg-blue-700 gap-1" data-testid="validate-upload-btn">
+                  {bulkValidating ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                  {bulkValidating ? 'Validating...' : 'Validate & Preview'}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 2: Preview */}
+          {bulkStep === 2 && bulkData && (
+            <div className="space-y-4 py-2">
+              {/* Summary cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                <Card><CardContent className="p-3 text-center">
+                  <p className="text-[10px] text-slate-500 font-medium">Total Rows</p>
+                  <p className="text-lg font-bold text-slate-700" data-testid="bulk-total-rows">{bulkData.total_rows}</p>
+                </CardContent></Card>
+                <Card className="bg-green-50"><CardContent className="p-3 text-center">
+                  <p className="text-[10px] text-green-600 font-medium">Valid</p>
+                  <p className="text-lg font-bold text-green-700" data-testid="bulk-valid-count">{bulkData.valid_count}</p>
+                </CardContent></Card>
+                <Card className="bg-red-50"><CardContent className="p-3 text-center">
+                  <p className="text-[10px] text-red-600 font-medium">Errors</p>
+                  <p className="text-lg font-bold text-red-600" data-testid="bulk-error-count">{bulkData.error_count}</p>
+                </CardContent></Card>
+                <Card className="bg-blue-50"><CardContent className="p-3 text-center">
+                  <p className="text-[10px] text-blue-600 font-medium">New</p>
+                  <p className="text-lg font-bold text-blue-700">{bulkData.new_count}</p>
+                </CardContent></Card>
+                <Card className="bg-amber-50"><CardContent className="p-3 text-center">
+                  <p className="text-[10px] text-amber-600 font-medium">Existing</p>
+                  <p className="text-lg font-bold text-amber-700">{bulkData.update_count}</p>
+                </CardContent></Card>
+              </div>
+
+              {/* Error alert */}
+              {bulkData.error_count > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-red-700">{bulkData.error_count} row(s) have errors and will be skipped</p>
+                    <Button variant="outline" size="sm" className="mt-2 text-xs border-red-300 text-red-700" onClick={downloadErrorReport} data-testid="download-error-report">
+                      <Download className="w-3 h-3 mr-1" /> Download Error Report
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Duplicate handling */}
+              {bulkData.update_count > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <p className="text-sm font-medium text-amber-800 mb-2">{bulkData.update_count} employee(s) already exist in the system</p>
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="radio" name="bulkMode" value="skip" checked={bulkMode === 'skip'} onChange={() => setBulkMode('skip')} className="accent-amber-600" />
+                      <span className="text-sm text-slate-700">Skip duplicates</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="radio" name="bulkMode" value="overwrite" checked={bulkMode === 'overwrite'} onChange={() => setBulkMode('overwrite')} className="accent-amber-600" />
+                      <span className="text-sm text-slate-700">Overwrite existing</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* Preview table */}
+              <div className="max-h-[300px] overflow-auto border rounded-lg">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 z-10">
+                    <tr className="bg-slate-100 text-left text-slate-600">
+                      <th className="p-2 font-medium">Row</th>
+                      <th className="p-2 font-medium">Status</th>
+                      <th className="p-2 font-medium">Employee ID</th>
+                      <th className="p-2 font-medium">Name</th>
+                      <th className="p-2 font-medium">Department</th>
+                      <th className="p-2 font-medium">Designation</th>
+                      <th className="p-2 font-medium">DOJ</th>
+                      <th className="p-2 font-medium">Salary</th>
+                      <th className="p-2 font-medium">Issues</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bulkData.rows.map((row, i) => (
+                      <tr key={i} className={`border-b ${row.has_errors ? 'bg-red-50' : row.is_existing ? 'bg-amber-50' : 'hover:bg-slate-50'}`} data-testid={`bulk-row-${i}`}>
+                        <td className="p-2 text-slate-400">{row.row_num}</td>
+                        <td className="p-2">
+                          {row.has_errors ? (
+                            <XCircle className="w-4 h-4 text-red-500" />
+                          ) : row.is_existing ? (
+                            <AlertCircle className="w-4 h-4 text-amber-500" />
+                          ) : (
+                            <CheckCircle2 className="w-4 h-4 text-green-500" />
+                          )}
+                        </td>
+                        <td className="p-2 font-mono">{row.employee_id}</td>
+                        <td className="p-2 font-medium">{row.name}</td>
+                        <td className="p-2">{row.department || '-'}</td>
+                        <td className="p-2">{row.designation || '-'}</td>
+                        <td className="p-2">{row.date_of_joining}</td>
+                        <td className="p-2">{row.basic_salary?.toLocaleString('en-IN')}</td>
+                        <td className="p-2">
+                          {row.has_errors && (
+                            <span className="text-red-600">{row.errors.join('; ')}</span>
+                          )}
+                          {!row.has_errors && row.is_existing && (
+                            <span className="text-amber-600">Already exists</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex justify-between">
+                <Button variant="outline" onClick={() => setBulkStep(1)}>
+                  <ChevronLeft className="w-4 h-4 mr-1" /> Back
+                </Button>
+                <div className="flex gap-3">
+                  <Button variant="outline" onClick={() => setBulkOpen(false)}>Cancel</Button>
+                  <Button onClick={confirmBulkUpload} disabled={bulkConfirming || bulkData.valid_count === 0} className="bg-green-600 hover:bg-green-700 gap-1" data-testid="confirm-upload-btn">
+                    {bulkConfirming ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                    {bulkConfirming ? 'Importing...' : `Confirm Import (${bulkData.valid_count} employees)`}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Result */}
+          {bulkStep === 3 && bulkResult && (
+            <div className="space-y-4 py-4 text-center">
+              <CheckCircle2 className="w-14 h-14 text-green-500 mx-auto" />
+              <h3 className="text-lg font-bold text-slate-800">Import Complete</h3>
+              <div className="grid grid-cols-3 gap-3 max-w-sm mx-auto">
+                <Card className="bg-green-50"><CardContent className="p-3 text-center">
+                  <p className="text-[10px] text-green-600 font-medium">Created</p>
+                  <p className="text-xl font-bold text-green-700" data-testid="bulk-created">{bulkResult.created}</p>
+                </CardContent></Card>
+                <Card className="bg-blue-50"><CardContent className="p-3 text-center">
+                  <p className="text-[10px] text-blue-600 font-medium">Updated</p>
+                  <p className="text-xl font-bold text-blue-700" data-testid="bulk-updated">{bulkResult.updated}</p>
+                </CardContent></Card>
+                <Card className="bg-slate-50"><CardContent className="p-3 text-center">
+                  <p className="text-[10px] text-slate-500 font-medium">Skipped</p>
+                  <p className="text-xl font-bold text-slate-600" data-testid="bulk-skipped">{bulkResult.skipped}</p>
+                </CardContent></Card>
+              </div>
+              <Button onClick={() => setBulkOpen(false)} className="bg-blue-600 hover:bg-blue-700" data-testid="bulk-done-btn">
+                Done
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -429,8 +736,6 @@ const EmployeeManagement = () => {
                   </div>
                 </div>
               )}
-
-              {/* Certificates & Documents */}
               <div className="border-t pt-3">
                 <h4 className="text-sm font-semibold text-slate-600 flex items-center gap-2 mb-3"><FileText className="w-4 h-4" /> Certificates & Documents</h4>
                 <div className="flex flex-wrap gap-2">

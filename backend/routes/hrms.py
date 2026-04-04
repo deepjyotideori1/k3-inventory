@@ -8,6 +8,7 @@ from io import BytesIO
 from bson import Binary
 import uuid
 import base64
+import re
 
 router = APIRouter()
 
@@ -154,6 +155,17 @@ async def get_employees(
     }
 
 
+# Upload logs endpoint - must be before {employee_id} route to avoid path conflict
+@router.get("/hrms/employees/upload-logs")
+async def get_upload_logs(user: dict = Depends(get_current_user)):
+    if user.get('role') not in ('admin', 'hr_admin'):
+        raise HTTPException(status_code=403, detail="Admin or HR Admin required")
+    logs = []
+    async for log in db.hrms_upload_logs.find({}, {'_id': 0}).sort('created_at', -1).limit(20):
+        logs.append(log)
+    return logs
+
+
 @router.get("/hrms/employees/{employee_id}")
 async def get_employee(employee_id: str, user: dict = Depends(get_current_user)):
     emp = await db.hrms_employees.find_one({'id': employee_id}, {'_id': 0})
@@ -294,6 +306,517 @@ async def upload_employee_photo(employee_id: str, file: UploadFile = File(...), 
         {'$set': {'photo_url': data_uri, 'updated_at': datetime.now(timezone.utc).isoformat()}}
     )
     return {"message": "Photo uploaded", "photo_url": data_uri}
+
+
+# ============ EMPLOYEE BULK UPLOAD ============
+
+BULK_TEMPLATE_HEADERS = [
+    'Employee_ID', 'Full_Name', 'Gender', 'Date_of_Birth', 'Phone', 'Email',
+    'Address', 'Department', 'Designation', 'Date_of_Joining', 'Employment_Type',
+    'Basic_Salary', 'HRA', 'Allowances', 'Bank_Account_Number', 'IFSC_Code',
+    'PAN_Number', 'Aadhaar_Number', 'PF_Applicable', 'ESI_Applicable'
+]
+
+
+def _parse_date_ddmmyyyy(val):
+    """Parse DD-MM-YYYY or DD/MM/YYYY to YYYY-MM-DD"""
+    if not val:
+        return ''
+    s = str(val).strip()
+    for fmt in ('%d-%m-%Y', '%d/%m/%Y', '%Y-%m-%d'):
+        try:
+            return datetime.strptime(s, fmt).strftime('%Y-%m-%d')
+        except ValueError:
+            continue
+    return None
+
+
+def _validate_pan(pan):
+    if not pan:
+        return True
+    return bool(re.match(r'^[A-Z]{5}[0-9]{4}[A-Z]$', str(pan).strip().upper()))
+
+
+def _validate_aadhaar(aadhaar):
+    if not aadhaar:
+        return True
+    cleaned = re.sub(r'\s', '', str(aadhaar).strip())
+    return bool(re.match(r'^\d{12}$', cleaned))
+
+
+def _capitalize_name(name):
+    if not name:
+        return ''
+    return ' '.join(w.capitalize() for w in str(name).strip().split())
+
+
+@router.get("/hrms/employees/bulk-upload/template")
+async def download_bulk_template(user: dict = Depends(get_current_user)):
+    if user.get('role') not in ('admin', 'hr_admin'):
+        raise HTTPException(status_code=403, detail="Admin or HR Admin required")
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Employee Upload"
+
+    hf = Font(name='Arial', size=10, bold=True, color='FFFFFF')
+    hfill = PatternFill(start_color='264785', end_color='264785', fill_type='solid')
+    border = Border(
+        left=Side(style='thin', color='CCCCCC'), right=Side(style='thin', color='CCCCCC'),
+        top=Side(style='thin', color='CCCCCC'), bottom=Side(style='thin', color='CCCCCC')
+    )
+
+    # Title
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(BULK_TEMPLATE_HEADERS))
+    ws['A1'] = 'Employee Bulk Upload Template'
+    ws['A1'].font = Font(name='Arial', size=14, bold=True)
+    ws['A1'].alignment = Alignment(horizontal='center')
+
+    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=len(BULK_TEMPLATE_HEADERS))
+    ws['A2'] = 'Fill in employee data below. Date format: DD-MM-YYYY. Required fields: Employee_ID, Full_Name, Date_of_Joining, Basic_Salary'
+    ws['A2'].font = Font(name='Arial', size=8, color='666666')
+    ws['A2'].alignment = Alignment(horizontal='center')
+
+    # Headers
+    for col, h in enumerate(BULK_TEMPLATE_HEADERS, 1):
+        cell = ws.cell(row=4, column=col, value=h)
+        cell.font = hf
+        cell.fill = hfill
+        cell.alignment = Alignment(horizontal='center')
+        cell.border = border
+
+    # Sample row
+    sample = ['K3-EMP-001', 'Rahul Kumar', 'Male', '15-06-1990', '9876543210', 'rahul@example.com',
+              'Itanagar, Arunachal Pradesh', 'Operations', 'Manager', '01-01-2024', 'Full-time',
+              25000, 5000, 3000, '1234567890', 'SBIN0001234',
+              'ABCDE1234F', '123456789012', 'Yes', 'Yes']
+    for col, val in enumerate(sample, 1):
+        cell = ws.cell(row=5, column=col, value=val)
+        cell.font = Font(name='Arial', size=9, color='888888', italic=True)
+        cell.border = border
+
+    widths = [14, 20, 8, 14, 14, 22, 28, 16, 16, 14, 12, 12, 8, 10, 18, 14, 14, 14, 12, 12]
+    for i, w in enumerate(widths):
+        ws.column_dimensions[chr(65 + i) if i < 26 else 'A' + chr(65 + i - 26)].width = w
+
+    # Instructions sheet
+    instr = wb.create_sheet("Instructions")
+    instructions = [
+        ['Field', 'Required', 'Format / Notes'],
+        ['Employee_ID', 'Yes', 'Unique ID for the employee (e.g., K3-EMP-001). No duplicates allowed.'],
+        ['Full_Name', 'Yes', 'Full name. Will be auto-capitalized.'],
+        ['Gender', 'No', 'Male / Female / Other'],
+        ['Date_of_Birth', 'No', 'DD-MM-YYYY format'],
+        ['Phone', 'No', 'Mobile number (10 digits)'],
+        ['Email', 'No', 'Valid email address'],
+        ['Address', 'No', 'Full address text'],
+        ['Department', 'No', 'Department name (must exist in system or will use default)'],
+        ['Designation', 'No', 'Job role / title'],
+        ['Date_of_Joining', 'Yes', 'DD-MM-YYYY format'],
+        ['Employment_Type', 'No', 'Full-time / Contract / Part-time / Intern'],
+        ['Basic_Salary', 'Yes', 'Numeric value (monthly basic salary)'],
+        ['HRA', 'No', 'Numeric value'],
+        ['Allowances', 'No', 'Numeric value (other allowances)'],
+        ['Bank_Account_Number', 'No', 'Bank account number'],
+        ['IFSC_Code', 'No', 'Bank IFSC code'],
+        ['PAN_Number', 'No', 'PAN in format: ABCDE1234F'],
+        ['Aadhaar_Number', 'No', '12-digit Aadhaar number'],
+        ['PF_Applicable', 'No', 'Yes / No'],
+        ['ESI_Applicable', 'No', 'Yes / No'],
+    ]
+    for r, row in enumerate(instructions, 1):
+        for c, val in enumerate(row, 1):
+            cell = instr.cell(row=r, column=c, value=val)
+            if r == 1:
+                cell.font = Font(name='Arial', size=10, bold=True, color='FFFFFF')
+                cell.fill = PatternFill(start_color='264785', end_color='264785', fill_type='solid')
+            else:
+                cell.font = Font(name='Arial', size=9)
+    instr.column_dimensions['A'].width = 20
+    instr.column_dimensions['B'].width = 10
+    instr.column_dimensions['C'].width = 60
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return Response(content=buf.read(),
+                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": 'attachment; filename="Employee_Upload_Template.xlsx"'})
+
+
+@router.post("/hrms/employees/bulk-upload/validate")
+async def validate_bulk_upload(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    if user.get('role') not in ('admin', 'hr_admin'):
+        raise HTTPException(status_code=403, detail="Admin or HR Admin required")
+    if not file.filename.endswith('.xlsx'):
+        raise HTTPException(status_code=400, detail="Only .xlsx files are accepted")
+
+    from openpyxl import load_workbook
+
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large (max 10MB)")
+
+    try:
+        wb = load_workbook(BytesIO(content), data_only=True)
+        ws = wb.active
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid Excel file")
+
+    # Find header row
+    header_row = None
+    for row_idx in range(1, min(10, ws.max_row + 1)):
+        vals = [str(ws.cell(row=row_idx, column=c).value or '').strip() for c in range(1, ws.max_column + 1)]
+        if 'Employee_ID' in vals and 'Full_Name' in vals:
+            header_row = row_idx
+            break
+    if not header_row:
+        raise HTTPException(status_code=400, detail="Could not find headers. Ensure 'Employee_ID' and 'Full_Name' columns exist.")
+
+    headers = [str(ws.cell(row=header_row, column=c).value or '').strip() for c in range(1, ws.max_column + 1)]
+    col_map = {}
+    for i, h in enumerate(headers):
+        for tmpl in BULK_TEMPLATE_HEADERS:
+            if h.lower().replace(' ', '_') == tmpl.lower().replace(' ', '_') or h.lower() == tmpl.lower():
+                col_map[tmpl] = i
+                break
+
+    # Load departments for name matching
+    depts = {}
+    async for dept in db.hrms_departments.find({}, {'_id': 0}):
+        depts[dept['name'].lower().strip()] = dept['id']
+
+    # Load existing employee IDs for duplicate check
+    existing_emp_ids = set()
+    async for emp in db.hrms_employees.find({}, {'_id': 0, 'employee_id': 1}):
+        existing_emp_ids.add(emp.get('employee_id', '').strip().upper())
+
+    validated_rows = []
+    errors = []
+    seen_ids = set()
+
+    for row_idx in range(header_row + 1, ws.max_row + 1):
+        row_vals = [ws.cell(row=row_idx, column=c + 1).value for c in range(len(headers))]
+        # Skip empty rows
+        if all(v is None or str(v).strip() == '' for v in row_vals):
+            continue
+
+        def get_val(col_name):
+            idx = col_map.get(col_name)
+            if idx is None:
+                return ''
+            val = row_vals[idx]
+            return str(val).strip() if val is not None else ''
+
+        row_num = row_idx
+        row_errors = []
+
+        emp_id = get_val('Employee_ID').strip()
+        full_name = get_val('Full_Name').strip()
+        doj_raw = get_val('Date_of_Joining')
+        salary_raw = get_val('Basic_Salary')
+
+        # Required field checks
+        if not emp_id:
+            row_errors.append('Employee_ID is required')
+        if not full_name:
+            row_errors.append('Full_Name is required')
+        if not doj_raw:
+            row_errors.append('Date_of_Joining is required')
+        if not salary_raw:
+            row_errors.append('Basic_Salary is required')
+
+        # Duplicate ID in file
+        if emp_id:
+            if emp_id.upper() in seen_ids:
+                row_errors.append(f'Duplicate Employee_ID in file: {emp_id}')
+            seen_ids.add(emp_id.upper())
+
+        # Check if exists in DB
+        is_existing = emp_id.upper() in existing_emp_ids if emp_id else False
+
+        # Parse dates
+        doj = _parse_date_ddmmyyyy(doj_raw) if doj_raw else ''
+        if doj_raw and doj is None:
+            row_errors.append(f'Invalid Date_of_Joining format: {doj_raw} (use DD-MM-YYYY)')
+            doj = ''
+
+        dob_raw = get_val('Date_of_Birth')
+        dob = _parse_date_ddmmyyyy(dob_raw) if dob_raw else ''
+        if dob_raw and dob is None:
+            row_errors.append(f'Invalid Date_of_Birth format: {dob_raw} (use DD-MM-YYYY)')
+            dob = ''
+
+        # Parse salary
+        try:
+            basic_salary = float(salary_raw) if salary_raw else 0
+        except (ValueError, TypeError):
+            row_errors.append(f'Invalid Basic_Salary: {salary_raw}')
+            basic_salary = 0
+
+        try:
+            hra = float(get_val('HRA')) if get_val('HRA') else 0
+        except (ValueError, TypeError):
+            row_errors.append('Invalid HRA value')
+            hra = 0
+
+        try:
+            allowances = float(get_val('Allowances')) if get_val('Allowances') else 0
+        except (ValueError, TypeError):
+            row_errors.append('Invalid Allowances value')
+            allowances = 0
+
+        # Validate PAN
+        pan = get_val('PAN_Number').upper()
+        if pan and not _validate_pan(pan):
+            row_errors.append(f'Invalid PAN format: {pan} (expected: ABCDE1234F)')
+
+        # Validate Aadhaar
+        aadhaar = re.sub(r'\s', '', get_val('Aadhaar_Number'))
+        if aadhaar and not _validate_aadhaar(aadhaar):
+            row_errors.append(f'Invalid Aadhaar: {aadhaar} (expected 12 digits)')
+
+        # Resolve department
+        dept_name = get_val('Department').strip()
+        dept_id = ''
+        if dept_name:
+            dept_id = depts.get(dept_name.lower(), '')
+            if not dept_id:
+                row_errors.append(f'Department not found: "{dept_name}". Create it first or leave blank.')
+
+        # Employment type
+        emp_type_raw = get_val('Employment_Type').strip().lower().replace('-', '_').replace(' ', '_')
+        emp_type_map = {'full_time': 'full_time', 'fulltime': 'full_time', 'contract': 'contract',
+                        'part_time': 'part_time', 'parttime': 'part_time', 'intern': 'intern'}
+        employment_type = emp_type_map.get(emp_type_raw, 'full_time')
+
+        gender_raw = get_val('Gender').strip().lower()
+        gender = gender_raw if gender_raw in ('male', 'female', 'other') else ''
+
+        pf_applicable = get_val('PF_Applicable').strip().lower() in ('yes', 'y', 'true', '1')
+        esi_applicable = get_val('ESI_Applicable').strip().lower() in ('yes', 'y', 'true', '1')
+
+        row_data = {
+            'row_num': row_num,
+            'employee_id': emp_id,
+            'name': _capitalize_name(full_name),
+            'gender': gender,
+            'date_of_birth': dob,
+            'phone': get_val('Phone'),
+            'email': get_val('Email').strip().lower(),
+            'address': get_val('Address'),
+            'department': dept_name,
+            'department_id': dept_id,
+            'designation': get_val('Designation'),
+            'date_of_joining': doj,
+            'employment_type': employment_type,
+            'basic_salary': basic_salary,
+            'hra': hra,
+            'other_allowances': allowances,
+            'bank_account_no': get_val('Bank_Account_Number'),
+            'ifsc_code': get_val('IFSC_Code').upper(),
+            'pan_number': pan,
+            'aadhar_number': aadhaar,
+            'pf_applicable': pf_applicable,
+            'esi_applicable': esi_applicable,
+            'is_existing': is_existing,
+            'errors': row_errors,
+            'has_errors': len(row_errors) > 0,
+        }
+        validated_rows.append(row_data)
+        if row_errors:
+            errors.append({'row': row_num, 'employee_id': emp_id, 'name': full_name, 'errors': row_errors})
+
+    total = len(validated_rows)
+    valid_count = sum(1 for r in validated_rows if not r['has_errors'])
+    error_count = sum(1 for r in validated_rows if r['has_errors'])
+    new_count = sum(1 for r in validated_rows if not r['has_errors'] and not r['is_existing'])
+    update_count = sum(1 for r in validated_rows if not r['has_errors'] and r['is_existing'])
+
+    return {
+        'total_rows': total,
+        'valid_count': valid_count,
+        'error_count': error_count,
+        'new_count': new_count,
+        'update_count': update_count,
+        'rows': validated_rows,
+        'errors': errors,
+        'departments_available': list(depts.keys()),
+    }
+
+
+@router.post("/hrms/employees/bulk-upload/confirm")
+async def confirm_bulk_upload(data: dict, user: dict = Depends(get_current_user)):
+    if user.get('role') not in ('admin', 'hr_admin'):
+        raise HTTPException(status_code=403, detail="Admin or HR Admin required")
+
+    rows = data.get('rows', [])
+    mode = data.get('mode', 'skip')  # 'skip' or 'overwrite'
+
+    if not rows:
+        raise HTTPException(status_code=400, detail="No rows to import")
+
+    created = 0
+    updated = 0
+    skipped = 0
+
+    for row in rows:
+        if row.get('has_errors'):
+            skipped += 1
+            continue
+
+        emp_id = row.get('employee_id', '').strip()
+        if not emp_id:
+            skipped += 1
+            continue
+
+        existing = await db.hrms_employees.find_one({'employee_id': emp_id})
+
+        if existing:
+            if mode == 'skip':
+                skipped += 1
+                continue
+            # Overwrite mode: update existing
+            update_fields = {
+                'name': row.get('name', existing.get('name', '')),
+                'gender': row.get('gender', '') or existing.get('gender', ''),
+                'date_of_birth': row.get('date_of_birth', '') or existing.get('date_of_birth', ''),
+                'phone': row.get('phone', '') or existing.get('phone', ''),
+                'email': row.get('email', '') or existing.get('email', ''),
+                'address': row.get('address', '') or existing.get('address', ''),
+                'designation': row.get('designation', '') or existing.get('designation', ''),
+                'date_of_joining': row.get('date_of_joining', '') or existing.get('date_of_joining', ''),
+                'employment_type': row.get('employment_type', 'full_time'),
+                'basic_salary': float(row.get('basic_salary', 0)),
+                'hra': float(row.get('hra', 0)),
+                'other_allowances': float(row.get('other_allowances', 0)),
+                'bank_account_no': row.get('bank_account_no', '') or existing.get('bank_account_no', ''),
+                'ifsc_code': row.get('ifsc_code', '') or existing.get('ifsc_code', ''),
+                'pan_number': row.get('pan_number', '') or existing.get('pan_number', ''),
+                'aadhar_number': row.get('aadhar_number', '') or existing.get('aadhar_number', ''),
+                'updated_at': datetime.now(timezone.utc).isoformat(),
+            }
+            if row.get('department_id'):
+                update_fields['department_id'] = row['department_id']
+            await db.hrms_employees.update_one({'employee_id': emp_id}, {'$set': update_fields})
+            updated += 1
+        else:
+            # Create new
+            employee = {
+                'id': str(uuid.uuid4()),
+                'employee_id': emp_id,
+                'name': row.get('name', ''),
+                'email': row.get('email', ''),
+                'phone': row.get('phone', ''),
+                'date_of_birth': row.get('date_of_birth', ''),
+                'gender': row.get('gender', ''),
+                'address': row.get('address', ''),
+                'department_id': row.get('department_id', ''),
+                'designation': row.get('designation', ''),
+                'date_of_joining': row.get('date_of_joining', ''),
+                'employment_type': row.get('employment_type', 'full_time'),
+                'basic_salary': float(row.get('basic_salary', 0)),
+                'hra': float(row.get('hra', 0)),
+                'da': 0,
+                'other_allowances': float(row.get('other_allowances', 0)),
+                'pf_number': '',
+                'esi_number': '',
+                'pan_number': row.get('pan_number', ''),
+                'aadhar_number': row.get('aadhar_number', ''),
+                'bank_name': '',
+                'bank_account_no': row.get('bank_account_no', ''),
+                'ifsc_code': row.get('ifsc_code', ''),
+                'photo_url': '',
+                'emergency_contact_name': '',
+                'emergency_contact_phone': '',
+                'is_active': True,
+                'status': 'active',
+                'increment_history': [],
+                'created_by': user.get('id', ''),
+                'created_at': datetime.now(timezone.utc).isoformat(),
+                'updated_at': datetime.now(timezone.utc).isoformat(),
+            }
+            await db.hrms_employees.insert_one(employee)
+            created += 1
+
+    # Log upload
+    log = {
+        'id': str(uuid.uuid4()),
+        'uploaded_by': user.get('name', ''),
+        'uploaded_by_id': user.get('id', ''),
+        'mode': mode,
+        'total_rows': len(rows),
+        'created': created,
+        'updated': updated,
+        'skipped': skipped,
+        'created_at': datetime.now(timezone.utc).isoformat(),
+    }
+    await db.hrms_upload_logs.insert_one(log)
+    await log_audit(user.get('id', ''), user.get('name', ''), 'bulk_upload', 'employee', log['id'],
+                    f"Bulk upload: {created} created, {updated} updated, {skipped} skipped")
+
+    return {
+        "message": f"Import complete: {created} created, {updated} updated, {skipped} skipped",
+        "created": created,
+        "updated": updated,
+        "skipped": skipped,
+    }
+
+
+@router.post("/hrms/employees/bulk-upload/error-report")
+async def download_error_report(data: dict, user: dict = Depends(get_current_user)):
+    """Generate downloadable Excel with error details"""
+    if user.get('role') not in ('admin', 'hr_admin'):
+        raise HTTPException(status_code=403, detail="Admin or HR Admin required")
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+
+    errors = data.get('errors', [])
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Error Report"
+
+    hf = Font(name='Arial', size=10, bold=True, color='FFFFFF')
+    ef = Font(name='Arial', size=9, color='CC0000')
+    nf = Font(name='Arial', size=9)
+    hfill = PatternFill(start_color='CC3333', end_color='CC3333', fill_type='solid')
+    border = Border(left=Side(style='thin', color='CCCCCC'), right=Side(style='thin', color='CCCCCC'),
+                    top=Side(style='thin', color='CCCCCC'), bottom=Side(style='thin', color='CCCCCC'))
+
+    ws.merge_cells('A1:D1')
+    ws['A1'] = 'Employee Bulk Upload - Error Report'
+    ws['A1'].font = Font(name='Arial', size=14, bold=True, color='CC0000')
+    ws['A1'].alignment = Alignment(horizontal='center')
+
+    headers = ['Row #', 'Employee ID', 'Name', 'Errors']
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=3, column=col, value=h)
+        cell.font = hf
+        cell.fill = hfill
+        cell.border = border
+
+    for i, err in enumerate(errors):
+        row = i + 4
+        ws.cell(row=row, column=1, value=err.get('row', '')).font = nf
+        ws.cell(row=row, column=2, value=err.get('employee_id', '')).font = nf
+        ws.cell(row=row, column=3, value=err.get('name', '')).font = nf
+        ws.cell(row=row, column=4, value='; '.join(err.get('errors', []))).font = ef
+        for c in range(1, 5):
+            ws.cell(row=row, column=c).border = border
+
+    ws.column_dimensions['A'].width = 8
+    ws.column_dimensions['B'].width = 16
+    ws.column_dimensions['C'].width = 24
+    ws.column_dimensions['D'].width = 60
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return Response(content=buf.read(),
+                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": 'attachment; filename="Upload_Error_Report.xlsx"'})
 
 
 # ============ INCREMENT HISTORY ============
