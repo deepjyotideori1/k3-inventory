@@ -438,6 +438,7 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] Salary Certificate & Experience Certificate PDF generation per employee - April 2026
 - [x] Seed data populated: 17 employees, 4 departments, attendance/payroll/reviews/hiring data - April 2026
 - [x] Employee Bulk Upload (Excel Import): Template download, .xlsx upload, validation (required fields, PAN/Aadhaar/date format, duplicates), preview with error report, skip/overwrite modes, upload logs - April 2026
+- [x] Attendance Bulk Upload (Excel Import): Template with employee list, .xlsx upload, validation (employee lookup, date/status/leave-type checks, duplicate detection), preview, skip/overwrite, error report - April 2026
 
 ### P2 (Nice to Have)
 - [x] Refactor backend/server.py into smaller modules using FastAPI APIRouter (April 2026)
