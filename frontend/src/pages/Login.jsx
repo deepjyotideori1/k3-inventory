@@ -23,7 +23,7 @@ const Login = () => {
 
   useEffect(() => {
     if (user) {
-      navigate(user.role === 'admin' ? '/dashboard' : '/manager-dashboard');
+      navigate('/select-dashboard');
     }
     checkMaintenance();
   }, [user, navigate]);
@@ -47,7 +47,7 @@ const Login = () => {
       const response = await login(email, password);
       loginUser(response.data.user, response.data.token);
       toast.success('Login successful!');
-      navigate(response.data.user.role === 'admin' ? '/dashboard' : '/manager-dashboard');
+      navigate('/select-dashboard');
     } catch (err) {
       const message = err.response?.data?.detail || 'Login failed. Please try again.';
       setError(message);

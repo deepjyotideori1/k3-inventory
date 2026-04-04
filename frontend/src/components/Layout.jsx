@@ -19,16 +19,29 @@ import {
   ShoppingCart,
   MessageSquare,
   TrendingUp,
-  ShoppingBag
+  ShoppingBag,
+  ArrowLeftRight
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
+import api from '../lib/api';
+import { toast } from 'sonner';
 
 const Layout = ({ children }) => {
   const { user, logout, isAdmin, isSalesExecutive, maintenanceMode } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
+
+  const handleSwitchToHRMS = async () => {
+    try {
+      await api.post('/auth/set-dashboard', { dashboard: 'hrms' });
+      toast.success('Switching to HRMS Dashboard');
+      navigate('/hrms');
+    } catch (e) {
+      toast.error('Failed to switch dashboard');
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -181,6 +194,17 @@ const Layout = ({ children }) => {
                   </p>
                 </div>
               </div>
+              {isAdmin && (
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start text-amber-200 hover:text-amber-100 hover:bg-white/10 mb-1"
+                  onClick={handleSwitchToHRMS}
+                  data-testid="switch-to-hrms-btn"
+                >
+                  <ArrowLeftRight className="w-4 h-4 mr-2" />
+                  Switch to HRMS
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 className="w-full justify-start text-white/80 hover:text-white hover:bg-white/10"

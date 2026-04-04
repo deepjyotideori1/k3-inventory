@@ -26,6 +26,13 @@ const OrderManagement = lazy(() => import("./pages/OrderManagement"));
 const CustomerOrderReport = lazy(() => import("./pages/CustomerOrderReport"));
 const BulkMessaging = lazy(() => import("./pages/BulkMessaging"));
 
+// HRMS Pages
+const DashboardSelector = lazy(() => import("./pages/DashboardSelector"));
+const HRMSDashboard = lazy(() => import("./pages/HRMSDashboard"));
+const EmployeeManagement = lazy(() => import("./pages/EmployeeManagement"));
+const HRMSDepartments = lazy(() => import("./pages/HRMSDepartments"));
+const HRMSSettings = lazy(() => import("./pages/HRMSSettings"));
+
 // Loading fallback
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -79,13 +86,7 @@ const RoleBasedRedirect = () => {
     return <Navigate to="/login" replace />;
   }
 
-  if (user.role === 'admin') {
-    return <Navigate to="/dashboard" replace />;
-  } else if (user.role === 'sales_executive') {
-    return <Navigate to="/sales-data" replace />;
-  } else {
-    return <Navigate to="/manager-dashboard" replace />;
-  }
+  return <Navigate to="/select-dashboard" replace />;
 };
 
 function AppRoutes() {
@@ -97,6 +98,15 @@ function AppRoutes() {
 
       {/* Role-based redirect */}
       <Route path="/" element={<RoleBasedRedirect />} />
+
+      {/* Dashboard Selector */}
+      <Route path="/select-dashboard" element={<ProtectedRoute><DashboardSelector /></ProtectedRoute>} />
+
+      {/* HRMS Routes */}
+      <Route path="/hrms" element={<ProtectedRoute><HRMSDashboard /></ProtectedRoute>} />
+      <Route path="/hrms/employees" element={<ProtectedRoute><EmployeeManagement /></ProtectedRoute>} />
+      <Route path="/hrms/departments" element={<ProtectedRoute><HRMSDepartments /></ProtectedRoute>} />
+      <Route path="/hrms/settings" element={<ProtectedRoute><HRMSSettings /></ProtectedRoute>} />
 
       {/* Admin Routes */}
       <Route
