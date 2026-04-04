@@ -451,7 +451,13 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
   - New API: GET /api/hrms/attendance/today-stats for dashboard attendance summary
 
 ### P2 (Nice to Have)
-- [x] Refactor backend/server.py into smaller modules using FastAPI APIRouter (April 2026)
+- [x] Refactor hrms.py into modular routers (April 2026):
+  - hrms_settings.py (110 lines) - Company Settings + Departments + Logo
+  - hrms_employees.py (752 lines) - Employee CRUD + Bulk Upload + Increment + Photo
+  - hrms_dashboard.py (67 lines) - Dashboard Stats + Preference
+  - hrms_search.py (109 lines) - Smart Search
+  - hrms_users.py (156 lines) - User Management
+  - Old monolithic hrms.py (1164 lines) deleted
 - [ ] Migrate client-side search to server-side for scalability
 - [ ] Integrate real SMS/WhatsApp provider (Twilio, MSG91, Meta) with Bulk Messaging
 - [ ] Weekly, Monthly, Yearly aggregated reports for dashboard
