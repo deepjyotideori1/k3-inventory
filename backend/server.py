@@ -26,7 +26,11 @@ from routes.sales import router as sales_router
 from routes.orders import router as orders_router
 from routes.analytics import router as analytics_router
 from routes.messaging import router as messaging_router
-from routes.hrms import router as hrms_router
+from routes.hrms_settings import router as hrms_settings_router
+from routes.hrms_employees import router as hrms_employees_router
+from routes.hrms_dashboard import router as hrms_dashboard_router
+from routes.hrms_search import router as hrms_search_router
+from routes.hrms_users import router as hrms_users_router
 from routes.hrms_payroll import router as hrms_payroll_router
 from routes.hrms_attendance import router as hrms_attendance_router
 from routes.hrms_performance import router as hrms_performance_router
@@ -202,7 +206,11 @@ app.include_router(sales_router, prefix="/api")
 app.include_router(orders_router, prefix="/api")
 app.include_router(analytics_router, prefix="/api")
 app.include_router(messaging_router, prefix="/api")
-app.include_router(hrms_router, prefix="/api")
+app.include_router(hrms_settings_router, prefix="/api")
+app.include_router(hrms_employees_router, prefix="/api")
+app.include_router(hrms_dashboard_router, prefix="/api")
+app.include_router(hrms_search_router, prefix="/api")
+app.include_router(hrms_users_router, prefix="/api")
 app.include_router(hrms_payroll_router, prefix="/api")
 app.include_router(hrms_attendance_router, prefix="/api")
 app.include_router(hrms_performance_router, prefix="/api")
