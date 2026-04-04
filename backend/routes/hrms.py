@@ -1081,6 +1081,7 @@ async def create_hrms_user(data: dict, user: dict = Depends(require_hrms_admin))
         'name': name,
         'role': role,
         'warehouse_id': None,
+        'allowed_dashboards': ['hrms'],
         'linked_employee_id': linked_employee_id,
         'is_active': True,
         'created_at': datetime.now(timezone.utc).isoformat(),
