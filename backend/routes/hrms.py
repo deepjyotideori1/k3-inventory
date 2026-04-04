@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, Response
 from database import db
-from deps import get_current_user, require_admin, require_hrms_access
+from deps import get_current_user, require_admin, require_hrms_access, require_hrms_admin
 from helpers import format_inr, log_audit, hash_password
 from datetime import datetime, timezone
 from typing import Optional, List
@@ -1017,3 +1017,146 @@ async def hrms_smart_search(q: str = '', user: dict = Depends(get_current_user))
         'query': query,
         'module_counts': module_counts,
     }
+
+
+# ============ HRMS USER MANAGEMENT ============
+
+@router.get("/hrms/users")
+async def list_hrms_users(user: dict = Depends(require_hrms_admin)):
+    """List all HRMS users (hr_admin, hrms_employee)"""
+    users = []
+    async for u in db.users.find({'role': {'$in': ['hr_admin', 'hrms_employee']}}, {'_id': 0, 'password': 0}):
+        emp_name = ''
+        emp_code = ''
+        if u.get('linked_employee_id'):
+            emp = await db.hrms_employees.find_one({'id': u['linked_employee_id']}, {'_id': 0, 'name': 1, 'employee_id': 1})
+            if emp:
+                emp_name = emp.get('name', '')
+                emp_code = emp.get('employee_id', '')
+        users.append({
+            'id': u['id'],
+            'email': u['email'],
+            'name': u['name'],
+            'role': u['role'],
+            'linked_employee_id': u.get('linked_employee_id', ''),
+            'linked_employee_name': emp_name,
+            'linked_employee_code': emp_code,
+            'visible_password': u.get('visible_password', ''),
+            'is_active': u.get('is_active', True),
+            'created_at': u.get('created_at', ''),
+        })
+    return users
+
+
+@router.post("/hrms/users")
+async def create_hrms_user(data: dict, user: dict = Depends(require_hrms_admin)):
+    """Create an HRMS user (hr_admin or hrms_employee only)"""
+    email = data.get('email', '').strip().lower()
+    password = data.get('password', '').strip()
+    name = data.get('name', '').strip()
+    role = data.get('role', '').strip()
+    linked_employee_id = data.get('linked_employee_id', '').strip()
+
+    if not email or not password or not name or not role:
+        raise HTTPException(status_code=400, detail="Email, password, name, and role are required")
+    if role not in ('hr_admin', 'hrms_employee'):
+        raise HTTPException(status_code=400, detail="Role must be hr_admin or hrms_employee")
+    if len(password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    existing = await db.users.find_one({'email': email})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already exists")
+
+    if linked_employee_id:
+        emp = await db.hrms_employees.find_one({'id': linked_employee_id}, {'_id': 0, 'id': 1})
+        if not emp:
+            raise HTTPException(status_code=400, detail="Linked employee not found")
+
+    new_user = {
+        'id': str(uuid.uuid4()),
+        'email': email,
+        'password': hash_password(password),
+        'visible_password': password,
+        'name': name,
+        'role': role,
+        'warehouse_id': None,
+        'linked_employee_id': linked_employee_id,
+        'is_active': True,
+        'created_at': datetime.now(timezone.utc).isoformat(),
+    }
+    await db.users.insert_one(new_user)
+    await log_audit(user.get('id', ''), user.get('name', ''), 'create', 'hrms_user', new_user['id'],
+                    f"Created HRMS user: {name} ({role})")
+
+    return {'message': f'User {name} created successfully', 'id': new_user['id']}
+
+
+@router.put("/hrms/users/{user_id}")
+async def update_hrms_user(user_id: str, data: dict, user: dict = Depends(require_hrms_admin)):
+    """Update an HRMS user"""
+    target = await db.users.find_one({'id': user_id, 'role': {'$in': ['hr_admin', 'hrms_employee']}})
+    if not target:
+        raise HTTPException(status_code=404, detail="HRMS user not found")
+
+    update = {}
+    if data.get('name'):
+        update['name'] = data['name'].strip()
+    if data.get('role') and data['role'] in ('hr_admin', 'hrms_employee'):
+        update['role'] = data['role']
+    if data.get('linked_employee_id') is not None:
+        linked = data['linked_employee_id'].strip() if data['linked_employee_id'] else ''
+        if linked:
+            emp = await db.hrms_employees.find_one({'id': linked}, {'_id': 0, 'id': 1})
+            if not emp:
+                raise HTTPException(status_code=400, detail="Linked employee not found")
+        update['linked_employee_id'] = linked
+    if data.get('email'):
+        dup = await db.users.find_one({'email': data['email'], 'id': {'$ne': user_id}})
+        if dup:
+            raise HTTPException(status_code=400, detail="Email already in use")
+        update['email'] = data['email'].strip().lower()
+
+    if update:
+        update['updated_at'] = datetime.now(timezone.utc).isoformat()
+        await db.users.update_one({'id': user_id}, {'$set': update})
+
+    return {'message': 'User updated successfully'}
+
+
+@router.post("/hrms/users/{user_id}/reset-password")
+async def reset_hrms_user_password(user_id: str, data: dict, user: dict = Depends(require_hrms_admin)):
+    """Reset password for an HRMS user"""
+    target = await db.users.find_one({'id': user_id, 'role': {'$in': ['hr_admin', 'hrms_employee']}})
+    if not target:
+        raise HTTPException(status_code=404, detail="HRMS user not found")
+
+    new_password = data.get('password', '').strip()
+    if not new_password or len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    await db.users.update_one({'id': user_id}, {'$set': {
+        'password': hash_password(new_password),
+        'visible_password': new_password,
+        'updated_at': datetime.now(timezone.utc).isoformat(),
+    }})
+    await log_audit(user.get('id', ''), user.get('name', ''), 'reset_password', 'hrms_user', user_id,
+                    f"Reset password for {target.get('name', '')}")
+
+    return {'message': f"Password reset for {target.get('name', '')}"}
+
+
+@router.delete("/hrms/users/{user_id}")
+async def delete_hrms_user(user_id: str, user: dict = Depends(require_hrms_admin)):
+    """Deactivate an HRMS user"""
+    target = await db.users.find_one({'id': user_id, 'role': {'$in': ['hr_admin', 'hrms_employee']}})
+    if not target:
+        raise HTTPException(status_code=404, detail="HRMS user not found")
+    if target['id'] == user['id']:
+        raise HTTPException(status_code=400, detail="Cannot deactivate your own account")
+
+    await db.users.update_one({'id': user_id}, {'$set': {'is_active': False}})
+    await log_audit(user.get('id', ''), user.get('name', ''), 'deactivate', 'hrms_user', user_id,
+                    f"Deactivated HRMS user: {target.get('name', '')}")
+
+    return {'message': f"User {target.get('name', '')} deactivated"}
