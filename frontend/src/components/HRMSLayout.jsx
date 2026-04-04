@@ -4,7 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import api from '../lib/api';
 import {
   LayoutDashboard, Users, Building2, Settings, LogOut, Menu, X,
-  ArrowLeftRight, UserCircle, ChevronDown, ChevronRight
+  ArrowLeftRight, UserCircle, ChevronDown, ChevronRight,
+  DollarSign, CalendarDays
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
@@ -13,6 +14,8 @@ const navItems = [
   { path: '/hrms', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/hrms/employees', label: 'Employees', icon: Users },
   { path: '/hrms/departments', label: 'Departments', icon: Building2 },
+  { path: '/hrms/attendance', label: 'Attendance', icon: CalendarDays },
+  { path: '/hrms/payroll', label: 'Payroll', icon: DollarSign },
   { path: '/hrms/settings', label: 'Company Settings', icon: Settings, roles: ['admin', 'hr_admin'] },
 ];
 
