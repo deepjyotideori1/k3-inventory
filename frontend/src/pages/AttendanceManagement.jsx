@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/
 import { toast } from 'sonner';
 import {
   CalendarDays, Save, Loader2, Clock, UserCheck, UserX,
-  AlertTriangle, Sun, ChevronLeft, ChevronRight, BarChart3
+  AlertTriangle, Sun, ChevronLeft, ChevronRight, BarChart3, Download, FileText
 } from 'lucide-react';
 
 const STATUS_OPTIONS = [
@@ -393,10 +393,24 @@ const AttendanceManagement = () => {
         {/* SUMMARY TAB */}
         {activeTab === 'summary' && (
           <>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => navigateMonth(-1)}><ChevronLeft className="w-4 h-4" /></Button>
-              <span className="font-medium text-slate-700 min-w-[160px] text-center">{summaryLabel}</span>
-              <Button variant="outline" size="sm" onClick={() => navigateMonth(1)}><ChevronRight className="w-4 h-4" /></Button>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => navigateMonth(-1)}><ChevronLeft className="w-4 h-4" /></Button>
+                <span className="font-medium text-slate-700 min-w-[160px] text-center">{summaryLabel}</span>
+                <Button variant="outline" size="sm" onClick={() => navigateMonth(1)}><ChevronRight className="w-4 h-4" /></Button>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => {
+                  api.get(`/hrms/reports/attendance/pdf?month=${summaryMonth}${selectedDept !== 'all' ? `&department_id=${selectedDept}` : ''}`, { responseType: 'blob' })
+                    .then(r => { const u = window.URL.createObjectURL(new Blob([r.data])); const a = document.createElement('a'); a.href = u; a.download = `Attendance_${summaryMonth}.pdf`; a.click(); })
+                    .catch(() => toast.error('Failed to export PDF'));
+                }} data-testid="export-attendance-pdf"><FileText className="w-4 h-4 mr-1" /> PDF</Button>
+                <Button variant="outline" size="sm" onClick={() => {
+                  api.get(`/hrms/reports/attendance/excel?month=${summaryMonth}${selectedDept !== 'all' ? `&department_id=${selectedDept}` : ''}`, { responseType: 'blob' })
+                    .then(r => { const u = window.URL.createObjectURL(new Blob([r.data])); const a = document.createElement('a'); a.href = u; a.download = `Attendance_${summaryMonth}.xlsx`; a.click(); })
+                    .catch(() => toast.error('Failed to export Excel'));
+                }} data-testid="export-attendance-excel"><Download className="w-4 h-4 mr-1" /> Excel</Button>
+              </div>
             </div>
 
             <Card>

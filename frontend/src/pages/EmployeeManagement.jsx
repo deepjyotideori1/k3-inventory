@@ -9,7 +9,7 @@ import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { Plus, Search, Edit, Trash2, Eye, Upload, ChevronLeft, ChevronRight, UserCircle, IndianRupee, History } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Eye, Upload, ChevronLeft, ChevronRight, UserCircle, IndianRupee, History, Download, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatINR } from '../lib/utils';
 
@@ -157,6 +157,21 @@ const EmployeeManagement = () => {
 
   const updateField = (field, value) => setForm(f => ({ ...f, [field]: value }));
 
+  const downloadReport = async (format) => {
+    try {
+      const params = {};
+      if (filterDept !== 'all') params.department_id = filterDept;
+      if (filterStatus !== 'all') params.status = filterStatus;
+      const res = await api.get(`/hrms/reports/employees/${format}`, { params, responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Employee_Directory.${format === 'pdf' ? 'pdf' : 'xlsx'}`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } catch (e) { toast.error(`Failed to export ${format.toUpperCase()}`); }
+  };
+
   return (
     <HRMSLayout>
       <div className="space-y-4" data-testid="employee-management">
@@ -166,9 +181,13 @@ const EmployeeManagement = () => {
             <h1 className="text-2xl font-bold text-slate-800">Employees</h1>
             <p className="text-slate-500 text-sm">{total} total employees</p>
           </div>
-          <Button onClick={openAdd} className="gap-2 bg-blue-600 hover:bg-blue-700" data-testid="add-employee-btn">
-            <Plus className="w-4 h-4" /> Add Employee
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => downloadReport('pdf')} data-testid="export-employees-pdf"><FileText className="w-4 h-4 mr-1" /> PDF</Button>
+            <Button variant="outline" size="sm" onClick={() => downloadReport('excel')} data-testid="export-employees-excel"><Download className="w-4 h-4 mr-1" /> Excel</Button>
+            <Button onClick={openAdd} className="gap-2 bg-blue-600 hover:bg-blue-700" data-testid="add-employee-btn">
+              <Plus className="w-4 h-4" /> Add Employee
+            </Button>
+          </div>
         </div>
 
         {/* Filters */}

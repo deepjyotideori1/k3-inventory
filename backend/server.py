@@ -31,6 +31,7 @@ from routes.hrms_payroll import router as hrms_payroll_router
 from routes.hrms_attendance import router as hrms_attendance_router
 from routes.hrms_performance import router as hrms_performance_router
 from routes.hrms_hiring import router as hrms_hiring_router
+from routes.hrms_reports import router as hrms_reports_router
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -155,6 +156,7 @@ app.include_router(hrms_payroll_router, prefix="/api")
 app.include_router(hrms_attendance_router, prefix="/api")
 app.include_router(hrms_performance_router, prefix="/api")
 app.include_router(hrms_hiring_router, prefix="/api")
+app.include_router(hrms_reports_router, prefix="/api")
 
 
 # ============ HEALTH CHECK ============

@@ -246,7 +246,19 @@ const PayrollManagement = () => {
                                 <div className="bg-slate-50 p-4 border-t">
                                   <div className="flex items-center justify-between mb-3">
                                     <h4 className="font-semibold text-sm text-slate-700">Employee Breakdown</h4>
-                                    <span className="text-xs text-slate-400">PF Employer: {formatINR(payrollDetail.total_pf_employer)} | ESI Employer: {formatINR(payrollDetail.total_esi_employer)}</span>
+                                    <div className="flex items-center gap-3">
+                                      <span className="text-xs text-slate-400">PF Employer: {formatINR(payrollDetail.total_pf_employer)} | ESI Employer: {formatINR(payrollDetail.total_esi_employer)}</span>
+                                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => {
+                                        api.get(`/hrms/reports/payroll/${p.id}/pdf`, { responseType: 'blob' })
+                                          .then(r => { const u = window.URL.createObjectURL(new Blob([r.data])); const a = document.createElement('a'); a.href = u; a.download = `Payroll_${p.period}.pdf`; a.click(); })
+                                          .catch(() => toast.error('Failed'));
+                                      }} data-testid={`export-payroll-pdf-${p.id}`}><FileText className="w-3 h-3 mr-1" /> PDF</Button>
+                                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => {
+                                        api.get(`/hrms/reports/payroll/${p.id}/excel`, { responseType: 'blob' })
+                                          .then(r => { const u = window.URL.createObjectURL(new Blob([r.data])); const a = document.createElement('a'); a.href = u; a.download = `Payroll_${p.period}.xlsx`; a.click(); })
+                                          .catch(() => toast.error('Failed'));
+                                      }} data-testid={`export-payroll-excel-${p.id}`}><Download className="w-3 h-3 mr-1" /> Excel</Button>
+                                    </div>
                                   </div>
                                   <div className="overflow-x-auto">
                                     <table className="w-full text-xs">
