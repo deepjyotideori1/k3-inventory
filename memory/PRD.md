@@ -431,8 +431,8 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] HRMS Phase 1: Employee Master, Departments CRUD, Company Settings, HRMS Layout/Sidebar
 - [x] HRMS Phase 2: Payroll System (Indian Statutory: PF, ESI, TDS) - April 2026
 - [x] HRMS Phase 2: Time & Attendance (Manual entry, leave management) - April 2026
-- [ ] HRMS Phase 2: Performance Management (KPIs, Appraisals)
-- [ ] HRMS Phase 2: Hire Analytics (Recruitment pipeline)
+- [x] HRMS Phase 2: Performance Management (KPIs, Appraisals) - April 2026
+- [x] HRMS Phase 2: Hire Analytics (Recruitment pipeline) - April 2026
 - [ ] HRMS Reports: A4/Arial PDF/Excel with Company Logo
 
 ### P2 (Nice to Have)
