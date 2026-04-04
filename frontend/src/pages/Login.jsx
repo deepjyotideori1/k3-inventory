@@ -93,7 +93,7 @@ const Login = () => {
             <CardHeader className="px-0 pt-0">
               <CardTitle className="text-2xl font-bold text-slate-800">Welcome back</CardTitle>
               <CardDescription className="text-slate-500">
-                Sign in to access your inventory dashboard
+                Sign in to access your dashboard
               </CardDescription>
             </CardHeader>
             <CardContent className="px-0">
@@ -171,14 +171,26 @@ const Login = () => {
 
       {/* Right Panel - Image */}
       <div className="hidden lg:flex lg:w-1/2 login-bg-image min-h-screen">
-        <div className="relative z-10 h-full w-full flex items-end p-12">
-          <div className="text-white">
-            <h2 className="text-4xl font-bold mb-4 drop-shadow-lg">
-              Inventory Management
-            </h2>
-            <p className="text-xl text-white/90 drop-shadow-md">
-              Streamline your LPG cylinder tracking across all warehouses
-            </p>
+        <div className="relative z-10 h-full w-full flex flex-col justify-end p-12">
+          <div className="text-white space-y-6">
+            <div>
+              <h2 className="text-4xl font-bold mb-4 drop-shadow-lg">
+                K3 Gas Service Portal
+              </h2>
+              <p className="text-xl text-white/90 drop-shadow-md">
+                One platform, multiple dashboards
+              </p>
+            </div>
+            <div className="flex gap-4">
+              <div className="bg-white/15 backdrop-blur-sm rounded-lg px-5 py-3 border border-white/20">
+                <p className="font-semibold text-lg drop-shadow">Inventory & Operations</p>
+                <p className="text-sm text-white/80">Warehouses, Sales, Orders</p>
+              </div>
+              <div className="bg-white/15 backdrop-blur-sm rounded-lg px-5 py-3 border border-white/20">
+                <p className="font-semibold text-lg drop-shadow">HRMS</p>
+                <p className="text-sm text-white/80">Employees, Payroll, Attendance</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>

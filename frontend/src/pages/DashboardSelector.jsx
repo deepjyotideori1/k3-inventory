@@ -12,25 +12,18 @@ const DashboardSelector = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [selecting, setSelecting] = useState('');
+  const [lastUsed, setLastUsed] = useState(null);
 
   useEffect(() => {
-    checkPreference();
+    loadPreference();
   }, []);
 
-  const checkPreference = async () => {
+  const loadPreference = async () => {
     try {
       const res = await api.get('/auth/dashboard-preference');
-      const pref = res.data.active_dashboard;
-      if (pref === 'inventory') {
-        navigate(user?.role === 'admin' ? '/dashboard' : '/manager-dashboard');
-        return;
-      }
-      if (pref === 'hrms') {
-        navigate('/hrms');
-        return;
-      }
+      setLastUsed(res.data.active_dashboard || null);
     } catch (e) {
-      console.error('Failed to check preference:', e);
+      console.error('Failed to load preference:', e);
     }
     setLoading(false);
   };
@@ -81,11 +74,14 @@ const DashboardSelector = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Inventory Dashboard */}
           <Card
-            className="group cursor-pointer border-2 border-slate-200 hover:border-green-500 hover:shadow-lg transition-all duration-200"
+            className={`group cursor-pointer border-2 hover:shadow-lg transition-all duration-200 ${lastUsed === 'inventory' ? 'border-green-500 shadow-md' : 'border-slate-200 hover:border-green-500'}`}
             onClick={() => selectDashboard('inventory')}
             data-testid="select-inventory"
           >
             <CardContent className="p-8 text-center">
+              {lastUsed === 'inventory' && (
+                <span className="inline-block mb-3 text-xs font-medium text-green-700 bg-green-50 px-3 py-1 rounded-full">Last Used</span>
+              )}
               <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-green-50 flex items-center justify-center group-hover:bg-green-100 transition-colors">
                 <Package className="w-8 h-8 text-green-700" />
               </div>
@@ -106,11 +102,14 @@ const DashboardSelector = () => {
 
           {/* HRMS Dashboard */}
           <Card
-            className="group cursor-pointer border-2 border-slate-200 hover:border-blue-500 hover:shadow-lg transition-all duration-200"
+            className={`group cursor-pointer border-2 hover:shadow-lg transition-all duration-200 ${lastUsed === 'hrms' ? 'border-blue-500 shadow-md' : 'border-slate-200 hover:border-blue-500'}`}
             onClick={() => selectDashboard('hrms')}
             data-testid="select-hrms"
           >
             <CardContent className="p-8 text-center">
+              {lastUsed === 'hrms' && (
+                <span className="inline-block mb-3 text-xs font-medium text-blue-700 bg-blue-50 px-3 py-1 rounded-full">Last Used</span>
+              )}
               <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-blue-50 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
                 <Users className="w-8 h-8 text-blue-700" />
               </div>

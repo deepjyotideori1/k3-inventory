@@ -424,6 +424,17 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [ ] Admin UI to add new inventory stock items
 - [ ] Sync warehouse 'refilling at plant' to Plant Hollongi's received empties
 
+### Multi-Dashboard System (April 2026)
+- [x] Dashboard Selector page with Inventory & HRMS options
+- [x] Login page updated to show both dashboards (Inventory & HRMS cards on right panel)
+- [x] Dashboard Selector always shows both options (no auto-redirect), highlights "Last Used"
+- [x] HRMS Phase 1: Employee Master, Departments CRUD, Company Settings, HRMS Layout/Sidebar
+- [ ] HRMS Phase 2: Payroll System (Indian Statutory: PF, ESI, TDS)
+- [ ] HRMS Phase 2: Time & Attendance (Manual/Biometric-ready)
+- [ ] HRMS Phase 2: Performance Management (KPIs, Appraisals)
+- [ ] HRMS Phase 2: Hire Analytics (Recruitment pipeline)
+- [ ] HRMS Reports: A4/Arial PDF/Excel with Company Logo
+
 ### P2 (Nice to Have)
 - [x] Refactor backend/server.py into smaller modules using FastAPI APIRouter (April 2026)
 - [ ] Migrate client-side search to server-side for scalability
