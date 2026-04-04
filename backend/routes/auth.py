@@ -27,6 +27,10 @@ async def login(data: UserLogin):
     if not verify_password(data.password, user['password']):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
+    # Check if user is active
+    if user.get('is_active') is False:
+        raise HTTPException(status_code=401, detail="Account is deactivated. Contact your administrator.")
+    
     # Check maintenance mode for non-admin users
     if settings and settings.get('maintenance_mode') and user['role'] != 'admin':
         raise HTTPException(status_code=503, detail=settings.get('maintenance_message', 'System under maintenance'))

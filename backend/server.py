@@ -111,29 +111,51 @@ async def init_default_data():
             'id': str(uuid.uuid4()),
             'email': 'hr@k3gas.com',
             'password': hash_password('Hr@123'),
+            'visible_password': 'Hr@123',
             'name': 'HR Admin',
             'role': 'hr_admin',
             'warehouse_id': None,
+            'allowed_dashboards': ['hrms'],
             'linked_employee_id': '',
+            'is_active': True,
             'created_at': datetime.now(timezone.utc).isoformat()
         }
         existing_hr = await db.users.find_one({'email': 'hr@k3gas.com'})
         if not existing_hr:
             await db.users.insert_one(hr_admin_user)
+        else:
+            await db.users.update_one({'email': 'hr@k3gas.com'}, {'$set': {
+                'password': hash_password('Hr@123'),
+                'visible_password': 'Hr@123',
+                'role': 'hr_admin',
+                'allowed_dashboards': ['hrms'],
+                'is_active': True,
+            }})
 
         hrms_employee_user = {
             'id': str(uuid.uuid4()),
             'email': 'employee@k3gas.com',
             'password': hash_password('Employee@123'),
+            'visible_password': 'Employee@123',
             'name': 'Ankit Sharma',
             'role': 'hrms_employee',
             'warehouse_id': None,
+            'allowed_dashboards': ['hrms'],
             'linked_employee_id': '',
+            'is_active': True,
             'created_at': datetime.now(timezone.utc).isoformat()
         }
         existing_emp = await db.users.find_one({'email': 'employee@k3gas.com'})
         if not existing_emp:
             await db.users.insert_one(hrms_employee_user)
+        else:
+            await db.users.update_one({'email': 'employee@k3gas.com'}, {'$set': {
+                'password': hash_password('Employee@123'),
+                'visible_password': 'Employee@123',
+                'role': 'hrms_employee',
+                'allowed_dashboards': ['hrms'],
+                'is_active': True,
+            }})
 
         items = [
             {'id': str(uuid.uuid4()), 'name': '15kg Cylinder', 'unit': 'units', 'category': 'LPG Cylinder', 'created_at': datetime.now(timezone.utc).isoformat()},
