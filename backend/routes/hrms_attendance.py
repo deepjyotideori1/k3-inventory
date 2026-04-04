@@ -127,7 +127,7 @@ async def get_attendance(
     total = await db.hrms_attendance.count_documents(query)
     skip = (page - 1) * limit
     records = []
-    async for rec in db.hrms_attendance.find(query, {'_id': 0}).sort('date', -1).skip(skip).limit(limit):
+    async for rec in db.hrms_attendance.find(query, {'_id': 0}).sort('date', 1).skip(skip).limit(limit):
         emp = await db.hrms_employees.find_one({'id': rec['employee_id']}, {'_id': 0, 'name': 1, 'employee_id': 1, 'department_id': 1, 'designation': 1})
         if emp:
             rec['employee_name'] = emp.get('name', '')

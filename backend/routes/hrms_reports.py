@@ -12,6 +12,17 @@ import os
 
 router = APIRouter()
 
+def _fmt_date(d):
+    """Convert YYYY-MM-DD to DD-MM-YYYY for display"""
+    if not d:
+        return ''
+    try:
+        return datetime.strptime(str(d)[:10], '%Y-%m-%d').strftime('%d-%m-%Y')
+    except (ValueError, TypeError):
+        return str(d)
+
+
+
 # ============ FONT REGISTRATION (Arial via LiberationSans) ============
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
@@ -217,7 +228,7 @@ async def export_employees_pdf(department_id: Optional[str] = None, status: Opti
     for i, emp in enumerate(employees):
         data.append([
             str(i + 1), emp.get('employee_id', ''), emp['name'], emp.get('department_name', ''),
-            emp.get('designation', ''), emp.get('date_of_joining', ''), emp.get('phone', ''),
+            emp.get('designation', ''), _fmt_date(emp.get('date_of_joining', '')), emp.get('phone', ''),
             'Active' if emp.get('is_active') else 'Inactive',
         ])
 
@@ -289,7 +300,7 @@ async def export_employees_excel(department_id: Optional[str] = None, status: Op
     for i, emp in enumerate(employees):
         row = i + 5
         values = [i + 1, emp.get('employee_id', ''), emp['name'], emp.get('department_name', ''),
-                  emp.get('designation', ''), emp.get('date_of_joining', ''), emp.get('phone', ''),
+                  emp.get('designation', ''), _fmt_date(emp.get('date_of_joining', '')), emp.get('phone', ''),
                   emp.get('email', ''), emp.get('pan_number', ''), 'Active' if emp.get('is_active') else 'Inactive']
         for col, val in enumerate(values, 1):
             cell = ws.cell(row=row, column=col, value=val)
@@ -648,7 +659,7 @@ async def export_employee_attendance_pdf(
     info_style = ParagraphStyle('Info', fontName='Arial', fontSize=9, alignment=TA_LEFT, spaceAfter=1 * mm)
     elements.append(Paragraph(f"<b>Employee:</b> {emp['name']} ({emp.get('employee_id', '')})", info_style))
     elements.append(Paragraph(f"<b>Department:</b> {dept['name'] if dept else 'N/A'} | <b>Designation:</b> {emp.get('designation', '')}", info_style))
-    elements.append(Paragraph(f"<b>Period:</b> {start_date} to {end_date}", info_style))
+    elements.append(Paragraph(f"<b>Period:</b> {_fmt_date(start_date)} to {_fmt_date(end_date)}", info_style))
     elements.append(Spacer(1, 3 * mm))
 
     # Summary mini-table
@@ -676,7 +687,7 @@ async def export_employee_attendance_pdf(
             day_name = ''
         data.append([
             str(i + 1),
-            rec['date'],
+            _fmt_date(rec['date']),
             day_name[:3],
             STATUS_LABELS.get(rec.get('status', ''), rec.get('status', '')),
             rec.get('check_in', '') or '-',
@@ -761,7 +772,7 @@ async def export_employee_attendance_excel(
     ws['A1'].font = hf
     ws['A1'].alignment = Alignment(horizontal='center')
     ws.merge_cells('A2:I2')
-    ws['A2'] = f"Employee Attendance Report | {start_date} to {end_date}"
+    ws['A2'] = f"Employee Attendance Report | {_fmt_date(start_date)} to {_fmt_date(end_date)}"
     ws['A2'].font = sf
     ws['A2'].alignment = Alignment(horizontal='center')
 
@@ -802,7 +813,7 @@ async def export_employee_attendance_excel(
         except Exception:
             day_name = ''
         values = [
-            i + 1, rec['date'], day_name[:3],
+            i + 1, _fmt_date(rec['date']), day_name[:3],
             STATUS_LABELS.get(rec.get('status', ''), rec.get('status', '')),
             rec.get('check_in', '') or '-', rec.get('check_out', '') or '-',
             rec.get('overtime_hours', 0) or 0,
@@ -871,7 +882,7 @@ async def generate_salary_certificate(employee_id: str, user: dict = Depends(get
     elements.append(Paragraph(
         f"This is to certify that <b>{title} {emp['name']}</b> (Employee ID: <b>{emp.get('employee_id', '')}</b>) "
         f"is currently employed with <b>{company['name']}</b> as <b>{emp.get('designation', '')}</b> in the "
-        f"<b>{dept['name'] if dept else 'N/A'}</b> department since <b>{emp.get('date_of_joining', 'N/A')}</b>.",
+        f"<b>{dept['name'] if dept else 'N/A'}</b> department since <b>{_fmt_date(emp.get('date_of_joining', ''))}</b>.",
         body_style
     ))
 
@@ -971,7 +982,7 @@ async def generate_experience_letter(employee_id: str, user: dict = Depends(get_
 
     elements.append(Paragraph(
         f"This is to certify that <b>{title} {emp['name']}</b> (Employee ID: <b>{emp.get('employee_id', '')}</b>) "
-        f"has been employed with <b>{company['name']}</b> since <b>{emp.get('date_of_joining', 'N/A')}</b> as "
+        f"has been employed with <b>{company['name']}</b> since <b>{_fmt_date(emp.get('date_of_joining', ''))}</b> as "
         f"<b>{emp.get('designation', '')}</b> in the <b>{dept['name'] if dept else 'N/A'}</b> department.",
         body_style
     ))

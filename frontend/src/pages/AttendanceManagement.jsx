@@ -8,6 +8,7 @@ import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { toast } from 'sonner';
+import { formatDate } from '../lib/utils';
 import {
   CalendarDays, Save, Loader2, Clock, UserCheck, UserX,
   AlertTriangle, Sun, ChevronLeft, ChevronRight, BarChart3, Download, FileText, User, Search,
@@ -663,7 +664,7 @@ const AttendanceManagement = () => {
                       </div>
                       <div className="ml-auto text-right">
                         <p className="text-xs text-slate-500">Period</p>
-                        <p className="text-sm font-medium text-slate-700">{overviewData.date_range.start} to {overviewData.date_range.end}</p>
+                        <p className="text-sm font-medium text-slate-700">{formatDate(overviewData.date_range.start)} to {formatDate(overviewData.date_range.end)}</p>
                       </div>
                     </div>
                   </CardContent>
@@ -738,7 +739,7 @@ const AttendanceManagement = () => {
                               return (
                                 <tr key={rec.date} className="border-b hover:bg-slate-50" data-testid={`overview-row-${rec.date}`}>
                                   <td className="p-2 text-slate-400">{i + 1}</td>
-                                  <td className="p-2 font-medium">{rec.date}</td>
+                                  <td className="p-2 font-medium">{formatDate(rec.date)}</td>
                                   <td className="p-2 text-slate-500">{dayName}</td>
                                   <td className="p-2">{getStatusBadge(rec.status)}</td>
                                   <td className="p-2 text-center">{rec.check_in || '-'}</td>
@@ -895,7 +896,7 @@ const AttendanceManagement = () => {
                                 <span className="font-medium">{row.employee_name || row.employee_code}</span>
                                 <span className="text-slate-400 ml-1">({row.employee_code})</span>
                               </td>
-                              <td className="p-2 font-mono">{row.date}</td>
+                              <td className="p-2 font-mono">{formatDate(row.date)}</td>
                               <td className="p-2">{getStatusBadge(row.status)}</td>
                               <td className="p-2">{row.check_in || '-'}</td>
                               <td className="p-2">{row.check_out || '-'}</td>

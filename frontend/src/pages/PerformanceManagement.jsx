@@ -8,6 +8,7 @@ import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { toast } from 'sonner';
+import { formatDate } from '../lib/utils';
 import {
   Target, Plus, Star, Edit, Trash2, Loader2, CheckCircle,
   FileText, TrendingUp, Award, ChevronDown, ChevronUp
@@ -222,7 +223,7 @@ const PerformanceManagement = () => {
                           {cycles.map(c => (
                             <tr key={c.id} className="border-b hover:bg-slate-50" data-testid={`cycle-row-${c.id}`}>
                               <td className="py-3 font-medium">{c.name}</td>
-                              <td className="py-3 text-slate-500 text-xs">{c.start_date} to {c.end_date}</td>
+                              <td className="py-3 text-slate-500 text-xs">{formatDate(c.start_date)} to {formatDate(c.end_date)}</td>
                               <td className="py-3"><span className={`px-2 py-0.5 rounded text-xs font-medium ${c.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>{c.status}</span></td>
                               <td className="py-3">{c.review_count}</td>
                               <td className="py-3"><Button size="sm" variant="ghost" className="h-7 text-xs text-red-500" onClick={() => deleteCycle(c.id)}><Trash2 className="w-3 h-3" /></Button></td>

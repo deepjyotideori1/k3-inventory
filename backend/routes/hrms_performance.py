@@ -73,7 +73,7 @@ async def delete_kpi(kpi_id: str, user: dict = Depends(get_current_user)):
 @router.get("/hrms/appraisals/cycles")
 async def get_appraisal_cycles(user: dict = Depends(get_current_user)):
     cycles = []
-    async for c in db.hrms_appraisal_cycles.find({}, {'_id': 0}).sort('start_date', -1):
+    async for c in db.hrms_appraisal_cycles.find({}, {'_id': 0}).sort('start_date', 1):
         c['review_count'] = await db.hrms_reviews.count_documents({'cycle_id': c['id']})
         cycles.append(c)
     return cycles
@@ -140,7 +140,7 @@ async def get_reviews(
     if employee_id:
         query['employee_id'] = employee_id
     reviews = []
-    async for r in db.hrms_reviews.find(query, {'_id': 0}).sort('created_at', -1):
+    async for r in db.hrms_reviews.find(query, {'_id': 0}).sort('created_at', 1):
         emp = await db.hrms_employees.find_one({'id': r['employee_id']}, {'_id': 0, 'name': 1, 'employee_id': 1, 'designation': 1, 'department_id': 1})
         if emp:
             r['employee_name'] = emp.get('name', '')

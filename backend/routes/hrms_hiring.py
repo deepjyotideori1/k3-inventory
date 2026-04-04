@@ -19,7 +19,7 @@ async def get_jobs(status: Optional[str] = None, user: dict = Depends(get_curren
     if status and status != 'all':
         query['status'] = status
     jobs = []
-    async for j in db.hrms_jobs.find(query, {'_id': 0}).sort('created_at', -1):
+    async for j in db.hrms_jobs.find(query, {'_id': 0}).sort('created_at', 1):
         j['candidate_count'] = await db.hrms_candidates.count_documents({'job_id': j['id']})
         j['hired_count'] = await db.hrms_candidates.count_documents({'job_id': j['id'], 'stage': 'hired'})
         dept = await db.hrms_departments.find_one({'id': j.get('department_id')}, {'_id': 0, 'name': 1})
@@ -105,7 +105,7 @@ async def get_candidates(
             {'phone': {'$regex': search, '$options': 'i'}},
         ]
     candidates = []
-    async for c in db.hrms_candidates.find(query, {'_id': 0}).sort('created_at', -1):
+    async for c in db.hrms_candidates.find(query, {'_id': 0}).sort('created_at', 1):
         job = await db.hrms_jobs.find_one({'id': c.get('job_id')}, {'_id': 0, 'title': 1})
         c['job_title'] = job['title'] if job else 'N/A'
         candidates.append(c)

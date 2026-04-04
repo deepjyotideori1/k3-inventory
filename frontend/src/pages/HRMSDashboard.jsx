@@ -7,7 +7,7 @@ import {
   Users, Building2, DollarSign, TrendingUp, CalendarDays,
   Target, Briefcase, ArrowRight, UserCheck, Clock
 } from 'lucide-react';
-import { formatINR } from '../lib/utils';
+import { formatINR, formatDate } from '../lib/utils';
 import { Button } from '../components/ui/button';
 
 const StatCard = ({ title, value, subtitle, icon: Icon, color }) => (
@@ -157,7 +157,7 @@ const HRMSDashboard = () => {
                         <p className="text-sm font-medium text-slate-700 truncate">{emp.name}</p>
                         <p className="text-xs text-slate-400 truncate">{emp.designation} &middot; {emp.department_name}</p>
                       </div>
-                      <span className="text-xs text-slate-400 flex-shrink-0">{emp.date_of_joining}</span>
+                      <span className="text-xs text-slate-400 flex-shrink-0">{formatDate(emp.date_of_joining)}</span>
                     </div>
                   ))}
                 </div>

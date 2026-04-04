@@ -258,7 +258,7 @@ async def get_payroll_history(
     if year:
         query['year'] = year
     payrolls = []
-    async for p in db.hrms_payroll.find(query, {'_id': 0, 'employees': 0}).sort([('year', -1), ('month', -1)]):
+    async for p in db.hrms_payroll.find(query, {'_id': 0, 'employees': 0}).sort([('year', 1), ('month', 1)]):
         payrolls.append(p)
     return payrolls
 

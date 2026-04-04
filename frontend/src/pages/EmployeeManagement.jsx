@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Plus, Search, Edit, Trash2, Eye, Upload, ChevronLeft, ChevronRight, UserCircle, IndianRupee, History, Download, FileText, AlertCircle, CheckCircle2, XCircle, FileSpreadsheet, Loader2, Users } from 'lucide-react';
 import { toast } from 'sonner';
-import { formatINR } from '../lib/utils';
+import { formatINR, formatDate } from '../lib/utils';
 
 const emptyForm = {
   name: '', email: '', phone: '', date_of_birth: '', gender: '', address: '',
@@ -352,7 +352,7 @@ const EmployeeManagement = () => {
                       <TableCell>{emp.department_name}</TableCell>
                       <TableCell>{emp.designation}</TableCell>
                       <TableCell>{emp.phone}</TableCell>
-                      <TableCell>{emp.date_of_joining}</TableCell>
+                      <TableCell>{formatDate(emp.date_of_joining)}</TableCell>
                       <TableCell>
                         <Badge variant={emp.is_active ? 'default' : 'secondary'} className={emp.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}>
                           {emp.is_active ? 'Active' : 'Inactive'}
@@ -555,7 +555,7 @@ const EmployeeManagement = () => {
                         <td className="p-2 font-medium">{row.name}</td>
                         <td className="p-2">{row.department || '-'}</td>
                         <td className="p-2">{row.designation || '-'}</td>
-                        <td className="p-2">{row.date_of_joining}</td>
+                        <td className="p-2">{formatDate(row.date_of_joining)}</td>
                         <td className="p-2">{row.basic_salary?.toLocaleString('en-IN')}</td>
                         <td className="p-2">
                           {row.has_errors && (
@@ -710,8 +710,8 @@ const EmployeeManagement = () => {
               <div className="grid grid-cols-2 gap-3 text-sm">
                 {[
                   ['Email', selectedEmployee.email], ['Phone', selectedEmployee.phone],
-                  ['DOB', selectedEmployee.date_of_birth], ['Gender', selectedEmployee.gender],
-                  ['Address', selectedEmployee.address], ['Joining Date', selectedEmployee.date_of_joining],
+                  ['DOB', formatDate(selectedEmployee.date_of_birth)], ['Gender', selectedEmployee.gender],
+                  ['Address', selectedEmployee.address], ['Joining Date', formatDate(selectedEmployee.date_of_joining)],
                   ['Type', selectedEmployee.employment_type], ['Basic Salary', `Rs.${selectedEmployee.basic_salary}`],
                   ['HRA', `Rs.${selectedEmployee.hra}`], ['DA', `Rs.${selectedEmployee.da}`],
                   ['PF No.', selectedEmployee.pf_number], ['ESI No.', selectedEmployee.esi_number],
@@ -727,7 +727,7 @@ const EmployeeManagement = () => {
                   <div className="space-y-2">
                     {selectedEmployee.increment_history.map((inc, i) => (
                       <div key={i} className="flex items-center justify-between text-sm bg-slate-50 p-2 rounded">
-                        <span>{inc.date}</span>
+                        <span>{formatDate(inc.date)}</span>
                         <span>Rs.{inc.previous_salary} &rarr; Rs.{inc.new_salary}</span>
                         <span className="text-green-600 font-medium">+Rs.{inc.increment_amount}</span>
                         <span className="text-slate-400 text-xs">{inc.reason}</span>
