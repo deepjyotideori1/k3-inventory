@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
+import HRMSSearch from './HRMSSearch';
 
 const navItems = [
   { path: '/hrms', label: 'Dashboard', icon: LayoutDashboard },
@@ -142,7 +143,7 @@ const HRMSLayout = ({ children }) => {
           >
             {sidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
-          <div className="flex-1" />
+          <HRMSSearch />
           <span className="text-xs px-2 py-1 bg-blue-50 text-blue-700 rounded font-medium">HRMS</span>
         </header>
 
