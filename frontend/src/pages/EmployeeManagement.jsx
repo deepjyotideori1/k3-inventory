@@ -429,6 +429,23 @@ const EmployeeManagement = () => {
                   </div>
                 </div>
               )}
+
+              {/* Certificates & Documents */}
+              <div className="border-t pt-3">
+                <h4 className="text-sm font-semibold text-slate-600 flex items-center gap-2 mb-3"><FileText className="w-4 h-4" /> Certificates & Documents</h4>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" className="text-xs gap-1" onClick={() => {
+                    api.get(`/hrms/certificates/salary/${selectedEmployee.id}/pdf`, { responseType: 'blob' })
+                      .then(r => { const u = window.URL.createObjectURL(new Blob([r.data])); const a = document.createElement('a'); a.href = u; a.download = `Salary_Certificate_${selectedEmployee.name.replace(/\s/g, '_')}.pdf`; a.click(); })
+                      .catch(() => toast.error('Failed'));
+                  }} data-testid="salary-cert-btn"><Download className="w-3 h-3" /> Salary Certificate</Button>
+                  <Button variant="outline" size="sm" className="text-xs gap-1" onClick={() => {
+                    api.get(`/hrms/certificates/experience/${selectedEmployee.id}/pdf`, { responseType: 'blob' })
+                      .then(r => { const u = window.URL.createObjectURL(new Blob([r.data])); const a = document.createElement('a'); a.href = u; a.download = `Experience_Certificate_${selectedEmployee.name.replace(/\s/g, '_')}.pdf`; a.click(); })
+                      .catch(() => toast.error('Failed'));
+                  }} data-testid="exp-cert-btn"><Download className="w-3 h-3" /> Experience Certificate</Button>
+                </div>
+              </div>
             </div>
           )}
         </DialogContent>
