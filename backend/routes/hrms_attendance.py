@@ -106,6 +106,8 @@ async def get_attendance(
     date: Optional[str] = None,
     employee_id: Optional[str] = None,
     month: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     page: int = 1,
     limit: int = 50,
     user: dict = Depends(get_current_user)
@@ -115,7 +117,9 @@ async def get_attendance(
         query['date'] = date
     if employee_id:
         query['employee_id'] = employee_id
-    if month:
+    if start_date and end_date:
+        query['date'] = {'$gte': start_date, '$lte': end_date}
+    elif month:
         query['date'] = {'$regex': f'^{month}'}
 
     total = await db.hrms_attendance.count_documents(query)
@@ -305,3 +309,147 @@ async def get_daily_attendance(
         })
 
     return {'date': date, 'employees': result}
+
+
+# ============ EMPLOYEE-WISE ATTENDANCE OVERVIEW (Custom Date Range) ============
+
+@router.get("/hrms/attendance/employee-overview")
+async def get_employee_attendance_overview(
+    employee_id: str,
+    start_date: str,
+    end_date: str,
+    user: dict = Depends(get_current_user)
+):
+    """Get detailed attendance overview for a single employee across a custom date range"""
+    emp = await db.hrms_employees.find_one({'id': employee_id}, {'_id': 0})
+    if not emp:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    dept = await db.hrms_departments.find_one({'id': emp.get('department_id')}, {'_id': 0, 'name': 1})
+
+    query = {'employee_id': employee_id, 'date': {'$gte': start_date, '$lte': end_date}}
+
+    records = []
+    async for rec in db.hrms_attendance.find(query, {'_id': 0}).sort('date', 1):
+        records.append(rec)
+
+    # Compute summary stats
+    present = sum(1 for r in records if r.get('status') == 'present')
+    absent = sum(1 for r in records if r.get('status') == 'absent')
+    half_day = sum(1 for r in records if r.get('status') == 'half_day')
+    late = sum(1 for r in records if r.get('status') == 'late')
+    leave = sum(1 for r in records if r.get('status') == 'leave')
+    holiday = sum(1 for r in records if r.get('status') == 'holiday')
+    week_off = sum(1 for r in records if r.get('status') == 'week_off')
+    total_ot = sum(float(r.get('overtime_hours', 0)) for r in records)
+    effective_present = present + late + (half_day * 0.5)
+
+    # Leave type breakdown
+    leave_breakdown = {}
+    for r in records:
+        if r.get('status') == 'leave' and r.get('leave_type'):
+            lt = r['leave_type']
+            leave_breakdown[lt] = leave_breakdown.get(lt, 0) + 1
+
+    return {
+        'employee': {
+            'id': emp['id'],
+            'name': emp['name'],
+            'employee_code': emp.get('employee_id', ''),
+            'department': dept['name'] if dept else 'Unassigned',
+            'designation': emp.get('designation', ''),
+        },
+        'date_range': {'start': start_date, 'end': end_date},
+        'summary': {
+            'total_records': len(records),
+            'present': present,
+            'absent': absent,
+            'half_day': half_day,
+            'late': late,
+            'leave': leave,
+            'holiday': holiday,
+            'week_off': week_off,
+            'overtime_hours': round(total_ot, 1),
+            'effective_present': effective_present,
+            'leave_breakdown': leave_breakdown,
+        },
+        'records': records,
+    }
+
+
+# ============ BIOMETRIC SYNC ENDPOINT (API-Ready) ============
+
+@router.post("/hrms/attendance/biometric-sync")
+async def biometric_sync(data: dict, user: dict = Depends(get_current_user)):
+    """
+    API-ready endpoint for biometric device integration.
+    Accepts bulk attendance punches from external biometric systems.
+    Expected payload:
+    {
+        "device_id": "BIO-001",
+        "punches": [
+            {"employee_code": "K3-001", "timestamp": "2026-04-15T09:05:00", "type": "check_in"},
+            {"employee_code": "K3-001", "timestamp": "2026-04-15T18:10:00", "type": "check_out"}
+        ]
+    }
+    """
+    if user.get('role') not in ('admin', 'hr_admin'):
+        raise HTTPException(status_code=403, detail="Admin or HR Admin required")
+
+    device_id = data.get('device_id', 'unknown')
+    punches = data.get('punches', [])
+    if not punches:
+        raise HTTPException(status_code=400, detail="No punches provided")
+
+    processed = 0
+    errors = []
+    for punch in punches:
+        emp_code = punch.get('employee_code', '')
+        timestamp_str = punch.get('timestamp', '')
+        punch_type = punch.get('type', '')  # check_in or check_out
+
+        if not emp_code or not timestamp_str or punch_type not in ('check_in', 'check_out'):
+            errors.append(f"Invalid punch data: {punch}")
+            continue
+
+        emp = await db.hrms_employees.find_one({'employee_id': emp_code}, {'_id': 0, 'id': 1})
+        if not emp:
+            errors.append(f"Employee not found: {emp_code}")
+            continue
+
+        try:
+            ts = datetime.fromisoformat(timestamp_str)
+            punch_date = ts.strftime('%Y-%m-%d')
+            punch_time = ts.strftime('%H:%M')
+        except ValueError:
+            errors.append(f"Invalid timestamp: {timestamp_str}")
+            continue
+
+        existing = await db.hrms_attendance.find_one({'employee_id': emp['id'], 'date': punch_date})
+        if existing:
+            update_field = {punch_type: punch_time, 'updated_at': datetime.now(timezone.utc).isoformat(), 'updated_by': f'biometric:{device_id}'}
+            if punch_type == 'check_in' and not existing.get('status'):
+                update_field['status'] = 'present'
+            await db.hrms_attendance.update_one({'employee_id': emp['id'], 'date': punch_date}, {'$set': update_field})
+        else:
+            att = {
+                'id': str(uuid.uuid4()),
+                'employee_id': emp['id'],
+                'date': punch_date,
+                'status': 'present' if punch_type == 'check_in' else '',
+                'leave_type': '',
+                'check_in': punch_time if punch_type == 'check_in' else '',
+                'check_out': punch_time if punch_type == 'check_out' else '',
+                'overtime_hours': 0,
+                'remarks': f'Biometric ({device_id})',
+                'marked_by': f'biometric:{device_id}',
+                'created_at': datetime.now(timezone.utc).isoformat(),
+            }
+            await db.hrms_attendance.insert_one(att)
+        processed += 1
+
+    return {
+        "message": f"Biometric sync complete: {processed} punches processed, {len(errors)} errors",
+        "processed": processed,
+        "errors": errors,
+    }

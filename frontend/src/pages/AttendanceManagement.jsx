@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/
 import { toast } from 'sonner';
 import {
   CalendarDays, Save, Loader2, Clock, UserCheck, UserX,
-  AlertTriangle, Sun, ChevronLeft, ChevronRight, BarChart3, Download, FileText
+  AlertTriangle, Sun, ChevronLeft, ChevronRight, BarChart3, Download, FileText, User, Search
 } from 'lucide-react';
 
 const STATUS_OPTIONS = [
@@ -58,10 +58,28 @@ const AttendanceManagement = () => {
   const [leaveDialog, setLeaveDialog] = useState(null);
   const [leaveBalance, setLeaveBalance] = useState(null);
 
+  // Employee Overview state
+  const [allEmployees, setAllEmployees] = useState([]);
+  const [overviewEmpId, setOverviewEmpId] = useState('');
+  const [overviewStartDate, setOverviewStartDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  });
+  const [overviewEndDate, setOverviewEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [overviewData, setOverviewData] = useState(null);
+  const [overviewLoading, setOverviewLoading] = useState(false);
+
   const fetchDepartments = useCallback(async () => {
     try {
       const res = await api.get('/hrms/departments');
       setDepartments(res.data);
+    } catch (e) { console.error(e); }
+  }, []);
+
+  const fetchAllEmployees = useCallback(async () => {
+    try {
+      const res = await api.get('/hrms/employees', { params: { limit: 200 } });
+      setAllEmployees(res.data.employees || []);
     } catch (e) { console.error(e); }
   }, []);
 
@@ -102,11 +120,14 @@ const AttendanceManagement = () => {
     }
   }, [summaryMonth, selectedDept]);
 
-  useEffect(() => { fetchDepartments(); }, [fetchDepartments]);
+  useEffect(() => {
+    fetchDepartments();
+    fetchAllEmployees();
+  }, [fetchDepartments, fetchAllEmployees]);
 
   useEffect(() => {
     if (activeTab === 'daily') fetchDailyAttendance();
-    else fetchMonthlySummary();
+    else if (activeTab === 'summary') fetchMonthlySummary();
   }, [activeTab, fetchDailyAttendance, fetchMonthlySummary]);
 
   const updateAttendance = (empId, field, value) => {
@@ -175,6 +196,52 @@ const AttendanceManagement = () => {
     }
   };
 
+  // Employee Overview functions
+  const fetchEmployeeOverview = async () => {
+    if (!overviewEmpId) {
+      toast.error('Please select an employee');
+      return;
+    }
+    if (!overviewStartDate || !overviewEndDate) {
+      toast.error('Please select a date range');
+      return;
+    }
+    if (overviewStartDate > overviewEndDate) {
+      toast.error('Start date must be before end date');
+      return;
+    }
+    setOverviewLoading(true);
+    try {
+      const res = await api.get('/hrms/attendance/employee-overview', {
+        params: { employee_id: overviewEmpId, start_date: overviewStartDate, end_date: overviewEndDate }
+      });
+      setOverviewData(res.data);
+    } catch (e) {
+      toast.error('Failed to load employee overview');
+    } finally {
+      setOverviewLoading(false);
+    }
+  };
+
+  const exportOverview = (format) => {
+    if (!overviewEmpId || !overviewStartDate || !overviewEndDate) {
+      toast.error('Please search first');
+      return;
+    }
+    const url = `/hrms/reports/attendance-employee/${format}?employee_id=${overviewEmpId}&start_date=${overviewStartDate}&end_date=${overviewEndDate}`;
+    api.get(url, { responseType: 'blob' })
+      .then(r => {
+        const blob = new Blob([r.data]);
+        const a = document.createElement('a');
+        a.href = window.URL.createObjectURL(blob);
+        const ext = format === 'pdf' ? 'pdf' : 'xlsx';
+        a.download = `Attendance_${overviewData?.employee?.name || 'Employee'}_${overviewStartDate}_to_${overviewEndDate}.${ext}`;
+        a.click();
+        toast.success(`${format.toUpperCase()} downloaded`);
+      })
+      .catch(() => toast.error(`Failed to export ${format.toUpperCase()}`));
+  };
+
   const markedCount = Object.values(attendanceMap).filter(v => v.status).length;
   const presentCount = Object.values(attendanceMap).filter(v => ['present', 'late'].includes(v.status)).length;
   const absentCount = Object.values(attendanceMap).filter(v => v.status === 'absent').length;
@@ -186,6 +253,9 @@ const AttendanceManagement = () => {
   const [smY, smM] = summaryMonth.split('-').map(Number);
   const summaryLabel = `${MONTH_NAMES[smM - 1]} ${smY}`;
 
+  const STATUS_LABELS = { present: 'Present', absent: 'Absent', half_day: 'Half Day', late: 'Late', leave: 'Leave', holiday: 'Holiday', week_off: 'Week Off' };
+  const LEAVE_LABELS = { casual: 'Casual', sick: 'Sick', earned: 'Earned', unpaid: 'Unpaid' };
+
   return (
     <HRMSLayout>
       <div className="space-y-5" data-testid="attendance-management">
@@ -193,7 +263,7 @@ const AttendanceManagement = () => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-800">Attendance</h1>
-            <p className="text-slate-500 text-sm mt-1">Mark daily attendance and view monthly summaries</p>
+            <p className="text-slate-500 text-sm mt-1">Mark daily attendance, view summaries and employee reports</p>
           </div>
         </div>
 
@@ -213,28 +283,36 @@ const AttendanceManagement = () => {
           >
             <BarChart3 className="w-4 h-4 inline mr-1" /> Monthly Summary
           </button>
+          <button
+            className={`px-4 py-2 rounded-md text-sm font-medium transition ${activeTab === 'overview' ? 'bg-white shadow text-slate-800' : 'text-slate-500'}`}
+            onClick={() => setActiveTab('overview')}
+            data-testid="overview-tab"
+          >
+            <User className="w-4 h-4 inline mr-1" /> Employee Overview
+          </button>
         </div>
 
-        {/* Department Filter */}
-        <div className="flex gap-3 items-end">
-          <div>
-            <Label className="text-xs text-slate-500">Department</Label>
-            <Select value={selectedDept} onValueChange={setSelectedDept}>
-              <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Departments</SelectItem>
-                {departments.map(d => (
-                  <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        {/* Department Filter (for daily/summary tabs) */}
+        {activeTab !== 'overview' && (
+          <div className="flex gap-3 items-end">
+            <div>
+              <Label className="text-xs text-slate-500">Department</Label>
+              <Select value={selectedDept} onValueChange={setSelectedDept}>
+                <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Departments</SelectItem>
+                  {departments.map(d => (
+                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* DAILY TAB */}
         {activeTab === 'daily' && (
           <>
-            {/* Date Picker Row */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" onClick={() => navigateDate(-1)}><ChevronLeft className="w-4 h-4" /></Button>
@@ -259,14 +337,12 @@ const AttendanceManagement = () => {
               </div>
             </div>
 
-            {/* Quick Stats */}
             <div className="grid grid-cols-3 gap-3">
               <Card><CardContent className="p-3 text-center"><p className="text-xs text-slate-500">Present</p><p className="text-lg font-bold text-green-700">{presentCount}</p></CardContent></Card>
               <Card><CardContent className="p-3 text-center"><p className="text-xs text-slate-500">Absent</p><p className="text-lg font-bold text-red-600">{absentCount}</p></CardContent></Card>
               <Card><CardContent className="p-3 text-center"><p className="text-xs text-slate-500">Total</p><p className="text-lg font-bold text-slate-700">{employees.length}</p></CardContent></Card>
             </div>
 
-            {/* Attendance Table */}
             <Card>
               <CardContent className="p-0">
                 {loading ? (
@@ -317,38 +393,17 @@ const AttendanceManagement = () => {
                                 </Select>
                               </td>
                               <td className="p-3">
-                                <Input
-                                  type="time"
-                                  value={att.check_in || ''}
-                                  onChange={e => updateAttendance(emp.employee_id, 'check_in', e.target.value)}
-                                  className="w-28 h-8 text-xs"
-                                />
+                                <Input type="time" value={att.check_in || ''} onChange={e => updateAttendance(emp.employee_id, 'check_in', e.target.value)} className="w-28 h-8 text-xs" />
                               </td>
                               <td className="p-3">
-                                <Input
-                                  type="time"
-                                  value={att.check_out || ''}
-                                  onChange={e => updateAttendance(emp.employee_id, 'check_out', e.target.value)}
-                                  className="w-28 h-8 text-xs"
-                                />
+                                <Input type="time" value={att.check_out || ''} onChange={e => updateAttendance(emp.employee_id, 'check_out', e.target.value)} className="w-28 h-8 text-xs" />
                               </td>
                               <td className="p-3">
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  step="0.5"
-                                  value={att.overtime_hours || ''}
-                                  onChange={e => updateAttendance(emp.employee_id, 'overtime_hours', e.target.value)}
-                                  className="w-16 h-8 text-xs"
-                                  placeholder="0"
-                                />
+                                <Input type="number" min="0" step="0.5" value={att.overtime_hours || ''} onChange={e => updateAttendance(emp.employee_id, 'overtime_hours', e.target.value)} className="w-16 h-8 text-xs" placeholder="0" />
                               </td>
                               <td className="p-3">
                                 {att.status === 'leave' ? (
-                                  <Select
-                                    value={att.leave_type || 'casual'}
-                                    onValueChange={v => updateAttendance(emp.employee_id, 'leave_type', v)}
-                                  >
+                                  <Select value={att.leave_type || 'casual'} onValueChange={v => updateAttendance(emp.employee_id, 'leave_type', v)}>
                                     <SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                       {LEAVE_TYPES.map(lt => (
@@ -361,12 +416,7 @@ const AttendanceManagement = () => {
                                 )}
                               </td>
                               <td className="p-3">
-                                <Input
-                                  value={att.remarks || ''}
-                                  onChange={e => updateAttendance(emp.employee_id, 'remarks', e.target.value)}
-                                  className="w-32 h-8 text-xs"
-                                  placeholder="Note..."
-                                />
+                                <Input value={att.remarks || ''} onChange={e => updateAttendance(emp.employee_id, 'remarks', e.target.value)} className="w-32 h-8 text-xs" placeholder="Note..." />
                               </td>
                             </tr>
                           );
@@ -378,7 +428,6 @@ const AttendanceManagement = () => {
               </CardContent>
             </Card>
 
-            {/* Save Button */}
             {employees.length > 0 && (
               <div className="flex justify-end">
                 <Button className="bg-blue-700 hover:bg-blue-800 gap-2" onClick={saveAttendance} disabled={saving} data-testid="save-attendance-btn">
@@ -471,6 +520,170 @@ const AttendanceManagement = () => {
                 )}
               </CardContent>
             </Card>
+          </>
+        )}
+
+        {/* EMPLOYEE OVERVIEW TAB */}
+        {activeTab === 'overview' && (
+          <>
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Employee Attendance Overview</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-3 items-end">
+                  <div className="flex-1 min-w-[200px]">
+                    <Label className="text-xs text-slate-500">Employee</Label>
+                    <Select value={overviewEmpId} onValueChange={setOverviewEmpId}>
+                      <SelectTrigger data-testid="overview-employee-select"><SelectValue placeholder="Select Employee" /></SelectTrigger>
+                      <SelectContent>
+                        {allEmployees.map(e => (
+                          <SelectItem key={e.id} value={e.id}>{e.name} ({e.employee_id})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-slate-500">Start Date</Label>
+                    <Input type="date" value={overviewStartDate} onChange={e => setOverviewStartDate(e.target.value)} className="w-40" data-testid="overview-start-date" />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-slate-500">End Date</Label>
+                    <Input type="date" value={overviewEndDate} onChange={e => setOverviewEndDate(e.target.value)} className="w-40" data-testid="overview-end-date" />
+                  </div>
+                  <Button className="bg-blue-700 hover:bg-blue-800 gap-1" onClick={fetchEmployeeOverview} disabled={overviewLoading} data-testid="overview-search-btn">
+                    {overviewLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                    Search
+                  </Button>
+                  {overviewData && (
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => exportOverview('pdf')} data-testid="overview-export-pdf">
+                        <FileText className="w-4 h-4 mr-1" /> PDF
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => exportOverview('excel')} data-testid="overview-export-excel">
+                        <Download className="w-4 h-4 mr-1" /> Excel
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {overviewLoading && (
+              <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-blue-600" /></div>
+            )}
+
+            {overviewData && !overviewLoading && (
+              <>
+                {/* Employee Info */}
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex flex-wrap gap-6 items-center">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                          <User className="w-5 h-5 text-blue-700" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-slate-800" data-testid="overview-emp-name">{overviewData.employee.name}</p>
+                          <p className="text-xs text-slate-400">{overviewData.employee.employee_code} | {overviewData.employee.department} | {overviewData.employee.designation}</p>
+                        </div>
+                      </div>
+                      <div className="ml-auto text-right">
+                        <p className="text-xs text-slate-500">Period</p>
+                        <p className="text-sm font-medium text-slate-700">{overviewData.date_range.start} to {overviewData.date_range.end}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Summary Cards */}
+                <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2">
+                  {[
+                    { label: 'Present', value: overviewData.summary.present, color: 'text-green-700 bg-green-50' },
+                    { label: 'Absent', value: overviewData.summary.absent, color: 'text-red-600 bg-red-50' },
+                    { label: 'Half Day', value: overviewData.summary.half_day, color: 'text-amber-600 bg-amber-50' },
+                    { label: 'Late', value: overviewData.summary.late, color: 'text-orange-600 bg-orange-50' },
+                    { label: 'Leave', value: overviewData.summary.leave, color: 'text-purple-600 bg-purple-50' },
+                    { label: 'Holiday', value: overviewData.summary.holiday, color: 'text-blue-600 bg-blue-50' },
+                    { label: 'Week Off', value: overviewData.summary.week_off, color: 'text-slate-600 bg-slate-50' },
+                    { label: 'OT Hrs', value: overviewData.summary.overtime_hours, color: 'text-cyan-700 bg-cyan-50' },
+                    { label: 'Effective', value: overviewData.summary.effective_present, color: 'text-indigo-700 bg-indigo-50' },
+                  ].map(item => (
+                    <Card key={item.label} className={item.color}>
+                      <CardContent className="p-2 text-center" data-testid={`overview-stat-${item.label.toLowerCase().replace(' ', '-')}`}>
+                        <p className="text-[10px] font-medium opacity-80">{item.label}</p>
+                        <p className="text-lg font-bold">{item.value}</p>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+
+                {/* Leave Breakdown (if any leaves) */}
+                {Object.keys(overviewData.summary.leave_breakdown || {}).length > 0 && (
+                  <Card>
+                    <CardContent className="p-3">
+                      <p className="text-xs font-medium text-slate-600 mb-2">Leave Breakdown</p>
+                      <div className="flex gap-4">
+                        {Object.entries(overviewData.summary.leave_breakdown).map(([type, count]) => (
+                          <span key={type} className="text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded">
+                            {LEAVE_LABELS[type] || type}: <strong>{count}</strong>
+                          </span>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Detail Records */}
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Day-wise Attendance ({overviewData.summary.total_records} records)</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {overviewData.records.length === 0 ? (
+                      <p className="text-slate-400 text-sm text-center py-8">No records found for this period</p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b bg-slate-50 text-left text-slate-500">
+                              <th className="p-2 font-medium">#</th>
+                              <th className="p-2 font-medium">Date</th>
+                              <th className="p-2 font-medium">Day</th>
+                              <th className="p-2 font-medium">Status</th>
+                              <th className="p-2 font-medium text-center">Check In</th>
+                              <th className="p-2 font-medium text-center">Check Out</th>
+                              <th className="p-2 font-medium text-center">OT Hrs</th>
+                              <th className="p-2 font-medium">Leave Type</th>
+                              <th className="p-2 font-medium">Remarks</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {overviewData.records.map((rec, i) => {
+                              let dayName = '';
+                              try { dayName = new Date(rec.date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short' }); } catch {}
+                              return (
+                                <tr key={rec.date} className="border-b hover:bg-slate-50" data-testid={`overview-row-${rec.date}`}>
+                                  <td className="p-2 text-slate-400">{i + 1}</td>
+                                  <td className="p-2 font-medium">{rec.date}</td>
+                                  <td className="p-2 text-slate-500">{dayName}</td>
+                                  <td className="p-2">{getStatusBadge(rec.status)}</td>
+                                  <td className="p-2 text-center">{rec.check_in || '-'}</td>
+                                  <td className="p-2 text-center">{rec.check_out || '-'}</td>
+                                  <td className="p-2 text-center">{rec.overtime_hours || '-'}</td>
+                                  <td className="p-2">{rec.status === 'leave' ? (LEAVE_LABELS[rec.leave_type] || rec.leave_type || '-') : '-'}</td>
+                                  <td className="p-2 text-slate-500">{rec.remarks || '-'}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            )}
           </>
         )}
       </div>

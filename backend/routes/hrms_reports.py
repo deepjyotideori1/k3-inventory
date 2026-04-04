@@ -599,6 +599,235 @@ async def export_payroll_report_excel(payroll_id: str, user: dict = Depends(get_
                     headers={"Content-Disposition": f'attachment; filename="Payroll_{month_name}_{year}.xlsx"'})
 
 
+
+# ============ EMPLOYEE-WISE ATTENDANCE REPORT (PDF) - Custom Date Range ============
+
+@router.get("/hrms/reports/attendance-employee/pdf")
+async def export_employee_attendance_pdf(
+    employee_id: str,
+    start_date: str,
+    end_date: str,
+    user: dict = Depends(get_current_user)
+):
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Table, Paragraph, Spacer
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+
+    company = await get_company_info()
+    emp = await db.hrms_employees.find_one({'id': employee_id}, {'_id': 0})
+    if not emp:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    dept = await db.hrms_departments.find_one({'id': emp.get('department_id')}, {'_id': 0, 'name': 1})
+
+    query = {'employee_id': employee_id, 'date': {'$gte': start_date, '$lte': end_date}}
+    records = []
+    async for rec in db.hrms_attendance.find(query, {'_id': 0}).sort('date', 1):
+        records.append(rec)
+
+    # Compute summary
+    present = sum(1 for r in records if r.get('status') == 'present')
+    absent = sum(1 for r in records if r.get('status') == 'absent')
+    half_day = sum(1 for r in records if r.get('status') == 'half_day')
+    late = sum(1 for r in records if r.get('status') == 'late')
+    leave = sum(1 for r in records if r.get('status') == 'leave')
+    holiday = sum(1 for r in records if r.get('status') == 'holiday')
+    week_off = sum(1 for r in records if r.get('status') == 'week_off')
+    total_ot = sum(float(r.get('overtime_hours', 0)) for r in records)
+    effective = present + late + (half_day * 0.5)
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=12 * mm, rightMargin=12 * mm, topMargin=15 * mm, bottomMargin=15 * mm)
+    elements = []
+
+    logo_path = build_report_header(elements, company, "EMPLOYEE ATTENDANCE REPORT", mm)
+
+    # Employee info block
+    info_style = ParagraphStyle('Info', fontName='Arial', fontSize=9, alignment=TA_LEFT, spaceAfter=1 * mm)
+    elements.append(Paragraph(f"<b>Employee:</b> {emp['name']} ({emp.get('employee_id', '')})", info_style))
+    elements.append(Paragraph(f"<b>Department:</b> {dept['name'] if dept else 'N/A'} | <b>Designation:</b> {emp.get('designation', '')}", info_style))
+    elements.append(Paragraph(f"<b>Period:</b> {start_date} to {end_date}", info_style))
+    elements.append(Spacer(1, 3 * mm))
+
+    # Summary mini-table
+    sum_data = [
+        ['Present', 'Absent', 'Half Day', 'Late', 'Leave', 'Holiday', 'Week Off', 'OT Hrs', 'Effective'],
+        [str(present), str(absent), str(half_day), str(late), str(leave), str(holiday), str(week_off), str(round(total_ot, 1)), str(effective)],
+    ]
+    sum_table = Table(sum_data, colWidths=[52] * 9)
+    sum_style = make_table_style(header_color=(0.2, 0.45, 0.2))
+    sum_style.add('ALIGN', (0, 0), (-1, -1), 'CENTER')
+    sum_table.setStyle(sum_style)
+    elements.append(sum_table)
+    elements.append(Spacer(1, 4 * mm))
+
+    # Detail table
+    STATUS_LABELS = {'present': 'Present', 'absent': 'Absent', 'half_day': 'Half Day', 'late': 'Late',
+                     'leave': 'Leave', 'holiday': 'Holiday', 'week_off': 'Week Off'}
+    LEAVE_LABELS = {'casual': 'Casual', 'sick': 'Sick', 'earned': 'Earned', 'unpaid': 'Unpaid'}
+
+    data = [['S.No', 'Date', 'Day', 'Status', 'Check In', 'Check Out', 'OT Hrs', 'Leave Type', 'Remarks']]
+    for i, rec in enumerate(records):
+        try:
+            day_name = datetime.strptime(rec['date'], '%Y-%m-%d').strftime('%A')
+        except Exception:
+            day_name = ''
+        data.append([
+            str(i + 1),
+            rec['date'],
+            day_name[:3],
+            STATUS_LABELS.get(rec.get('status', ''), rec.get('status', '')),
+            rec.get('check_in', '') or '-',
+            rec.get('check_out', '') or '-',
+            str(rec.get('overtime_hours', 0)) if rec.get('overtime_hours') else '-',
+            LEAVE_LABELS.get(rec.get('leave_type', ''), rec.get('leave_type', '')) or '-',
+            (rec.get('remarks', '') or '-')[:20],
+        ])
+
+    if len(data) > 1:
+        table = Table(data, colWidths=[25, 55, 28, 48, 42, 42, 35, 58, 80])
+        style = make_table_style()
+        style.add('ALIGN', (0, 0), (0, -1), 'CENTER')
+        style.add('ALIGN', (4, 0), (6, -1), 'CENTER')
+        table.setStyle(style)
+        elements.append(table)
+    else:
+        elements.append(Paragraph("No attendance records found for this period.", ParagraphStyle('NoData', fontName='Arial', fontSize=10, alignment=TA_CENTER)))
+
+    build_report_footer(elements, company, mm)
+    doc.build(elements)
+    if logo_path:
+        os.unlink(logo_path)
+    buf.seek(0)
+    name = emp['name'].replace(' ', '_')
+    return Response(content=buf.read(), media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="Attendance_{name}_{start_date}_to_{end_date}.pdf"'})
+
+
+# ============ EMPLOYEE-WISE ATTENDANCE REPORT (EXCEL) - Custom Date Range ============
+
+@router.get("/hrms/reports/attendance-employee/excel")
+async def export_employee_attendance_excel(
+    employee_id: str,
+    start_date: str,
+    end_date: str,
+    user: dict = Depends(get_current_user)
+):
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+
+    company = await get_company_info()
+    emp = await db.hrms_employees.find_one({'id': employee_id}, {'_id': 0})
+    if not emp:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    dept = await db.hrms_departments.find_one({'id': emp.get('department_id')}, {'_id': 0, 'name': 1})
+
+    query = {'employee_id': employee_id, 'date': {'$gte': start_date, '$lte': end_date}}
+    records = []
+    async for rec in db.hrms_attendance.find(query, {'_id': 0}).sort('date', 1):
+        records.append(rec)
+
+    present = sum(1 for r in records if r.get('status') == 'present')
+    absent = sum(1 for r in records if r.get('status') == 'absent')
+    half_day = sum(1 for r in records if r.get('status') == 'half_day')
+    late = sum(1 for r in records if r.get('status') == 'late')
+    leave = sum(1 for r in records if r.get('status') == 'leave')
+    holiday = sum(1 for r in records if r.get('status') == 'holiday')
+    week_off = sum(1 for r in records if r.get('status') == 'week_off')
+    total_ot = sum(float(r.get('overtime_hours', 0)) for r in records)
+    effective = present + late + (half_day * 0.5)
+
+    STATUS_LABELS = {'present': 'Present', 'absent': 'Absent', 'half_day': 'Half Day', 'late': 'Late',
+                     'leave': 'Leave', 'holiday': 'Holiday', 'week_off': 'Week Off'}
+    LEAVE_LABELS = {'casual': 'Casual Leave', 'sick': 'Sick Leave', 'earned': 'Earned Leave', 'unpaid': 'Unpaid Leave'}
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Attendance"
+    hf = Font(name='Arial', size=14, bold=True)
+    sf = Font(name='Arial', size=9, color='666666')
+    cf = Font(name='Arial', size=9, bold=True, color='FFFFFF')
+    nf = Font(name='Arial', size=9)
+    bf = Font(name='Arial', size=9, bold=True)
+    hfill = PatternFill(start_color='264785', end_color='264785', fill_type='solid')
+    sfill = PatternFill(start_color='336633', end_color='336633', fill_type='solid')
+    border = Border(left=Side(style='thin', color='CCCCCC'), right=Side(style='thin', color='CCCCCC'),
+                    top=Side(style='thin', color='CCCCCC'), bottom=Side(style='thin', color='CCCCCC'))
+
+    ws.merge_cells('A1:I1')
+    ws['A1'] = company['name']
+    ws['A1'].font = hf
+    ws['A1'].alignment = Alignment(horizontal='center')
+    ws.merge_cells('A2:I2')
+    ws['A2'] = f"Employee Attendance Report | {start_date} to {end_date}"
+    ws['A2'].font = sf
+    ws['A2'].alignment = Alignment(horizontal='center')
+
+    # Employee info
+    ws['A3'] = f"Employee: {emp['name']} ({emp.get('employee_id', '')})"
+    ws['A3'].font = Font(name='Arial', size=9, bold=True)
+    ws['E3'] = f"Dept: {dept['name'] if dept else 'N/A'} | Desig: {emp.get('designation', '')}"
+    ws['E3'].font = Font(name='Arial', size=9)
+
+    # Summary row
+    sum_headers = ['Present', 'Absent', 'Half Day', 'Late', 'Leave', 'Holiday', 'Week Off', 'OT Hrs', 'Effective']
+    sum_values = [present, absent, half_day, late, leave, holiday, week_off, round(total_ot, 1), effective]
+    for col, h in enumerate(sum_headers, 1):
+        cell = ws.cell(row=5, column=col, value=h)
+        cell.font = Font(name='Arial', size=8, bold=True, color='FFFFFF')
+        cell.fill = sfill
+        cell.alignment = Alignment(horizontal='center')
+        cell.border = border
+    for col, v in enumerate(sum_values, 1):
+        cell = ws.cell(row=6, column=col, value=v)
+        cell.font = bf
+        cell.alignment = Alignment(horizontal='center')
+        cell.border = border
+
+    # Detail headers
+    headers = ['S.No', 'Date', 'Day', 'Status', 'Check In', 'Check Out', 'OT Hrs', 'Leave Type', 'Remarks']
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=8, column=col, value=h)
+        cell.font = cf
+        cell.fill = hfill
+        cell.alignment = Alignment(horizontal='center')
+        cell.border = border
+
+    for i, rec in enumerate(records):
+        row = i + 9
+        try:
+            day_name = datetime.strptime(rec['date'], '%Y-%m-%d').strftime('%A')
+        except Exception:
+            day_name = ''
+        values = [
+            i + 1, rec['date'], day_name[:3],
+            STATUS_LABELS.get(rec.get('status', ''), rec.get('status', '')),
+            rec.get('check_in', '') or '-', rec.get('check_out', '') or '-',
+            rec.get('overtime_hours', 0) or 0,
+            LEAVE_LABELS.get(rec.get('leave_type', ''), rec.get('leave_type', '')) or '-',
+            rec.get('remarks', '') or '-',
+        ]
+        for col, val in enumerate(values, 1):
+            cell = ws.cell(row=row, column=col, value=val)
+            cell.font = nf
+            cell.border = border
+            if col in (1, 5, 6, 7):
+                cell.alignment = Alignment(horizontal='center')
+
+    for c, w in [('A', 6), ('B', 12), ('C', 6), ('D', 10), ('E', 10), ('F', 10), ('G', 8), ('H', 14), ('I', 22)]:
+        ws.column_dimensions[c].width = w
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    name = emp['name'].replace(' ', '_')
+    return Response(content=buf.read(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="Attendance_{name}_{start_date}_to_{end_date}.xlsx"'})
+
+
+
 # ============ SALARY CERTIFICATE (PDF) ============
 
 @router.get("/hrms/certificates/salary/{employee_id}/pdf")
@@ -629,7 +858,7 @@ async def generate_salary_certificate(employee_id: str, user: dict = Depends(get
 
     # Subject - Center + Bold
     elements.append(Paragraph(
-        f"<b>TO WHOM IT MAY CONCERN</b>",
+        "<b>TO WHOM IT MAY CONCERN</b>",
         ParagraphStyle('Subject', fontName='Arial-Bold', fontSize=12, alignment=TA_CENTER, spaceAfter=6 * mm)
     ))
 
