@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import HRMSLayout from '../components/HRMSLayout';
+import { useAuth } from '../context/AuthContext';
 import api from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -16,7 +18,15 @@ const ROLE_LABELS = { hr_admin: 'HR Admin', hrms_employee: 'Employee' };
 const ROLE_COLORS = { hr_admin: 'bg-blue-100 text-blue-700', hrms_employee: 'bg-green-100 text-green-700' };
 
 const HRMSSettings = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('company');
+
+  useEffect(() => {
+    if (user && user.role === 'hrms_employee') {
+      navigate('/hrms/dashboard');
+    }
+  }, [user, navigate]);
 
   // Company settings
   const [settings, setSettings] = useState({ company_name: '', tagline: '', address: '', email: '', helpline: '', logo_url: '' });
