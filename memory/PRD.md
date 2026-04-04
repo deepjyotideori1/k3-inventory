@@ -441,6 +441,7 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - [x] Attendance Bulk Upload (Excel Import): Template with employee list, .xlsx upload, validation (employee lookup, date/status/leave-type checks, duplicate detection), preview, skip/overwrite, error report - April 2026
 - [x] HRMS Smart Search: Real-time global search across Employees, Departments, Payroll, Hiring, Performance with keyword highlighting, module filters, Ctrl+K shortcut, click-to-navigate - April 2026
 - [x] Data Handling Rules: All dates DD-MM-YYYY format (UI, reports, exports), all records sorted ascending date-wise across all HRMS modules - April 2026
+- [x] HRMS Access Control System: 3 roles (Super Admin, HR Admin, Employee), auto-redirect to correct dashboard, role-based sidebar, employee self-service (own attendance only), dashboard restriction between Inventory/HRMS - April 2026
 
 ### P2 (Nice to Have)
 - [x] Refactor backend/server.py into smaller modules using FastAPI APIRouter (April 2026)
