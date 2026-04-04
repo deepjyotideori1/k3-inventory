@@ -387,7 +387,7 @@ const AttendanceManagement = () => {
         {/* DAILY TAB */}
         {activeTab === 'daily' && (
           <>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" onClick={() => navigateDate(-1)}><ChevronLeft className="w-4 h-4" /></Button>
                 <div className="flex items-center gap-2">
@@ -403,7 +403,7 @@ const AttendanceManagement = () => {
                 <Button variant="outline" size="sm" onClick={() => navigateDate(1)}><ChevronRight className="w-4 h-4" /></Button>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-xs text-slate-400">{markedCount}/{employees.length} marked</span>
+                <span className="text-xs text-slate-400 hidden sm:inline">{markedCount}/{employees.length} marked</span>
                 <div className="flex gap-1">
                   <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => markAll('present')} data-testid="mark-all-present">All Present</Button>
                   <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => markAll('absent')}>All Absent</Button>
@@ -516,10 +516,10 @@ const AttendanceManagement = () => {
         {/* SUMMARY TAB */}
         {activeTab === 'summary' && (
           <>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" onClick={() => navigateMonth(-1)}><ChevronLeft className="w-4 h-4" /></Button>
-                <span className="font-medium text-slate-700 min-w-[160px] text-center">{summaryLabel}</span>
+                <span className="font-medium text-slate-700 min-w-[140px] text-center text-sm sm:text-base">{summaryLabel}</span>
                 <Button variant="outline" size="sm" onClick={() => navigateMonth(1)}><ChevronRight className="w-4 h-4" /></Button>
               </div>
               <div className="flex gap-2">

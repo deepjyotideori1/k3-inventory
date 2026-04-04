@@ -1,17 +1,53 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import HRMSLayout from '../components/HRMSLayout';
 import api from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { useNavigate } from 'react-router-dom';
 import {
   Users, Building2, DollarSign, TrendingUp, CalendarDays,
-  Target, Briefcase, ArrowRight, UserCheck, Clock
+  Target, Briefcase, ArrowRight, UserCheck, Clock, UserX,
+  AlertCircle, CheckCircle
 } from 'lucide-react';
 import { formatINR, formatDate } from '../lib/utils';
 import { Button } from '../components/ui/button';
 
-const StatCard = ({ title, value, subtitle, icon: Icon, color }) => (
-  <Card data-testid={`stat-${title.toLowerCase().replace(/\s/g, '-')}`}>
+const SkeletonCard = () => (
+  <Card>
+    <CardContent className="p-5">
+      <div className="animate-pulse space-y-3">
+        <div className="h-3 bg-slate-200 rounded w-24" />
+        <div className="h-7 bg-slate-200 rounded w-16" />
+        <div className="h-2 bg-slate-100 rounded w-20" />
+      </div>
+    </CardContent>
+  </Card>
+);
+
+const SkeletonList = ({ rows = 4 }) => (
+  <Card>
+    <CardContent className="p-5">
+      <div className="animate-pulse space-y-4">
+        <div className="h-4 bg-slate-200 rounded w-32" />
+        {Array.from({ length: rows }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full bg-slate-200" />
+            <div className="flex-1 space-y-1">
+              <div className="h-3 bg-slate-200 rounded w-3/4" />
+              <div className="h-2 bg-slate-100 rounded w-1/2" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </CardContent>
+  </Card>
+);
+
+const StatCard = ({ title, value, subtitle, icon: Icon, color, onClick }) => (
+  <Card
+    className={`transition-all duration-200 ${onClick ? 'cursor-pointer hover:shadow-md hover:-translate-y-0.5' : ''}`}
+    onClick={onClick}
+    data-testid={`stat-${title.toLowerCase().replace(/\s/g, '-')}`}
+  >
     <CardContent className="p-5">
       <div className="flex items-start justify-between">
         <div>
@@ -32,36 +68,56 @@ const HRMSDashboard = () => {
   const [payrollStats, setPayrollStats] = useState(null);
   const [hiringStats, setHiringStats] = useState(null);
   const [perfStats, setPerfStats] = useState(null);
+  const [attendanceToday, setAttendanceToday] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    fetchAll();
-  }, []);
-
-  const fetchAll = async () => {
+  const fetchAll = useCallback(async () => {
     try {
-      const [hrRes, payRes, hireRes, perfRes] = await Promise.allSettled([
+      const [hrRes, payRes, hireRes, perfRes, attRes] = await Promise.allSettled([
         api.get('/hrms/dashboard/stats'),
         api.get('/hrms/payroll/history'),
         api.get('/hrms/hiring/stats'),
         api.get('/hrms/performance/stats'),
+        api.get('/hrms/attendance/today-stats'),
       ]);
       if (hrRes.status === 'fulfilled') setStats(hrRes.value.data);
       if (payRes.status === 'fulfilled') setPayrollStats(payRes.value.data);
       if (hireRes.status === 'fulfilled') setHiringStats(hireRes.value.data);
       if (perfRes.status === 'fulfilled') setPerfStats(perfRes.value.data);
+      if (attRes.status === 'fulfilled') setAttendanceToday(attRes.value.data);
     } catch (e) { console.error(e); }
     setLoading(false);
-  };
+  }, []);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.key === '1' && e.altKey) { e.preventDefault(); navigate('/hrms/employees'); }
+      if (e.key === '2' && e.altKey) { e.preventDefault(); navigate('/hrms/attendance'); }
+      if (e.key === '3' && e.altKey) { e.preventDefault(); navigate('/hrms/payroll'); }
+      if (e.key === '4' && e.altKey) { e.preventDefault(); navigate('/hrms/performance'); }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [navigate]);
 
   const latestPayroll = payrollStats?.[0];
 
   if (loading) {
     return (
       <HRMSLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full" />
+        <div className="space-y-6" data-testid="hrms-dashboard-loading">
+          <div className="animate-pulse"><div className="h-7 bg-slate-200 rounded w-48" /><div className="h-3 bg-slate-100 rounded w-64 mt-2" /></div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[1,2,3,4].map(i => <SkeletonCard key={i} />)}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <SkeletonList /><SkeletonList />
+          </div>
         </div>
       </HRMSLayout>
     );
@@ -70,32 +126,44 @@ const HRMSDashboard = () => {
   return (
     <HRMSLayout>
       <div className="space-y-6" data-testid="hrms-dashboard">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800">HRMS Dashboard</h1>
-          <p className="text-slate-500 text-sm mt-1">Human Resource Management Overview</p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-800">HRMS Dashboard</h1>
+            <p className="text-slate-500 text-sm mt-1">Human Resource Management Overview</p>
+          </div>
+          <div className="hidden sm:flex items-center gap-1 text-[10px] text-slate-400 bg-slate-100 px-2 py-1 rounded">
+            <span>Alt+1</span> Employees
+            <span className="mx-1">|</span>
+            <span>Alt+2</span> Attendance
+            <span className="mx-1">|</span>
+            <span>Alt+3</span> Payroll
+          </div>
         </div>
 
         {/* Stat Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <StatCard
             title="Total Employees"
             value={stats?.total_employees || 0}
             subtitle={`${stats?.total_inactive || 0} inactive`}
             icon={Users}
             color="bg-blue-50 text-blue-600"
+            onClick={() => navigate('/hrms/employees')}
           />
           <StatCard
             title="Departments"
             value={stats?.total_departments || 0}
             icon={Building2}
             color="bg-purple-50 text-purple-600"
+            onClick={() => navigate('/hrms/departments')}
           />
           <StatCard
             title="Monthly Payroll"
-            value={formatINR ? formatINR(stats?.total_monthly_payroll || 0) : `Rs.${stats?.total_monthly_payroll || 0}`}
+            value={formatINR(stats?.total_monthly_payroll || 0)}
             subtitle="Gross salary"
             icon={DollarSign}
             color="bg-green-50 text-green-600"
+            onClick={() => navigate('/hrms/payroll')}
           />
           <StatCard
             title="Gender Ratio"
@@ -105,6 +173,66 @@ const HRMSDashboard = () => {
             color="bg-amber-50 text-amber-600"
           />
         </div>
+
+        {/* Attendance Today Widget */}
+        {attendanceToday && (
+          <Card className="border-l-4 border-l-teal-500" data-testid="attendance-today-widget">
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <CardTitle className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                <CalendarDays className="w-4 h-4 text-teal-600" /> Today's Attendance
+              </CardTitle>
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => navigate('/hrms/attendance')}>
+                Mark Attendance <ArrowRight className="w-3 h-3 ml-1" />
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                <div className="flex items-center gap-2 p-2 bg-green-50 rounded-lg">
+                  <UserCheck className="w-4 h-4 text-green-600 flex-shrink-0" />
+                  <div>
+                    <p className="text-lg font-bold text-green-700">{attendanceToday.present}</p>
+                    <p className="text-[10px] text-green-600 font-medium">Present</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 p-2 bg-red-50 rounded-lg">
+                  <UserX className="w-4 h-4 text-red-500 flex-shrink-0" />
+                  <div>
+                    <p className="text-lg font-bold text-red-600">{attendanceToday.absent}</p>
+                    <p className="text-[10px] text-red-500 font-medium">Absent</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 p-2 bg-purple-50 rounded-lg">
+                  <CalendarDays className="w-4 h-4 text-purple-500 flex-shrink-0" />
+                  <div>
+                    <p className="text-lg font-bold text-purple-600">{attendanceToday.on_leave}</p>
+                    <p className="text-[10px] text-purple-500 font-medium">On Leave</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 p-2 bg-amber-50 rounded-lg">
+                  <Clock className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                  <div>
+                    <p className="text-lg font-bold text-amber-600">{attendanceToday.half_day}</p>
+                    <p className="text-[10px] text-amber-500 font-medium">Half Day</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
+                  <AlertCircle className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <div>
+                    <p className="text-lg font-bold text-slate-500">{attendanceToday.not_marked}</p>
+                    <p className="text-[10px] text-slate-400 font-medium">Not Marked</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 p-2 bg-teal-50 rounded-lg">
+                  <CheckCircle className="w-4 h-4 text-teal-600 flex-shrink-0" />
+                  <div>
+                    <p className="text-lg font-bold text-teal-700">{attendanceToday.attendance_rate}%</p>
+                    <p className="text-[10px] text-teal-600 font-medium">Rate</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Department Breakdown */}
@@ -117,9 +245,9 @@ const HRMSDashboard = () => {
                 <div className="space-y-3">
                   {stats.department_breakdown.map((dept, i) => (
                     <div key={i} className="flex items-center justify-between">
-                      <span className="text-sm text-slate-600">{dept.name}</span>
-                      <div className="flex items-center gap-3">
-                        <div className="w-32 h-2 bg-slate-100 rounded-full overflow-hidden">
+                      <span className="text-sm text-slate-600 truncate flex-1 mr-3">{dept.name}</span>
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <div className="w-24 sm:w-32 h-2 bg-slate-100 rounded-full overflow-hidden">
                           <div
                             className="h-full bg-blue-500 rounded-full transition-all"
                             style={{ width: `${stats.total_employees > 0 ? (dept.count / stats.total_employees) * 100 : 0}%` }}
@@ -157,7 +285,7 @@ const HRMSDashboard = () => {
                         <p className="text-sm font-medium text-slate-700 truncate">{emp.name}</p>
                         <p className="text-xs text-slate-400 truncate">{emp.designation} &middot; {emp.department_name}</p>
                       </div>
-                      <span className="text-xs text-slate-400 flex-shrink-0">{formatDate(emp.date_of_joining)}</span>
+                      <span className="text-xs text-slate-400 flex-shrink-0 hidden sm:inline">{formatDate(emp.date_of_joining)}</span>
                     </div>
                   ))}
                 </div>
@@ -169,7 +297,7 @@ const HRMSDashboard = () => {
         </div>
 
         {/* Module Quick Views */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {/* Payroll Summary */}
           <Card className="border-l-4 border-l-green-500">
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
@@ -207,7 +335,7 @@ const HRMSDashboard = () => {
           </Card>
 
           {/* Performance Summary */}
-          <Card className="border-l-4 border-l-purple-500">
+          <Card className="border-l-4 border-l-purple-500 sm:col-span-2 lg:col-span-1">
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
               <CardTitle className="text-sm font-semibold text-slate-700 flex items-center gap-2"><Target className="w-4 h-4 text-purple-600" /> Performance</CardTitle>
               <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => navigate('/hrms/performance')}>View <ArrowRight className="w-3 h-3 ml-1" /></Button>

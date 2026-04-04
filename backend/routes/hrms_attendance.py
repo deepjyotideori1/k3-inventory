@@ -285,6 +285,35 @@ async def get_leave_balance(employee_id: str, year: Optional[int] = None, user: 
     }
 
 
+
+@router.get("/hrms/attendance/today-stats")
+async def get_today_attendance_stats(user: dict = Depends(get_current_user)):
+    """Get today's attendance summary for dashboard widget"""
+    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    total_active = await db.hrms_employees.count_documents({'is_active': True})
+
+    records = []
+    async for rec in db.hrms_attendance.find({'date': today}, {'_id': 0, 'status': 1}):
+        records.append(rec)
+
+    present = sum(1 for r in records if r.get('status') in ('present', 'late'))
+    absent = sum(1 for r in records if r.get('status') == 'absent')
+    on_leave = sum(1 for r in records if r.get('status') == 'leave')
+    half_day = sum(1 for r in records if r.get('status') == 'half_day')
+    not_marked = total_active - len(records)
+
+    return {
+        'date': today,
+        'total_employees': total_active,
+        'present': present,
+        'absent': absent,
+        'on_leave': on_leave,
+        'half_day': half_day,
+        'not_marked': max(0, not_marked),
+        'attendance_rate': round((present / total_active * 100), 1) if total_active > 0 else 0,
+    }
+
+
 # ============ DAILY ATTENDANCE LIST FOR A DATE ============
 
 @router.get("/hrms/attendance/daily")

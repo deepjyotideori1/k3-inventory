@@ -16,6 +16,8 @@ import {
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
+const ITEMS_PER_PAGE = 10;
+
 const PayrollManagement = () => {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -30,6 +32,7 @@ const PayrollManagement = () => {
   const [expandedPayroll, setExpandedPayroll] = useState(null);
   const [payrollDetail, setPayrollDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const fetchHistory = useCallback(async () => {
     try {
@@ -138,6 +141,19 @@ const PayrollManagement = () => {
   const totalGross = history.reduce((s, p) => s + (p.total_gross || 0), 0);
   const totalNet = history.reduce((s, p) => s + (p.total_net_pay || 0), 0);
   const latestPayroll = history[0];
+  const totalPages = Math.max(1, Math.ceil(history.length / ITEMS_PER_PAGE));
+  const paginatedHistory = history.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.key === 'ArrowLeft' && currentPage > 1) { e.preventDefault(); setCurrentPage(p => p - 1); }
+      if (e.key === 'ArrowRight' && currentPage < totalPages) { e.preventDefault(); setCurrentPage(p => p + 1); }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentPage, totalPages]);
 
   return (
     <HRMSLayout>
@@ -206,7 +222,7 @@ const PayrollManagement = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {history.map(p => (
+                    {paginatedHistory.map(p => (
                       <React.Fragment key={p.id}>
                         <tr className="border-b hover:bg-slate-50 cursor-pointer" onClick={() => toggleExpand(p.id)} data-testid={`payroll-row-${p.period}`}>
                           <td className="py-3 pr-4 font-medium">{MONTHS[(p.month || 1) - 1]} {p.year}</td>
@@ -307,6 +323,20 @@ const PayrollManagement = () => {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between pt-4 border-t" data-testid="payroll-pagination">
+                <span className="text-xs text-slate-500">Page {currentPage} of {totalPages} ({history.length} total)</span>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage(p => p - 1)} data-testid="payroll-prev-page">
+                    <ChevronUp className="w-4 h-4 rotate-[-90deg]" />
+                  </Button>
+                  <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)} data-testid="payroll-next-page">
+                    <ChevronDown className="w-4 h-4 rotate-[-90deg]" />
+                  </Button>
+                  <span className="text-[10px] text-slate-400 hidden sm:inline">Arrow keys to navigate</span>
+                </div>
               </div>
             )}
           </CardContent>
