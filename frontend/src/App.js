@@ -34,6 +34,8 @@ const HRMSDepartments = lazy(() => import("./pages/HRMSDepartments"));
 const HRMSSettings = lazy(() => import("./pages/HRMSSettings"));
 const PayrollManagement = lazy(() => import("./pages/PayrollManagement"));
 const AttendanceManagement = lazy(() => import("./pages/AttendanceManagement"));
+const PerformanceManagement = lazy(() => import("./pages/PerformanceManagement"));
+const HireAnalytics = lazy(() => import("./pages/HireAnalytics"));
 
 // Loading fallback
 const PageLoader = () => (
@@ -110,6 +112,8 @@ function AppRoutes() {
       <Route path="/hrms/departments" element={<ProtectedRoute><HRMSDepartments /></ProtectedRoute>} />
       <Route path="/hrms/attendance" element={<ProtectedRoute><AttendanceManagement /></ProtectedRoute>} />
       <Route path="/hrms/payroll" element={<ProtectedRoute><PayrollManagement /></ProtectedRoute>} />
+      <Route path="/hrms/performance" element={<ProtectedRoute><PerformanceManagement /></ProtectedRoute>} />
+      <Route path="/hrms/hiring" element={<ProtectedRoute><HireAnalytics /></ProtectedRoute>} />
       <Route path="/hrms/settings" element={<ProtectedRoute><HRMSSettings /></ProtectedRoute>} />
 
       {/* Admin Routes */}
