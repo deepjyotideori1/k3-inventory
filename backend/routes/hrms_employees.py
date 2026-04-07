@@ -9,6 +9,17 @@ import uuid
 import base64
 import re
 
+
+def _safe_float(val, default=0):
+    """Safely convert value to float, returning default for empty/invalid values."""
+    if val is None or val == '':
+        return default
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return default
+
+
 router = APIRouter()
 
 
@@ -144,10 +155,10 @@ async def create_employee(data: dict, user: dict = Depends(get_current_user)):
         'designation': data['designation'],
         'date_of_joining': data['date_of_joining'],
         'employment_type': data.get('employment_type', 'full_time'),
-        'basic_salary': float(data.get('basic_salary', 0)),
-        'hra': float(data.get('hra', 0)),
-        'da': float(data.get('da', 0)),
-        'other_allowances': float(data.get('other_allowances', 0)),
+        'basic_salary': _safe_float(data.get('basic_salary')),
+        'hra': _safe_float(data.get('hra')),
+        'da': _safe_float(data.get('da')),
+        'other_allowances': _safe_float(data.get('other_allowances')),
         'pf_number': data.get('pf_number', ''),
         'esi_number': data.get('esi_number', ''),
         'pan_number': data.get('pan_number', ''),
@@ -194,7 +205,7 @@ async def update_employee(employee_id: str, data: dict, user: dict = Depends(get
     for field in updatable:
         if field in data:
             if field in ('basic_salary', 'hra', 'da', 'other_allowances'):
-                update_fields[field] = float(data[field])
+                update_fields[field] = _safe_float(data[field])
             else:
                 update_fields[field] = data[field]
 
@@ -259,8 +270,8 @@ async def add_increment(employee_id: str, data: dict, user: dict = Depends(get_c
         'id': str(uuid.uuid4()),
         'date': data.get('date', datetime.now(timezone.utc).strftime('%Y-%m-%d')),
         'previous_salary': emp.get('basic_salary', 0),
-        'new_salary': float(data.get('new_salary', 0)),
-        'increment_amount': float(data.get('new_salary', 0)) - emp.get('basic_salary', 0),
+        'new_salary': _safe_float(data.get('new_salary')),
+        'increment_amount': _safe_float(data.get('new_salary')) - emp.get('basic_salary', 0),
         'reason': data.get('reason', ''),
         'approved_by': user.get('name', ''),
         'created_at': datetime.now(timezone.utc).isoformat()
@@ -271,7 +282,7 @@ async def add_increment(employee_id: str, data: dict, user: dict = Depends(get_c
         {
             '$push': {'increment_history': increment},
             '$set': {
-                'basic_salary': float(data.get('new_salary', 0)),
+                'basic_salary': _safe_float(data.get('new_salary')),
                 'updated_at': datetime.now(timezone.utc).isoformat()
             }
         }
@@ -595,9 +606,9 @@ async def confirm_bulk_upload(data: dict, user: dict = Depends(get_current_user)
                         'phone': emp.get('phone', existing.get('phone')),
                         'designation': emp.get('designation', existing.get('designation')),
                         'department_id': emp.get('department_id', existing.get('department_id')),
-                        'basic_salary': float(emp.get('basic_salary', existing.get('basic_salary', 0))),
-                        'hra': float(emp.get('hra', existing.get('hra', 0))),
-                        'other_allowances': float(emp.get('other_allowances', existing.get('other_allowances', 0))),
+                        'basic_salary': _safe_float(emp.get('basic_salary', existing.get('basic_salary', 0))),
+                        'hra': _safe_float(emp.get('hra', existing.get('hra', 0))),
+                        'other_allowances': _safe_float(emp.get('other_allowances', existing.get('other_allowances', 0))),
                         'updated_at': datetime.now(timezone.utc).isoformat(),
                     }
                     if emp.get('date_of_birth'):
@@ -637,10 +648,10 @@ async def confirm_bulk_upload(data: dict, user: dict = Depends(get_current_user)
                 'designation': emp.get('designation', ''),
                 'date_of_joining': emp.get('date_of_joining', ''),
                 'employment_type': emp.get('employment_type', 'full_time'),
-                'basic_salary': float(emp.get('basic_salary', 0)),
-                'hra': float(emp.get('hra', 0)),
+                'basic_salary': _safe_float(emp.get('basic_salary')),
+                'hra': _safe_float(emp.get('hra')),
                 'da': 0,
-                'other_allowances': float(emp.get('other_allowances', 0)),
+                'other_allowances': _safe_float(emp.get('other_allowances')),
                 'pf_number': '',
                 'esi_number': '',
                 'pan_number': emp.get('pan_number', ''),
