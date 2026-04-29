@@ -449,6 +449,17 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
   - Responsive Design: 2-column grid on mobile for stat cards and attendance widget, responsive headers on Attendance/Payroll
   - Export Alignment: Verified PDF/Excel consistency with Arial font and proper column widths
   - New API: GET /api/hrms/attendance/today-stats for dashboard attendance summary
+- [x] Post-Payroll Adjustment Module - April 2026:
+  - Review & Adjust Payroll stage before finalization
+  - Employee-wise adjustments: custom deductions (penalties, advances, recovery) and earnings (bonus, incentives, reimbursements)
+  - Mandatory reason/audit trail with user log, timestamps
+  - Negative net salary prevention
+  - Before vs After salary comparison (4 summary cards)
+  - Modified rows highlighted with amber indicator
+  - Inline adjustment chips with edit/delete controls
+  - Finalization recalculates totals including adjustments, then locks data
+  - Adjustments included in payslip PDF breakdown
+  - New APIs: GET review, POST/PUT/DELETE adjustments
 
 ### P2 (Nice to Have)
 - [x] Refactor hrms.py into modular routers (April 2026):
