@@ -415,6 +415,245 @@ async def get_employee_attendance_overview(
     }
 
 
+
+# ============ BULK ATTENDANCE UPDATE (Multi-Date & Multi-Employee) ============
+
+@router.post("/hrms/attendance/bulk-update/preview")
+async def preview_bulk_update(data: dict, user: dict = Depends(get_current_user)):
+    """Preview changes before applying bulk attendance update"""
+    if user.get('role') not in ('admin', 'hr_admin'):
+        raise HTTPException(status_code=403, detail="Admin or HR Admin required")
+
+    employee_ids = data.get('employee_ids', [])
+    dates = data.get('dates', [])
+    status = data.get('status', '')
+
+    if not employee_ids:
+        raise HTTPException(status_code=400, detail="Select at least one employee")
+    if not dates:
+        raise HTTPException(status_code=400, detail="Select at least one date")
+    if status and status not in ('present', 'absent', 'half_day', 'late', 'leave', 'holiday', 'week_off'):
+        raise HTTPException(status_code=400, detail="Invalid status")
+
+    # Check for locked payroll periods
+    locked_dates = set()
+    for date in dates:
+        parts = date.split('-')
+        if len(parts) == 3:
+            month_str = f"{parts[0]}-{parts[1]}"
+            finalized = await db.hrms_payroll.find_one({
+                'period': {'$regex': month_str},
+                'status': 'finalized'
+            })
+            if finalized:
+                locked_dates.add(date)
+
+    # Get existing attendance for all employee×date combos
+    preview = []
+    for emp_id in employee_ids:
+        emp = await db.hrms_employees.find_one({'id': emp_id}, {'_id': 0, 'name': 1, 'employee_id': 1})
+        if not emp:
+            continue
+        for date in dates:
+            is_locked = date in locked_dates
+            existing = await db.hrms_attendance.find_one(
+                {'employee_id': emp_id, 'date': date},
+                {'_id': 0, 'status': 1, 'marked_by': 1, 'check_in': 1, 'check_out': 1}
+            )
+            old_status = existing.get('status', '') if existing else ''
+            has_biometric = bool(existing and (existing.get('check_in') or existing.get('check_out')))
+            preview.append({
+                'employee_id': emp_id,
+                'employee_name': emp.get('name', ''),
+                'employee_code': emp.get('employee_id', ''),
+                'date': date,
+                'old_status': old_status,
+                'new_status': status if status else old_status,
+                'has_biometric': has_biometric,
+                'is_locked': is_locked,
+                'is_override': old_status != '' and old_status != status and status != '',
+            })
+
+    return {
+        'preview': preview,
+        'total_changes': len([p for p in preview if not p['is_locked'] and p.get('is_override', False) or (not p['old_status'] and status)]),
+        'locked_count': len([p for p in preview if p['is_locked']]),
+        'biometric_overrides': len([p for p in preview if p['has_biometric'] and p.get('is_override', False)]),
+    }
+
+
+@router.post("/hrms/attendance/bulk-update/apply")
+async def apply_bulk_update(data: dict, user: dict = Depends(get_current_user)):
+    """Apply bulk attendance update to multiple employees × dates"""
+    if user.get('role') not in ('admin', 'hr_admin'):
+        raise HTTPException(status_code=403, detail="Admin or HR Admin required")
+
+    entries = data.get('entries', [])
+    reason = data.get('reason', '').strip()
+    if not entries:
+        raise HTTPException(status_code=400, detail="No entries to update")
+    if not reason:
+        raise HTTPException(status_code=400, detail="Reason is mandatory for bulk updates")
+
+    created = 0
+    updated = 0
+    skipped = 0
+    changes_log = []
+
+    for entry in entries:
+        emp_id = entry.get('employee_id', '')
+        date = entry.get('date', '')
+        new_status = entry.get('status', '')
+        leave_type = entry.get('leave_type', '')
+
+        if not emp_id or not date or not new_status:
+            skipped += 1
+            continue
+        if new_status not in ('present', 'absent', 'half_day', 'late', 'leave', 'holiday', 'week_off'):
+            skipped += 1
+            continue
+
+        # Check locked payroll
+        parts = date.split('-')
+        if len(parts) == 3:
+            month_str = f"{parts[0]}-{parts[1]}"
+            finalized = await db.hrms_payroll.find_one({
+                'period': {'$regex': month_str},
+                'status': 'finalized'
+            })
+            if finalized:
+                skipped += 1
+                continue
+
+        existing = await db.hrms_attendance.find_one({'employee_id': emp_id, 'date': date})
+        old_status = existing.get('status', '') if existing else ''
+
+        if existing:
+            await db.hrms_attendance.update_one(
+                {'employee_id': emp_id, 'date': date},
+                {'$set': {
+                    'status': new_status,
+                    'leave_type': leave_type if new_status == 'leave' else '',
+                    'remarks': f"Bulk update: {reason}",
+                    'updated_by': user.get('name', ''),
+                    'updated_at': datetime.now(timezone.utc).isoformat(),
+                    'bulk_update': True,
+                    'previous_status': old_status,
+                }}
+            )
+            updated += 1
+        else:
+            att = {
+                'id': str(uuid.uuid4()),
+                'employee_id': emp_id,
+                'date': date,
+                'status': new_status,
+                'leave_type': leave_type if new_status == 'leave' else '',
+                'check_in': '',
+                'check_out': '',
+                'overtime_hours': 0,
+                'remarks': f"Bulk update: {reason}",
+                'marked_by': user.get('name', ''),
+                'created_at': datetime.now(timezone.utc).isoformat(),
+                'bulk_update': True,
+            }
+            await db.hrms_attendance.insert_one(att)
+            created += 1
+
+        changes_log.append({
+            'employee_id': emp_id,
+            'date': date,
+            'old_status': old_status,
+            'new_status': new_status,
+        })
+
+    # Save audit log
+    if changes_log:
+        bulk_log = {
+            'id': str(uuid.uuid4()),
+            'type': 'bulk_attendance_update',
+            'updated_by': user.get('name', ''),
+            'updated_by_id': user.get('id', ''),
+            'reason': reason,
+            'total_entries': len(entries),
+            'created': created,
+            'updated': updated,
+            'skipped': skipped,
+            'employees_affected': list(set(c['employee_id'] for c in changes_log)),
+            'dates_affected': sorted(list(set(c['date'] for c in changes_log))),
+            'changes': changes_log[:100],
+            'created_at': datetime.now(timezone.utc).isoformat(),
+        }
+        await db.hrms_bulk_update_logs.insert_one(bulk_log)
+        await log_audit(
+            user.get('id', ''), user.get('name', ''), 'bulk_update', 'attendance',
+            bulk_log['id'], f"Bulk update: {created} new, {updated} updated, {skipped} skipped. Reason: {reason}"
+        )
+
+    return {
+        'message': f"Bulk update complete: {created} new, {updated} updated, {skipped} skipped",
+        'created': created,
+        'updated': updated,
+        'skipped': skipped,
+        'log_id': bulk_log['id'] if changes_log else None,
+    }
+
+
+@router.post("/hrms/attendance/bulk-update/undo")
+async def undo_bulk_update(data: dict, user: dict = Depends(get_current_user)):
+    """Undo a bulk attendance update using the log_id"""
+    if user.get('role') not in ('admin', 'hr_admin'):
+        raise HTTPException(status_code=403, detail="Admin or HR Admin required")
+
+    log_id = data.get('log_id', '').strip()
+    if not log_id:
+        raise HTTPException(status_code=400, detail="Log ID is required")
+
+    log_entry = await db.hrms_bulk_update_logs.find_one({'id': log_id}, {'_id': 0})
+    if not log_entry:
+        raise HTTPException(status_code=404, detail="Bulk update log not found")
+    if log_entry.get('undone'):
+        raise HTTPException(status_code=400, detail="This bulk update has already been undone")
+
+    reverted = 0
+    for change in log_entry.get('changes', []):
+        emp_id = change['employee_id']
+        date = change['date']
+        old_status = change.get('old_status', '')
+
+        if old_status:
+            await db.hrms_attendance.update_one(
+                {'employee_id': emp_id, 'date': date},
+                {'$set': {
+                    'status': old_status,
+                    'remarks': "Reverted from bulk update",
+                    'updated_by': user.get('name', ''),
+                    'updated_at': datetime.now(timezone.utc).isoformat(),
+                }}
+            )
+        else:
+            await db.hrms_attendance.delete_one({'employee_id': emp_id, 'date': date})
+        reverted += 1
+
+    await db.hrms_bulk_update_logs.update_one(
+        {'id': log_id},
+        {'$set': {'undone': True, 'undone_by': user.get('name', ''), 'undone_at': datetime.now(timezone.utc).isoformat()}}
+    )
+    await log_audit(user.get('id', ''), user.get('name', ''), 'undo', 'attendance', log_id, f"Undid bulk update ({reverted} entries reverted)")
+    return {'message': f"Bulk update undone: {reverted} entries reverted"}
+
+
+@router.get("/hrms/attendance/bulk-update/logs")
+async def get_bulk_update_logs(user: dict = Depends(get_current_user)):
+    if user.get('role') not in ('admin', 'hr_admin'):
+        raise HTTPException(status_code=403, detail="Admin or HR Admin required")
+    logs = []
+    async for log in db.hrms_bulk_update_logs.find({}, {'_id': 0}).sort('created_at', -1).limit(20):
+        logs.append(log)
+    return logs
+
+
+
 # ============ BIOMETRIC SYNC ENDPOINT (API-Ready) ============
 
 @router.post("/hrms/attendance/biometric-sync")

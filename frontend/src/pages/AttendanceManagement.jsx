@@ -12,8 +12,9 @@ import { formatDate } from '../lib/utils';
 import {
   CalendarDays, Save, Loader2, Clock, UserCheck, UserX,
   AlertTriangle, Sun, ChevronLeft, ChevronRight, BarChart3, Download, FileText, User, Search,
-  FileSpreadsheet, Upload, CheckCircle2, XCircle, AlertCircle
+  FileSpreadsheet, Upload, CheckCircle2, XCircle, AlertCircle, Grid3X3
 } from 'lucide-react';
+import BulkAttendanceUpdate from '../components/BulkAttendanceUpdate';
 
 const STATUS_OPTIONS = [
   { value: 'present', label: 'Present', color: 'bg-green-100 text-green-700', icon: UserCheck },
@@ -364,10 +365,17 @@ const AttendanceManagement = () => {
           >
             <FileSpreadsheet className="w-4 h-4 inline mr-1" /> Bulk Upload
           </button>
+          <button
+            className={`px-4 py-2 rounded-md text-sm font-medium transition ${activeTab === 'bulk_update' ? 'bg-white shadow text-slate-800' : 'text-slate-500'}`}
+            onClick={() => setActiveTab('bulk_update')}
+            data-testid="bulk-update-tab"
+          >
+            <Grid3X3 className="w-4 h-4 inline mr-1" /> Bulk Update
+          </button>
         </div>
 
         {/* Department Filter (for daily/summary tabs) */}
-        {activeTab !== 'overview' && activeTab !== 'bulk' && (
+        {activeTab !== 'overview' && activeTab !== 'bulk' && activeTab !== 'bulk_update' && (
           <div className="flex gap-3 items-end">
             <div>
               <Label className="text-xs text-slate-500">Department</Label>
@@ -953,6 +961,18 @@ const AttendanceManagement = () => {
               </Card>
             )}
           </div>
+        )}
+
+        {/* BULK UPDATE TAB */}
+        {activeTab === 'bulk_update' && (
+          <Card>
+            <CardContent className="p-6">
+              <BulkAttendanceUpdate
+                onClose={() => setActiveTab('daily')}
+                onSuccess={() => { fetchAttendance(); fetchSummary(); }}
+              />
+            </CardContent>
+          </Card>
         )}
       </div>
 
