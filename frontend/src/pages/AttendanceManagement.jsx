@@ -969,7 +969,7 @@ const AttendanceManagement = () => {
             <CardContent className="p-6">
               <BulkAttendanceUpdate
                 onClose={() => setActiveTab('daily')}
-                onSuccess={() => { fetchAttendance(); fetchSummary(); }}
+                onSuccess={() => { fetchDailyAttendance(); fetchMonthlySummary(); }}
               />
             </CardContent>
           </Card>

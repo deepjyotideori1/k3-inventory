@@ -553,6 +553,7 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 │           ├── CustomerOrderReport.jsx
 │           ├── Warehouses.jsx
 │           ├── Users.jsx
+│           ├── AuditLogs.jsx
 │           ├── Settings.jsx
 │           └── Login.jsx
 ├── memory/
@@ -563,4 +564,8 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 
 ---
 
-*Last Updated: April 4, 2026 - UI/UX Enhancements*
+## CHANGELOG (Apr 29, 2026)
+- Fixed Bulk Attendance Update dual-toast bug: parent `AttendanceManagement.jsx` was calling undefined `fetchAttendance/fetchSummary` functions inside the `onSuccess` callback, throwing a `ReferenceError` caught by the submit handler and triggering a spurious "Failed to apply bulk update" toast right after the success toast. Renamed to `fetchDailyAttendance/fetchMonthlySummary`.
+- Added Audit Log Viewer UI at `/audit-logs` (admin-only). Features: paginated table (50/page), resource-type filter (employee/attendance/payroll/customer/order/user/etc.), client-side search across user/action/details/resource ID, action-color badges, and a detail dialog showing full timestamp/user/resource/details. Wired into App.js routing and Layout adminLinks sidebar.
+
+*Last Updated: April 29, 2026 - Bulk Attendance Toast Fix + Audit Log Viewer*

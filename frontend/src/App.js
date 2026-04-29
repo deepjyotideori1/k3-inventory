@@ -25,6 +25,7 @@ const CustomerManagement = lazy(() => import("./pages/CustomerManagement"));
 const OrderManagement = lazy(() => import("./pages/OrderManagement"));
 const CustomerOrderReport = lazy(() => import("./pages/CustomerOrderReport"));
 const BulkMessaging = lazy(() => import("./pages/BulkMessaging"));
+const AuditLogs = lazy(() => import("./pages/AuditLogs"));
 
 // HRMS Pages
 const DashboardSelector = lazy(() => import("./pages/DashboardSelector"));
@@ -170,6 +171,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute adminOnly>
             <AdminEditReport />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/audit-logs"
+        element={
+          <ProtectedRoute adminOnly>
+            <AuditLogs />
           </ProtectedRoute>
         }
       />
