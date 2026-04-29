@@ -151,7 +151,7 @@ const OrderManagement = () => {
       const params = {};
       if (customerCategory !== 'all') params.category = customerCategory;
       const response = await getCustomers(params);
-      setCustomers(response.data);
+      setCustomers(response.data.customers || response.data || []);
     } catch (error) {
       console.error('Failed to fetch customers:', error);
     }

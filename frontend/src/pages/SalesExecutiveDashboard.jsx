@@ -45,7 +45,7 @@ const SalesExecutiveDashboard = () => {
         getOrders()
       ]);
 
-      const customers = customersRes.data;
+      const customers = customersRes.data.customers || customersRes.data || [];
       const orders = ordersRes.data;
 
       // Calculate stats

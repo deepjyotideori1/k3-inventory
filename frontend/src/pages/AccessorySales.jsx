@@ -112,7 +112,7 @@ const AccessorySales = () => {
         isAdmin ? getWarehouses() : Promise.resolve({ data: [] })
       ]);
       setAccessories(accessoriesRes.data.filter(a => a.is_active));
-      setCustomers(customersRes.data);
+      setCustomers(customersRes.data.customers || customersRes.data || []);
       setWarehouses(warehousesRes.data || []);
     } catch (error) {
       console.error('Failed to fetch data:', error);
