@@ -207,6 +207,7 @@ async def run_payroll(data: dict, user: dict = Depends(get_current_user)):
             'hra': emp.get('hra', 0),
             'da': emp.get('da', 0),
             'other_allowances': emp.get('other_allowances', 0),
+            'adjustments': [],
             **payroll_data
         })
 
@@ -238,13 +239,213 @@ async def run_payroll(data: dict, user: dict = Depends(get_current_user)):
 async def finalize_payroll(payroll_id: str, user: dict = Depends(get_current_user)):
     if user.get('role') not in ('admin', 'hr_admin'):
         raise HTTPException(status_code=403, detail="Admin or HR Admin required")
-    result = await db.hrms_payroll.update_one(
-        {'id': payroll_id, 'status': 'draft'},
-        {'$set': {'status': 'finalized', 'finalized_at': datetime.now(timezone.utc).isoformat(), 'finalized_by': user.get('name', '')}}
-    )
-    if result.modified_count == 0:
+    payroll = await db.hrms_payroll.find_one({'id': payroll_id, 'status': 'draft'})
+    if not payroll:
         raise HTTPException(status_code=400, detail="Payroll not found or already finalized")
+    # Recalculate final totals including adjustments
+    total_net = 0
+    total_gross = 0
+    total_deductions = 0
+    for emp in payroll.get('employees', []):
+        adj_total = sum(
+            a['amount'] if a['type'] == 'earning' else -a['amount']
+            for a in emp.get('adjustments', [])
+        )
+        final_net = emp.get('net_pay', 0) + adj_total
+        total_net += final_net
+        total_gross += emp.get('gross_salary', 0)
+        total_deductions += emp.get('total_deductions', 0)
+    await db.hrms_payroll.update_one(
+        {'id': payroll_id},
+        {'$set': {
+            'status': 'finalized',
+            'total_net_pay': round(total_net, 2),
+            'finalized_at': datetime.now(timezone.utc).isoformat(),
+            'finalized_by': user.get('name', ''),
+        }}
+    )
+    await log_audit(user.get('id', ''), user.get('name', ''), 'finalize', 'payroll', payroll_id, f"Finalized payroll {payroll.get('period')}")
     return {"message": "Payroll finalized"}
+
+
+# ============ POST-PAYROLL ADJUSTMENTS ============
+
+@router.get("/hrms/payroll/{payroll_id}/review")
+async def review_payroll(payroll_id: str, user: dict = Depends(get_current_user)):
+    """Get payroll with adjustment summary for review before finalization"""
+    payroll = await db.hrms_payroll.find_one({'id': payroll_id}, {'_id': 0})
+    if not payroll:
+        raise HTTPException(status_code=404, detail="Payroll not found")
+    # Compute per-employee adjustment totals
+    review_employees = []
+    total_adjustments = 0
+    for emp in payroll.get('employees', []):
+        adjustments = emp.get('adjustments', [])
+        adj_earnings = sum(a['amount'] for a in adjustments if a['type'] == 'earning')
+        adj_deductions = sum(a['amount'] for a in adjustments if a['type'] == 'deduction')
+        adj_net = adj_earnings - adj_deductions
+        final_net = round(emp.get('net_pay', 0) + adj_net, 2)
+        total_adjustments += adj_net
+        review_employees.append({
+            **emp,
+            'adjustment_earnings': round(adj_earnings, 2),
+            'adjustment_deductions': round(adj_deductions, 2),
+            'adjustment_net': round(adj_net, 2),
+            'final_net_pay': final_net,
+            'is_modified': len(adjustments) > 0,
+        })
+    return {
+        **{k: v for k, v in payroll.items() if k != 'employees'},
+        'employees': review_employees,
+        'total_adjustments': round(total_adjustments, 2),
+        'total_final_net_pay': round(payroll.get('total_net_pay', 0) + total_adjustments, 2),
+    }
+
+
+@router.post("/hrms/payroll/{payroll_id}/adjustments")
+async def add_adjustment(payroll_id: str, data: dict, user: dict = Depends(get_current_user)):
+    """Add a custom deduction or earning for an employee in a draft payroll"""
+    if user.get('role') not in ('admin', 'hr_admin'):
+        raise HTTPException(status_code=403, detail="Admin or HR Admin required")
+
+    payroll = await db.hrms_payroll.find_one({'id': payroll_id})
+    if not payroll:
+        raise HTTPException(status_code=404, detail="Payroll not found")
+    if payroll.get('status') == 'finalized':
+        raise HTTPException(status_code=400, detail="Cannot modify finalized payroll")
+
+    employee_id = data.get('employee_id', '').strip()
+    adj_name = data.get('name', '').strip()
+    adj_type = data.get('type', '').strip()
+    amount = data.get('amount')
+    reason = data.get('reason', '').strip()
+
+    if not all([employee_id, adj_name, adj_type, reason]):
+        raise HTTPException(status_code=400, detail="Name, type, amount, and reason are required")
+    if adj_type not in ('earning', 'deduction'):
+        raise HTTPException(status_code=400, detail="Type must be 'earning' or 'deduction'")
+    try:
+        amount = round(float(amount), 2)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Amount must be a valid number")
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be positive")
+
+    # Check employee exists in payroll
+    emp_found = False
+    emp_net_pay = 0
+    for emp in payroll.get('employees', []):
+        if emp['employee_id'] == employee_id:
+            emp_found = True
+            emp_net_pay = emp.get('net_pay', 0)
+            break
+    if not emp_found:
+        raise HTTPException(status_code=404, detail="Employee not found in this payroll")
+
+    # Check if deduction would make net salary negative
+    if adj_type == 'deduction':
+        existing_adjs = []
+        for emp in payroll.get('employees', []):
+            if emp['employee_id'] == employee_id:
+                existing_adjs = emp.get('adjustments', [])
+                break
+        current_adj_total = sum(
+            a['amount'] if a['type'] == 'earning' else -a['amount']
+            for a in existing_adjs
+        )
+        projected_net = emp_net_pay + current_adj_total - amount
+        if projected_net < 0:
+            raise HTTPException(status_code=400, detail=f"This deduction would result in negative net salary (Rs.{projected_net:,.2f}). Reduce the amount or add approval.")
+
+    adjustment = {
+        'id': str(uuid.uuid4()),
+        'name': adj_name,
+        'type': adj_type,
+        'amount': amount,
+        'reason': reason,
+        'created_by': user.get('name', ''),
+        'created_by_id': user.get('id', ''),
+        'created_at': datetime.now(timezone.utc).isoformat(),
+    }
+
+    await db.hrms_payroll.update_one(
+        {'id': payroll_id, 'employees.employee_id': employee_id},
+        {'$push': {'employees.$.adjustments': adjustment}}
+    )
+    await log_audit(
+        user.get('id', ''), user.get('name', ''), 'create', 'payroll_adjustment',
+        payroll_id, f"{adj_type.capitalize()} '{adj_name}' Rs.{amount} for employee {employee_id}: {reason}"
+    )
+    return {'message': 'Adjustment added', 'adjustment': adjustment}
+
+
+@router.put("/hrms/payroll/{payroll_id}/adjustments/{adjustment_id}")
+async def update_adjustment(payroll_id: str, adjustment_id: str, data: dict, user: dict = Depends(get_current_user)):
+    if user.get('role') not in ('admin', 'hr_admin'):
+        raise HTTPException(status_code=403, detail="Admin or HR Admin required")
+    payroll = await db.hrms_payroll.find_one({'id': payroll_id})
+    if not payroll or payroll.get('status') == 'finalized':
+        raise HTTPException(status_code=400, detail="Payroll not found or already finalized")
+
+    # Find and update the adjustment
+    updated = False
+    for emp in payroll.get('employees', []):
+        for i, adj in enumerate(emp.get('adjustments', [])):
+            if adj['id'] == adjustment_id:
+                if 'name' in data and data['name'].strip():
+                    adj['name'] = data['name'].strip()
+                if 'type' in data and data['type'] in ('earning', 'deduction'):
+                    adj['type'] = data['type']
+                if 'amount' in data:
+                    try:
+                        adj['amount'] = round(float(data['amount']), 2)
+                    except (ValueError, TypeError):
+                        raise HTTPException(status_code=400, detail="Invalid amount")
+                if 'reason' in data and data['reason'].strip():
+                    adj['reason'] = data['reason'].strip()
+                adj['updated_by'] = user.get('name', '')
+                adj['updated_at'] = datetime.now(timezone.utc).isoformat()
+                emp['adjustments'][i] = adj
+
+                await db.hrms_payroll.update_one(
+                    {'id': payroll_id, 'employees.employee_id': emp['employee_id']},
+                    {'$set': {'employees.$.adjustments': emp['adjustments']}}
+                )
+                updated = True
+                break
+        if updated:
+            break
+
+    if not updated:
+        raise HTTPException(status_code=404, detail="Adjustment not found")
+    await log_audit(user.get('id', ''), user.get('name', ''), 'update', 'payroll_adjustment', payroll_id, f"Updated adjustment {adjustment_id}")
+    return {'message': 'Adjustment updated'}
+
+
+@router.delete("/hrms/payroll/{payroll_id}/adjustments/{adjustment_id}")
+async def delete_adjustment(payroll_id: str, adjustment_id: str, user: dict = Depends(get_current_user)):
+    if user.get('role') not in ('admin', 'hr_admin'):
+        raise HTTPException(status_code=403, detail="Admin or HR Admin required")
+    payroll = await db.hrms_payroll.find_one({'id': payroll_id})
+    if not payroll or payroll.get('status') == 'finalized':
+        raise HTTPException(status_code=400, detail="Payroll not found or already finalized")
+
+    deleted = False
+    for emp in payroll.get('employees', []):
+        original_len = len(emp.get('adjustments', []))
+        emp['adjustments'] = [a for a in emp.get('adjustments', []) if a['id'] != adjustment_id]
+        if len(emp['adjustments']) < original_len:
+            await db.hrms_payroll.update_one(
+                {'id': payroll_id, 'employees.employee_id': emp['employee_id']},
+                {'$set': {'employees.$.adjustments': emp['adjustments']}}
+            )
+            deleted = True
+            break
+
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Adjustment not found")
+    await log_audit(user.get('id', ''), user.get('name', ''), 'delete', 'payroll_adjustment', payroll_id, f"Deleted adjustment {adjustment_id}")
+    return {'message': 'Adjustment removed'}
 
 
 # ============ PAYROLL HISTORY ============
@@ -312,11 +513,8 @@ async def download_payslip_pdf(payroll_id: str, employee_id: str, user: dict = D
     buf = BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=15*mm, rightMargin=15*mm, topMargin=15*mm, bottomMargin=15*mm)
 
-    styles = getSampleStyleSheet()
     title_style = ParagraphStyle('Title', fontName='Helvetica-Bold', fontSize=14, alignment=TA_CENTER, spaceAfter=2*mm)
     subtitle_style = ParagraphStyle('Subtitle', fontName='Helvetica', fontSize=9, alignment=TA_CENTER, spaceAfter=4*mm, textColor=colors.grey)
-    section_style = ParagraphStyle('Section', fontName='Helvetica-Bold', fontSize=10, spaceAfter=2*mm, spaceBefore=4*mm)
-    normal_style = ParagraphStyle('Normal2', fontName='Helvetica', fontSize=9)
 
     elements = []
     elements.append(Paragraph(company_name, title_style))
@@ -353,18 +551,37 @@ async def download_payslip_pdf(payroll_id: str, employee_id: str, user: dict = D
         ['HRA', format_inr(emp_data['earned_hra'])],
         ['DA', format_inr(emp_data['earned_da'])],
         ['Other Allowances', format_inr(emp_data['earned_other_allowances'])],
-        ['', ''],
-        ['Gross Salary', format_inr(emp_data['gross_salary'])],
     ]
+    # Add earning adjustments
+    for adj in emp_data.get('adjustments', []):
+        if adj['type'] == 'earning':
+            earnings.append([adj['name'], format_inr(adj['amount'])])
+    adj_earnings_total = sum(a['amount'] for a in emp_data.get('adjustments', []) if a['type'] == 'earning')
+    gross_with_adj = emp_data['gross_salary'] + adj_earnings_total
+    earnings.append(['', ''])
+    earnings.append(['Gross + Earnings', format_inr(gross_with_adj)])
+
     deductions = [
         ['DEDUCTIONS', 'Amount (Rs)'],
         ['PF (Employee)', format_inr(emp_data['pf_employee'])],
         ['ESI (Employee)', format_inr(emp_data['esi_employee'])],
         ['Professional Tax', format_inr(emp_data['professional_tax'])],
         ['TDS', format_inr(emp_data['tds'])],
-        ['', ''],
-        ['Total Deductions', format_inr(emp_data['total_deductions'])],
     ]
+    # Add deduction adjustments
+    for adj in emp_data.get('adjustments', []):
+        if adj['type'] == 'deduction':
+            deductions.append([adj['name'], format_inr(adj['amount'])])
+    adj_deductions_total = sum(a['amount'] for a in emp_data.get('adjustments', []) if a['type'] == 'deduction')
+    total_ded = emp_data['total_deductions'] + adj_deductions_total
+    deductions.append(['', ''])
+    deductions.append(['Total Deductions', format_inr(total_ded)])
+
+    # Pad to equal length
+    while len(earnings) < len(deductions):
+        earnings.append(['', ''])
+    while len(deductions) < len(earnings):
+        deductions.append(['', ''])
 
     combined = []
     for i in range(len(earnings)):
@@ -389,8 +606,10 @@ async def download_payslip_pdf(payroll_id: str, employee_id: str, user: dict = D
     elements.append(pay_table)
     elements.append(Spacer(1, 6*mm))
 
-    # Net Pay
-    net_data = [['NET PAY', format_inr(emp_data['net_pay'])]]
+    # Net Pay (including adjustments)
+    adj_net = adj_earnings_total - adj_deductions_total
+    final_net = round(emp_data['net_pay'] + adj_net, 2)
+    net_data = [['NET PAY', format_inr(final_net)]]
     net_table = Table(net_data, colWidths=[310, 90])
     net_table.setStyle(TableStyle([
         ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
