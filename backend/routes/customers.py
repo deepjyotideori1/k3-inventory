@@ -456,6 +456,158 @@ async def bulk_upload_customers_for_warehouse(
     
     return {"message": f"Successfully uploaded {len(customers_to_insert)} customers to {warehouse['name']}", "count": len(customers_to_insert)}
 
+
+@router.post("/customers/sync-from-sales")
+async def sync_customers_from_sales(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """
+    Backfill the customers collection from existing sales entries.
+    For every sales entry whose consumer is not already in the customers
+    collection (matched by consumer_no within the same warehouse, or by
+    customer_name when consumer_no is blank), creates a customer record
+    with the sales entry's date preserved (so FY2024-25 etc. records stay
+    in their original financial year). Also links sales_entries.customer_id
+    to the matched/created customer.
+
+    Admin or warehouse_manager only.
+    """
+    user = await get_current_user(credentials)
+    if user['role'] not in ('admin', 'warehouse_manager'):
+        raise HTTPException(status_code=403, detail="Admin or warehouse manager access required")
+
+    # Scope: admin → all warehouses, manager → only their warehouse
+    sales_query = {}
+    if user['role'] != 'admin':
+        if not user.get('warehouse_id'):
+            raise HTTPException(status_code=400, detail="User has no assigned warehouse")
+        sales_query['warehouse_id'] = user['warehouse_id']
+
+    # Build a lookup of existing customers (per warehouse) for fast matching
+    cust_query = {}
+    if user['role'] != 'admin':
+        cust_query['warehouse_id'] = user['warehouse_id']
+
+    existing_customers = await db.customers.find(cust_query, {
+        '_id': 0, 'id': 1, 'warehouse_id': 1, 'consumer_no': 1, 'customer_name': 1
+    }).to_list(50000)
+
+    by_consumer_no = {}    # (warehouse_id, consumer_no) -> customer_id
+    by_name = {}           # (warehouse_id, lower(name)) -> customer_id
+    for c in existing_customers:
+        wid = c.get('warehouse_id', '')
+        cno = (c.get('consumer_no') or '').strip()
+        nm = (c.get('customer_name') or '').strip().lower()
+        if cno:
+            by_consumer_no[(wid, cno)] = c['id']
+        if nm:
+            # First-occurrence wins so we don't overwrite older records
+            by_name.setdefault((wid, nm), c['id'])
+
+    # Iterate sales entries in the user's scope
+    cursor = db.sales_entries.find(sales_query, {
+        '_id': 0,
+        'id': 1, 'customer_id': 1, 'consumer_name': 1, 'consumer_no': 1,
+        'address': 1, 'connection_type': 1, 'cylinder_nos': 1, 'memo_no': 1,
+        'date': 1, 'warehouse_id': 1, 'remarks': 1
+    })
+
+    new_customers: List[Dict[str, Any]] = []
+    link_updates: List[Dict[str, Any]] = []
+    seen_in_run = {}  # (wid, key) -> id, so duplicates within run dedupe
+
+    scanned = 0
+    matched = 0
+    created = 0
+    skipped_no_name = 0
+
+    async for s in cursor:
+        scanned += 1
+        name = (s.get('consumer_name') or '').strip()
+        if not name:
+            skipped_no_name += 1
+            continue
+
+        wid = s.get('warehouse_id', '')
+        cno = (s.get('consumer_no') or '').strip()
+        nm_key = name.lower()
+
+        cust_id = None
+        if cno:
+            cust_id = by_consumer_no.get((wid, cno))
+        if not cust_id:
+            cust_id = by_name.get((wid, nm_key))
+        if not cust_id:
+            cust_id = seen_in_run.get((wid, cno or nm_key))
+
+        if cust_id:
+            matched += 1
+        else:
+            # Create a new customer; preserve the sales entry's date
+            ct = (s.get('connection_type') or 'domestic').strip().lower()
+            if ct not in ('domestic', 'commercial'):
+                # Refills/others -> infer domestic by default
+                ct = 'domestic'
+            new_id = str(uuid.uuid4())
+            new_cust = {
+                'id': new_id,
+                'warehouse_id': wid,
+                'date': s.get('date') or datetime.now(timezone.utc).strftime('%Y-%m-%d'),
+                'connection_type': ct,
+                'customer_name': name,
+                'address': s.get('address') or '',
+                'phone': '',
+                'consumer_no': cno,
+                'cash_memo_no': s.get('memo_no') or '',
+                'cylinder_nos': s.get('cylinder_nos') or '',
+                'gas_card_issued': False,
+                'kyc_done': False,
+                'remarks': f"Auto-synced from sales entry on "
+                           f"{datetime.now(timezone.utc).strftime('%Y-%m-%d')}",
+                'created_by': user['id'],
+                'created_at': datetime.now(timezone.utc).isoformat(),
+                'auto_synced': True,
+            }
+            new_customers.append(new_cust)
+            cust_id = new_id
+            created += 1
+            seen_in_run[(wid, cno or nm_key)] = new_id
+            if cno:
+                by_consumer_no[(wid, cno)] = new_id
+            by_name.setdefault((wid, nm_key), new_id)
+
+        # Link the sales entry if it has no customer_id yet (or a different one)
+        if s.get('customer_id') != cust_id:
+            link_updates.append({'sales_id': s['id'], 'customer_id': cust_id})
+
+    # Bulk insert new customers
+    if new_customers:
+        await db.customers.insert_many(new_customers)
+
+    # Bulk update sales entries to link customer_id
+    for u in link_updates:
+        await db.sales_entries.update_one(
+            {'id': u['sales_id']},
+            {'$set': {'customer_id': u['customer_id']}}
+        )
+
+    await log_audit(
+        user['id'], user['name'], 'sync', 'customer',
+        details=f"Synced from sales: scanned={scanned}, created={created}, "
+                f"linked={len(link_updates)}, matched={matched}"
+    )
+
+    return {
+        'message': f"Sync complete: {created} new customers created, "
+                   f"{len(link_updates)} sales entries linked",
+        'scanned': scanned,
+        'matched_to_existing': matched,
+        'created': created,
+        'linked_sales_entries': len(link_updates),
+        'skipped_no_name': skipped_no_name,
+    }
+
+
 @router.get("/customers/refill-status")
 async def get_customers_refill_status(
     warehouse_id: Optional[str] = None,

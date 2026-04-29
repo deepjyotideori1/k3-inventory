@@ -17,7 +17,8 @@ import {
   getWarehouses,
   getCustomerRefillStatus,
   exportCustomerRefillPDF,
-  exportCustomerRefillExcel
+  exportCustomerRefillExcel,
+  syncCustomersFromSales
 } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -499,6 +500,29 @@ const CustomerManagement = () => {
     }
   };
 
+  const [syncing, setSyncing] = useState(false);
+  const handleSyncFromSales = async () => {
+    if (!window.confirm(
+      'This will scan all sales entries and create any missing customer records ' +
+      '(preserving the original date so FY2024-25 and earlier customers reappear ' +
+      'in their correct financial year). Continue?'
+    )) return;
+    setSyncing(true);
+    try {
+      const res = await syncCustomersFromSales();
+      const d = res.data;
+      toast.success(
+        `Sync complete: ${d.created} new customer(s), ${d.linked_sales_entries} sales entries linked. ` +
+        `Scanned ${d.scanned}.`
+      );
+      fetchData();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to sync from sales');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   if (loading && customers.length === 0) {
     return (
       <Layout>
@@ -521,6 +545,16 @@ const CustomerManagement = () => {
             </p>
           </div>
           <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={handleSyncFromSales}
+              disabled={syncing}
+              data-testid="sync-from-sales-btn"
+              title="Create missing customer records from existing sales entries (e.g., FY2024-25 customers)"
+            >
+              {syncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+              Sync from Sales
+            </Button>
             <Button variant="outline" onClick={handleDownloadTemplate} data-testid="download-template-btn">
               <Download className="w-4 h-4 mr-2" />
               Sample Excel

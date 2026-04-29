@@ -411,6 +411,7 @@ export const exportAccessorySalesExcel = async (params) => {
 
 // Customers
 export const getCustomers = (params) => api.get('/customers', { params });
+export const syncCustomersFromSales = () => api.post('/customers/sync-from-sales');
 export const createCustomer = (data) => api.post('/customers', data);
 export const createCustomerForWarehouse = (warehouseId, data) => api.post(`/customers/warehouse/${warehouseId}`, data);
 export const updateCustomer = (customerId, data) => api.put(`/customers/${customerId}`, data);
