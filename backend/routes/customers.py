@@ -23,6 +23,8 @@ router = APIRouter()
 
 @router.get("/customers")
 async def get_customers(
+    page: int = 1,
+    limit: int = 50,
     category: Optional[str] = None,
     search: Optional[str] = None,
     start_date: Optional[str] = None,
@@ -63,7 +65,9 @@ async def get_customers(
             {'address': {'$regex': search, '$options': 'i'}}
         ]
     
-    customers = await db.customers.find(query).sort('date', -1).to_list(1000)
+    total = await db.customers.count_documents(query)
+    skip = (page - 1) * limit
+    customers = await db.customers.find(query).sort('date', -1).skip(skip).limit(limit).to_list(limit)
     
     # Get warehouse names
     warehouse_ids = list(set(c.get('warehouse_id') for c in customers if c.get('warehouse_id')))
@@ -92,7 +96,7 @@ async def get_customers(
             'updated_at': c.get('updated_at')
         })
     
-    return result
+    return {'customers': result, 'total': total, 'page': page, 'total_pages': max(1, (total + limit - 1) // limit)}
 
 @router.post("/customers")
 async def create_customer(
@@ -456,6 +460,8 @@ async def bulk_upload_customers_for_warehouse(
 async def get_customers_refill_status(
     warehouse_id: Optional[str] = None,
     overdue_only: Optional[bool] = False,
+    page: int = 1,
+    limit: int = 50,
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Get all customers with their last refill date and days since last refill"""

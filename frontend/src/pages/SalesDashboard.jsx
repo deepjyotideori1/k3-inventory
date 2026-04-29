@@ -308,7 +308,7 @@ const SalesDashboard = () => {
       setTotalPages(entriesRes.data.pages || 1);
       setTotalEntries(entriesRes.data.total || entriesData.length);
       setSummary(summaryRes.data);
-      setCustomers(customersRes.data);
+      setCustomers(customersRes.data.customers || customersRes.data);
       setFrequentCustomers(frequentRes.data);
       setAccessorySales(accSalesRes.data || []);
       setAccessorySummary(accSummaryRes.data || { total_sales: 0, total_amount: 0, cash_amount: 0, pending_amount: 0, online_amount: 0 });

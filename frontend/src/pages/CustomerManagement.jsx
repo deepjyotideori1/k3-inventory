@@ -148,8 +148,9 @@ const CustomerManagement = () => {
         getCustomerSummary(filterWarehouse !== 'all' ? { warehouse_id: filterWarehouse } : {})
       ]);
       
-      setCustomers(customersRes.data);
-      setFilteredCustomers(customersRes.data);
+      const custData = customersRes.data.customers || customersRes.data;
+      setCustomers(custData);
+      setFilteredCustomers(custData);
       setSummary(summaryRes.data);
       
       // Fetch refill status separately (non-blocking) so it doesn't break the page
