@@ -325,45 +325,112 @@ const CustomerManagement = () => {
     reader.onload = (event) => {
       try {
         const data = new Uint8Array(event.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
+        // cellDates:true -> Excel date cells are returned as JS Date objects
+        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-        
-        // Function to parse DD-MM-YYYY date format
-        const parseDate = (dateStr) => {
-          if (!dateStr) return getTodayDate();
-          const str = dateStr.toString().trim();
-          // Check if it's DD-MM-YYYY format
-          const ddmmyyyy = str.match(/^(\d{2})-(\d{2})-(\d{4})$/);
-          if (ddmmyyyy) {
-            return `${ddmmyyyy[3]}-${ddmmyyyy[2]}-${ddmmyyyy[1]}`; // Convert to YYYY-MM-DD
-          }
-          // Check if it's already YYYY-MM-DD format
-          const yyyymmdd = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-          if (yyyymmdd) {
-            return str;
-          }
-          return getTodayDate();
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true });
+
+        const MONTH_MAP = {
+          jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+          jul: '07', aug: '08', sep: '09', sept: '09', oct: '10', nov: '11', dec: '12',
         };
-        
+
+        // Robust date parser: returns 'YYYY-MM-DD' or null if unparseable.
+        const parseDate = (raw) => {
+          if (raw === null || raw === undefined || raw === '') return null;
+
+          // 1. JS Date (from cellDates:true)
+          if (raw instanceof Date && !isNaN(raw.getTime())) {
+            const yyyy = raw.getFullYear();
+            const mm = String(raw.getMonth() + 1).padStart(2, '0');
+            const dd = String(raw.getDate()).padStart(2, '0');
+            return `${yyyy}-${mm}-${dd}`;
+          }
+
+          // 2. Excel serial number (days since 1899-12-30)
+          if (typeof raw === 'number' && raw > 0 && raw < 200000) {
+            const epoch = Date.UTC(1899, 11, 30);
+            const ms = epoch + raw * 86400000;
+            const d = new Date(ms);
+            if (!isNaN(d.getTime())) {
+              const yyyy = d.getUTCFullYear();
+              const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+              const dd = String(d.getUTCDate()).padStart(2, '0');
+              return `${yyyy}-${mm}-${dd}`;
+            }
+          }
+
+          const str = String(raw).trim();
+          if (!str) return null;
+
+          // 3. YYYY-MM-DD (already correct)
+          let m = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+          if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+
+          // 4. DD-MM-YYYY or DD/MM/YYYY or DD.MM.YYYY (Indian format)
+          m = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+          if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+
+          // 5. DD-MM-YY (2-digit year, assume 2000s)
+          m = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2})$/);
+          if (m) {
+            const yy = parseInt(m[3], 10);
+            const yyyy = yy < 50 ? 2000 + yy : 1900 + yy;
+            return `${yyyy}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+          }
+
+          // 6. DD-Mon-YYYY (e.g., 15-Apr-2025, 1 April 2025)
+          m = str.match(/^(\d{1,2})[\s-]([A-Za-z]+)[\s-](\d{4})$/);
+          if (m && MONTH_MAP[m[2].toLowerCase()]) {
+            return `${m[3]}-${MONTH_MAP[m[2].toLowerCase()]}-${m[1].padStart(2, '0')}`;
+          }
+
+          // 7. Mon DD, YYYY (e.g., Apr 15, 2025)
+          m = str.match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$/);
+          if (m && MONTH_MAP[m[1].toLowerCase()]) {
+            return `${m[3]}-${MONTH_MAP[m[1].toLowerCase()]}-${m[2].padStart(2, '0')}`;
+          }
+
+          // 8. Last resort: let Date constructor try
+          const d = new Date(str);
+          if (!isNaN(d.getTime()) && d.getFullYear() > 1970 && d.getFullYear() < 2100) {
+            const yyyy = d.getFullYear();
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            return `${yyyy}-${mm}-${dd}`;
+          }
+
+          return null;
+        };
+
         // Skip header row - new format with phone column
-        const customers = jsonData.slice(1).filter(row => row.length > 0 && row[2]).map(row => ({
-          date: parseDate(row[0]),
-          connection_type: (row[1] || 'domestic').toLowerCase(),
-          customer_name: row[2] || '',
-          address: row[3] || '',
-          phone: row[4]?.toString().replace(/\D/g, '').slice(0, 10) || '',
-          consumer_no: row[5]?.toString().replace(/\D/g, '').slice(0, 10) || '',
-          cash_memo_no: row[6]?.toString() || '',
-          cylinder_nos: row[7]?.toString() || '',
-          gas_card_issued: (row[8] || '').toLowerCase() === 'yes',
-          kyc_done: (row[9] || '').toLowerCase() === 'yes',
-          remarks: row[10] || ''
-        }));
-        
+        let unparsedDateCount = 0;
+        const customers = jsonData.slice(1).filter(row => row.length > 0 && row[2]).map(row => {
+          const parsed = parseDate(row[0]);
+          if (parsed === null && row[0] !== '' && row[0] !== null && row[0] !== undefined) {
+            unparsedDateCount += 1;
+          }
+          return {
+            date: parsed || getTodayDate(),
+            connection_type: (row[1] || 'domestic').toString().toLowerCase(),
+            customer_name: (row[2] || '').toString(),
+            address: (row[3] || '').toString(),
+            phone: row[4]?.toString().replace(/\D/g, '').slice(0, 10) || '',
+            consumer_no: row[5]?.toString().replace(/\D/g, '').slice(0, 10) || '',
+            cash_memo_no: row[6]?.toString() || '',
+            cylinder_nos: row[7]?.toString() || '',
+            gas_card_issued: (row[8] || '').toString().toLowerCase() === 'yes',
+            kyc_done: (row[9] || '').toString().toLowerCase() === 'yes',
+            remarks: (row[10] || '').toString(),
+          };
+        });
+
         setBulkPreview(customers);
         setShowBulkPreview(true);
+        if (unparsedDateCount > 0) {
+          toast.warning(`${unparsedDateCount} row(s) had unparseable dates and were set to today. Use DD-MM-YYYY format.`);
+        }
       } catch (error) {
         console.error('Error parsing file:', error);
         toast.error('Failed to parse Excel file. Please check the format.');
