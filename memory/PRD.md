@@ -460,6 +460,18 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
   - Finalization recalculates totals including adjustments, then locks data
   - Adjustments included in payslip PDF breakdown
   - New APIs: GET review, POST/PUT/DELETE adjustments
+- [x] Bulk Attendance Update (Multi-Date & Multi-Employee) - April 2026:
+  - 4-step wizard: Select Employees -> Select Dates -> Grid Edit -> Review & Submit
+  - Excel-like grid with Employee rows x Date columns, per-cell status dropdowns
+  - Row quick-apply and Column quick-apply for fast editing
+  - Two modes: Same Status for All or Grid Editing
+  - 6 status types: Present, Absent, Half Day, Leave, Holiday, Week Off
+  - Color-coded cells (green/red/amber/purple/blue/slate)
+  - Mandatory reason for audit trail
+  - Payroll period lock check (finalized periods skipped)
+  - Undo Last Bulk Action before final save
+  - Audit logs with old vs new status, timestamps, user info
+  - New APIs: preview, apply, undo, logs endpoints
 
 ### P2 (Nice to Have)
 - [x] Refactor hrms.py into modular routers (April 2026):
