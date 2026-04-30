@@ -118,6 +118,12 @@ const OrderManagement = () => {
   const [updatingStatus, setUpdatingStatus] = useState(null);
   const [filteredOrders, setFilteredOrders] = useState([]);
 
+  // Customer dropdown server-side search (so we hit the full customer DB,
+  // not just the first 10000 loaded).
+  const [customerDropdownSearch, setCustomerDropdownSearch] = useState('');
+  const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
+  const [customerSearchTotal, setCustomerSearchTotal] = useState(0);
+
   // Cancel dialog state
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancellingOrder, setCancellingOrder] = useState(null);
@@ -129,6 +135,31 @@ const OrderManagement = () => {
       fetchWarehouses();
     }
   }, [isAdmin, customerCategory]);
+
+  // Debounced server-side search across the full customer DB
+  useEffect(() => {
+    const q = customerDropdownSearch.trim();
+    // When the input is cleared, fall back to the regular fetch
+    if (!q) {
+      fetchCustomers();
+      return undefined;
+    }
+    const t = setTimeout(async () => {
+      setCustomerSearchLoading(true);
+      try {
+        const params = { search: q, limit: 500, page: 1 };
+        if (customerCategory !== 'all') params.category = customerCategory;
+        const response = await getCustomers(params);
+        setCustomers(response.data.customers || response.data || []);
+        setCustomerSearchTotal(response.data.total ?? (response.data.customers?.length || 0));
+      } catch (e) {
+        console.error('Customer search failed:', e);
+      } finally {
+        setCustomerSearchLoading(false);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [customerDropdownSearch, customerCategory]);
 
   useEffect(() => {
     fetchOrders();
@@ -742,11 +773,34 @@ const OrderManagement = () => {
                         </div>
                         <div>
                           <Label className="text-sm">Select Customer *</Label>
+                          <div className="relative mt-1 mb-2">
+                            <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400" />
+                            <Input
+                              data-testid="customer-search-input"
+                              placeholder="Search across all customers (name, phone, consumer no, address)..."
+                              value={customerDropdownSearch}
+                              onChange={(e) => setCustomerDropdownSearch(e.target.value)}
+                              className="pl-8 pr-24 text-sm"
+                            />
+                            {customerSearchLoading && (
+                              <Loader2 className="absolute right-2.5 top-2.5 w-4 h-4 animate-spin text-slate-400" />
+                            )}
+                            {customerDropdownSearch.trim() && !customerSearchLoading && (
+                              <span className="absolute right-2.5 top-2 text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                                {customers.length}{customerSearchTotal > customers.length ? `/${customerSearchTotal}` : ''} match
+                              </span>
+                            )}
+                          </div>
                           <Select value={formData.customer_id} onValueChange={handleCustomerSelect}>
                             <SelectTrigger className="mt-1" data-testid="customer-select">
-                              <SelectValue placeholder="Choose a customer" />
+                              <SelectValue placeholder={customers.length === 0 ? 'No customers match' : 'Choose a customer'} />
                             </SelectTrigger>
                             <SelectContent>
+                              {customers.length === 0 && (
+                                <div className="px-3 py-2 text-xs text-slate-400">
+                                  {customerDropdownSearch.trim() ? 'No customers match your search' : 'No customers available'}
+                                </div>
+                              )}
                               {customers.map((c) => (
                                 <SelectItem key={c.id} value={c.id}>
                                   <div className="flex flex-wrap items-center gap-1 sm:gap-2">
