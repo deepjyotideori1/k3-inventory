@@ -41,7 +41,7 @@ const SalesExecutiveDashboard = () => {
   const fetchDashboardData = async () => {
     try {
       const [customersRes, ordersRes] = await Promise.all([
-        getCustomers(),
+        getCustomers({ limit: 10000, page: 1 }),
         getOrders()
       ]);
 

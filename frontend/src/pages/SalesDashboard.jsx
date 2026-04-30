@@ -297,7 +297,7 @@ const SalesDashboard = () => {
       const [entriesRes, summaryRes, customersRes, frequentRes, accSalesRes, accSummaryRes] = await Promise.all([
         getSalesEntries(params),
         getSalesSummary(params),
-        getCustomers(),
+        getCustomers({ limit: 10000, page: 1 }),
         getFrequentCustomers(8),
         getAccessorySales({ start_date: startDate, end_date: endDate, warehouse_id: isAdmin && filterWarehouse !== 'all' ? filterWarehouse : undefined }),
         getAccessorySalesSummary({ start_date: startDate, end_date: endDate, warehouse_id: isAdmin && filterWarehouse !== 'all' ? filterWarehouse : undefined })

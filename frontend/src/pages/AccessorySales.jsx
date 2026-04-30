@@ -108,7 +108,7 @@ const AccessorySales = () => {
     try {
       const [accessoriesRes, customersRes, warehousesRes] = await Promise.all([
         getAccessories(),
-        getCustomers(),
+        getCustomers({ limit: 10000, page: 1 }),
         isAdmin ? getWarehouses() : Promise.resolve({ data: [] })
       ]);
       setAccessories(accessoriesRes.data.filter(a => a.is_active));

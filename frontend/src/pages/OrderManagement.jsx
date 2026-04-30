@@ -148,7 +148,7 @@ const OrderManagement = () => {
 
   const fetchCustomers = async () => {
     try {
-      const params = {};
+      const params = { limit: 10000, page: 1 };
       if (customerCategory !== 'all') params.category = customerCategory;
       const response = await getCustomers(params);
       setCustomers(response.data.customers || response.data || []);

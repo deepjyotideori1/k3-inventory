@@ -137,7 +137,10 @@ const CustomerManagement = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const params = {};
+      // High limit so the full customer base loads in one shot.
+      // Backend defaults to 50/page which made FY2024-25 (older) customers
+      // disappear once the warehouse grew past 50 records.
+      const params = { limit: 10000, page: 1 };
       if (filterCategory !== 'all') params.category = filterCategory;
       if (filterWarehouse !== 'all') params.warehouse_id = filterWarehouse;
       if (searchQuery) params.search = searchQuery;
@@ -150,9 +153,17 @@ const CustomerManagement = () => {
       ]);
       
       const custData = customersRes.data.customers || customersRes.data;
+      const totalInDb = customersRes.data.total ?? custData.length;
       setCustomers(custData);
       setFilteredCustomers(custData);
       setSummary(summaryRes.data);
+
+      // Defensive notice if record count exceeds the load cap
+      if (totalInDb > custData.length) {
+        toast.warning(
+          `Loaded ${custData.length} of ${totalInDb} customers. Apply filters to narrow down.`
+        );
+      }
       
       // Fetch refill status separately (non-blocking) so it doesn't break the page
       try {
