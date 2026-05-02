@@ -34,6 +34,8 @@ const PayrollManagement = () => {
   const [tdsSaving, setTdsSaving] = useState(false);
   const [tdsHistory, setTdsHistory] = useState([]);
   const [tdsHistoryOpen, setTdsHistoryOpen] = useState(false);
+  // Department-wise export filter (per expanded payroll)
+  const [exportDeptIds, setExportDeptIds] = useState([]);
   const [processing, setProcessing] = useState(false);
   const [runMonth, setRunMonth] = useState(new Date().getMonth() + 1);
   const [runYear, setRunYear] = useState(new Date().getFullYear());
@@ -198,9 +200,10 @@ const PayrollManagement = () => {
 
   const toggleExpand = async (id) => {
     if (expandedPayroll === id) {
-      setExpandedPayroll(null); setPayrollDetail(null); return;
+      setExpandedPayroll(null); setPayrollDetail(null); setExportDeptIds([]); return;
     }
     setExpandedPayroll(id);
+    setExportDeptIds([]);  // reset dept filter when opening a different payroll
     setDetailLoading(true);
     try {
       const res = await api.get(`/hrms/payroll/${id}`);
@@ -669,22 +672,104 @@ const PayrollManagement = () => {
                                 <div className="py-6 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-blue-500" /></div>
                               ) : payrollDetail ? (
                                 <div className="bg-slate-50 p-4 border-t">
-                                  <div className="flex items-center justify-between mb-3">
-                                    <h4 className="font-semibold text-sm text-slate-700">Employee Breakdown</h4>
-                                    <div className="flex items-center gap-3">
-                                      <span className="text-xs text-slate-400">PF Employer: {formatINR(payrollDetail.total_pf_employer)} | ESI Employer: {formatINR(payrollDetail.total_esi_employer)}</span>
-                                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => downloadBlob(
-                                        api.get(`/hrms/reports/payroll/${p.id}/pdf`, { responseType: 'blob' }),
-                                        `Payroll_${p.period}.pdf`,
-                                        'Failed to download payroll PDF'
-                                      )} data-testid={`export-payroll-pdf-${p.id}`}><FileText className="w-3 h-3 mr-1" /> PDF</Button>
-                                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => downloadBlob(
-                                        api.get(`/hrms/reports/payroll/${p.id}/excel`, { responseType: 'blob' }),
-                                        `Payroll_${p.period}.xlsx`,
-                                        'Failed to download payroll Excel'
-                                      )} data-testid={`export-payroll-excel-${p.id}`}><Download className="w-3 h-3 mr-1" /> Excel</Button>
-                                    </div>
-                                  </div>
+                                  {(() => {
+                                    // Compute dept-wise summary from snapshot
+                                    const byDept = {};
+                                    (payrollDetail.employees || []).forEach(e => {
+                                      const key = e.department_id || `name:${e.department || 'Unassigned'}`;
+                                      if (!byDept[key]) byDept[key] = { id: e.department_id || '', name: e.department || 'Unassigned', count: 0, gross: 0, ded: 0, net: 0 };
+                                      byDept[key].count += 1;
+                                      byDept[key].gross += e.gross_salary || 0;
+                                      byDept[key].ded += e.total_deductions || 0;
+                                      byDept[key].net += e.net_pay || 0;
+                                    });
+                                    const deptRows = Object.values(byDept).sort((a, b) => a.name.localeCompare(b.name));
+                                    const deptIdsAvailable = deptRows.filter(d => d.id).map(d => d.id);
+                                    const allSelected = exportDeptIds.length === 0 || exportDeptIds.length === deptIdsAvailable.length;
+                                    const exportQueryStr = exportDeptIds.length > 0 ? `?departments=${exportDeptIds.join(',')}` : '';
+                                    return (
+                                      <>
+                                        {/* Department-wise summary table */}
+                                        <div className="mb-4 bg-white rounded-lg border border-slate-200 p-3" data-testid={`dept-summary-${p.id}`}>
+                                          <div className="flex items-center justify-between mb-2">
+                                            <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Department-wise Summary</h4>
+                                            {deptIdsAvailable.length > 0 && (
+                                              <button type="button" onClick={() => setExportDeptIds(allSelected ? [] : deptIdsAvailable)} className="text-[11px] text-blue-600 hover:underline" data-testid={`dept-select-all-${p.id}`}>
+                                                {allSelected ? 'Deselect all' : 'Select all'}
+                                              </button>
+                                            )}
+                                          </div>
+                                          <table className="w-full text-xs">
+                                            <thead>
+                                              <tr className="text-slate-400 border-b">
+                                                <th className="pb-1 text-left font-medium w-8"></th>
+                                                <th className="pb-1 text-left font-medium">Department</th>
+                                                <th className="pb-1 text-right font-medium">Employees</th>
+                                                <th className="pb-1 text-right font-medium">Gross</th>
+                                                <th className="pb-1 text-right font-medium">Deductions</th>
+                                                <th className="pb-1 text-right font-medium">Net Pay</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              {deptRows.map(d => {
+                                                const checked = exportDeptIds.length === 0 || exportDeptIds.includes(d.id);
+                                                return (
+                                                  <tr key={d.id || d.name} className="border-b border-slate-50 hover:bg-blue-50/30">
+                                                    <td className="py-1.5">
+                                                      {d.id && (
+                                                        <input
+                                                          type="checkbox"
+                                                          checked={checked}
+                                                          onChange={() => {
+                                                            if (exportDeptIds.length === 0) {
+                                                              // currently 'all' -> exclude this one
+                                                              setExportDeptIds(deptIdsAvailable.filter(x => x !== d.id));
+                                                            } else if (checked) {
+                                                              setExportDeptIds(exportDeptIds.filter(x => x !== d.id));
+                                                            } else {
+                                                              setExportDeptIds([...exportDeptIds, d.id]);
+                                                            }
+                                                          }}
+                                                          className="h-3.5 w-3.5 accent-blue-600"
+                                                          data-testid={`dept-checkbox-${d.id}`}
+                                                        />
+                                                      )}
+                                                    </td>
+                                                    <td className="py-1.5 font-medium text-slate-700">{d.name}</td>
+                                                    <td className="py-1.5 text-right">{d.count}</td>
+                                                    <td className="py-1.5 text-right">{formatINR(d.gross)}</td>
+                                                    <td className="py-1.5 text-right text-red-500">{formatINR(d.ded)}</td>
+                                                    <td className="py-1.5 text-right font-semibold text-green-700">{formatINR(d.net)}</td>
+                                                  </tr>
+                                                );
+                                              })}
+                                            </tbody>
+                                          </table>
+                                          {exportDeptIds.length > 0 && (
+                                            <p className="text-[11px] text-slate-500 mt-2">
+                                              Filter active — exports will include {exportDeptIds.length} of {deptIdsAvailable.length} departments
+                                            </p>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center justify-between mb-3">
+                                          <h4 className="font-semibold text-sm text-slate-700">Employee Breakdown</h4>
+                                          <div className="flex items-center gap-3">
+                                            <span className="text-xs text-slate-400">PF Employer: {formatINR(payrollDetail.total_pf_employer)} | ESI Employer: {formatINR(payrollDetail.total_esi_employer)}</span>
+                                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => downloadBlob(
+                                              api.get(`/hrms/reports/payroll/${p.id}/pdf${exportQueryStr}`, { responseType: 'blob' }),
+                                              `Payroll_${p.period}${exportDeptIds.length ? '_filtered' : ''}.pdf`,
+                                              'Failed to download payroll PDF'
+                                            )} data-testid={`export-payroll-pdf-${p.id}`}><FileText className="w-3 h-3 mr-1" /> PDF</Button>
+                                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => downloadBlob(
+                                              api.get(`/hrms/reports/payroll/${p.id}/excel${exportQueryStr}`, { responseType: 'blob' }),
+                                              `Payroll_${p.period}${exportDeptIds.length ? '_filtered' : ''}.xlsx`,
+                                              'Failed to download payroll Excel'
+                                            )} data-testid={`export-payroll-excel-${p.id}`}><Download className="w-3 h-3 mr-1" /> Excel</Button>
+                                          </div>
+                                        </div>
+                                      </>
+                                    );
+                                  })()}
                                   <div className="overflow-x-auto">
                                     <table className="w-full text-xs">
                                       <thead>

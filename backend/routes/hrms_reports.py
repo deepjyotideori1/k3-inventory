@@ -1,9 +1,9 @@
-from fastapi import APIRouter, HTTPException, Depends, Response
+from fastapi import APIRouter, HTTPException, Depends, Response, Query
 from database import db
 from deps import get_current_user
-from helpers import format_inr
+from helpers import format_inr, log_audit
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Dict
 from io import BytesIO
 import calendar
 import base64
@@ -476,7 +476,11 @@ async def export_attendance_excel(month: str, department_id: Optional[str] = Non
 # ============ PAYROLL REPORT (PDF) ============
 
 @router.get("/hrms/reports/payroll/{payroll_id}/pdf")
-async def export_payroll_report_pdf(payroll_id: str, user: dict = Depends(get_current_user)):
+async def export_payroll_report_pdf(
+    payroll_id: str,
+    departments: Optional[str] = Query(None, description="Comma-separated department IDs to filter by"),
+    user: dict = Depends(get_current_user),
+):
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib import colors
     from reportlab.platypus import SimpleDocTemplate, Table, Paragraph, Spacer
@@ -491,47 +495,112 @@ async def export_payroll_report_pdf(payroll_id: str, user: dict = Depends(get_cu
     month_name = calendar.month_name[payroll['month']]
     year = payroll['year']
 
+    all_emps = payroll.get('employees', []) or []
+    dept_filter = None
+    selected_dept_names = []
+    if departments:
+        dept_filter = {d.strip() for d in departments.split(',') if d.strip()}
+        all_emps = [e for e in all_emps if (e.get('department_id') or '') in dept_filter]
+        selected_dept_names = sorted({e.get('department', '—') for e in all_emps})
+        if not all_emps:
+            raise HTTPException(status_code=404, detail="No employees match the selected departments")
+
+    title = f"PAYROLL REGISTER - {month_name} {year}"
+    if selected_dept_names:
+        title += f" ({', '.join(selected_dept_names)})"
+
     buf = BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=10 * mm, rightMargin=10 * mm, topMargin=12 * mm, bottomMargin=12 * mm)
     elements = []
-    logo_path = build_report_header(elements, company, f"PAYROLL REGISTER - {month_name} {year}", mm)
+    logo_path = build_report_header(elements, company, title, mm)
 
-    data = [['S.No', 'Emp ID', 'Name', 'Dept', 'Days', 'Basic', 'HRA', 'DA', 'Other', 'Gross', 'PF', 'ESI', 'PT', 'TDS', 'Deductions', 'Net Pay']]
-    for i, emp in enumerate(payroll.get('employees', [])):
-        data.append([
-            str(i + 1), emp.get('employee_code', ''), emp['name'][:18], emp.get('department', '')[:12],
-            f"{emp['days_present']}/{emp['working_days']}",
-            format_inr(emp['earned_basic']), format_inr(emp['earned_hra']), format_inr(emp['earned_da']),
-            format_inr(emp['earned_other_allowances']), format_inr(emp['gross_salary']),
-            format_inr(emp['pf_employee']), format_inr(emp['esi_employee']),
-            format_inr(emp['professional_tax']), format_inr(emp['tds']),
-            format_inr(emp['total_deductions']), format_inr(emp['net_pay']),
-        ])
-    data.append(['', '', f'TOTAL ({len(payroll.get("employees", []))})', '', '', '', '', '', '',
-                 format_inr(payroll['total_gross']), '', '', '', '',
-                 format_inr(payroll['total_deductions']), format_inr(payroll['total_net_pay'])])
+    # Group employees by department for cleaner sections
+    by_dept: Dict[str, list] = {}
+    for emp in all_emps:
+        by_dept.setdefault(emp.get('department', '—'), []).append(emp)
+    grouped = sorted(by_dept.items(), key=lambda x: x[0].lower())
 
-    table = Table(data, colWidths=[22, 38, 68, 50, 30, 38, 35, 35, 35, 42, 35, 32, 28, 32, 42, 45])
-    style = make_table_style(header_color=(0.12, 0.35, 0.55))
-    style.add('ALIGN', (4, 0), (-1, -1), 'RIGHT')
-    style.add('FONTNAME', (0, -1), (-1, -1), 'Arial-Bold')
-    style.add('BACKGROUND', (0, -1), (-1, -1), colors.Color(0.88, 0.93, 0.88))
-    table.setStyle(style)
-    elements.append(table)
+    grand_gross = 0.0
+    grand_ded = 0.0
+    grand_net = 0.0
+    sno = 1
+    for dept_name, emps_in in grouped:
+        # Department section header
+        styles = ParagraphStyle('hdr', fontName='Arial-Bold', fontSize=10, textColor=colors.Color(0.10, 0.30, 0.50))
+        elements.append(Spacer(1, 4 * mm))
+        elements.append(Paragraph(f"<b>{dept_name}</b> &nbsp;·&nbsp; {len(emps_in)} employee(s)", styles))
+        elements.append(Spacer(1, 2 * mm))
+
+        data = [['S.No', 'Emp ID', 'Name', 'Days', 'Basic', 'HRA', 'DA', 'Other', 'Gross', 'PF', 'ESI', 'PT', 'TDS', 'Deductions', 'Net Pay']]
+        sec_gross = sec_ded = sec_net = 0.0
+        for emp in emps_in:
+            data.append([
+                str(sno), emp.get('employee_code', ''), emp['name'][:22],
+                f"{emp['days_present']}/{emp['working_days']}",
+                format_inr(emp['earned_basic']), format_inr(emp['earned_hra']), format_inr(emp['earned_da']),
+                format_inr(emp['earned_other_allowances']), format_inr(emp['gross_salary']),
+                format_inr(emp['pf_employee']), format_inr(emp['esi_employee']),
+                format_inr(emp['professional_tax']), format_inr(emp['tds']),
+                format_inr(emp['total_deductions']), format_inr(emp['net_pay']),
+            ])
+            sno += 1
+            sec_gross += emp['gross_salary']
+            sec_ded += emp['total_deductions']
+            sec_net += emp['net_pay']
+        # Section total row
+        data.append(['', '', f'Subtotal ({len(emps_in)})', '', '', '', '', '',
+                     format_inr(sec_gross), '', '', '', '',
+                     format_inr(sec_ded), format_inr(sec_net)])
+        grand_gross += sec_gross
+        grand_ded += sec_ded
+        grand_net += sec_net
+
+        table = Table(data, colWidths=[22, 42, 80, 32, 42, 38, 38, 38, 50, 38, 35, 30, 36, 50, 56])
+        style = make_table_style(header_color=(0.12, 0.35, 0.55))
+        style.add('ALIGN', (3, 0), (-1, -1), 'RIGHT')
+        style.add('FONTNAME', (0, -1), (-1, -1), 'Arial-Bold')
+        style.add('BACKGROUND', (0, -1), (-1, -1), colors.Color(0.92, 0.96, 0.92))
+        table.setStyle(style)
+        elements.append(table)
+
+    # Grand total summary
+    elements.append(Spacer(1, 6 * mm))
+    summary = [
+        ['Grand Total', f'{sno - 1} employee(s)', format_inr(grand_gross), format_inr(grand_ded), format_inr(grand_net)],
+    ]
+    summary_tbl = Table([['', 'Count', 'Total Gross', 'Total Deductions', 'Total Net Pay']] + summary,
+                       colWidths=[100, 80, 90, 90, 100])
+    summary_style = make_table_style(header_color=(0.20, 0.45, 0.30))
+    summary_style.add('ALIGN', (1, 0), (-1, -1), 'RIGHT')
+    summary_style.add('FONTNAME', (0, -1), (-1, -1), 'Arial-Bold')
+    summary_tbl.setStyle(summary_style)
+    elements.append(summary_tbl)
 
     build_report_footer(elements, company, mm)
     doc.build(elements)
     if logo_path:
         os.unlink(logo_path)
     buf.seek(0)
+
+    # Audit log: who exported what
+    await log_audit(
+        user.get('id', ''), user.get('name', ''), 'export', 'payroll',
+        payroll_id, f"PDF · period {payroll['period']} · depts: {','.join(selected_dept_names) or 'ALL'}"
+    )
+
+    suffix = ('_' + '_'.join(d[:8] for d in selected_dept_names)) if selected_dept_names else ''
     return Response(content=buf.read(), media_type="application/pdf",
-                    headers={"Content-Disposition": f'attachment; filename="Payroll_{month_name}_{year}.pdf"'})
+                    headers={"Content-Disposition": f'attachment; filename="Payroll_{month_name}_{year}{suffix}.pdf"'})
 
 
 # ============ PAYROLL REPORT (EXCEL) ============
 
 @router.get("/hrms/reports/payroll/{payroll_id}/excel")
-async def export_payroll_report_excel(payroll_id: str, user: dict = Depends(get_current_user)):
+async def export_payroll_report_excel(
+    payroll_id: str,
+    departments: Optional[str] = Query(None, description="Comma-separated department IDs to filter by"),
+    user: dict = Depends(get_current_user),
+):
     from openpyxl import Workbook
     from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 
@@ -542,9 +611,16 @@ async def export_payroll_report_excel(payroll_id: str, user: dict = Depends(get_
     month_name = calendar.month_name[payroll['month']]
     year = payroll['year']
 
+    all_emps = payroll.get('employees', []) or []
+    selected_dept_names = []
+    if departments:
+        dept_filter = {d.strip() for d in departments.split(',') if d.strip()}
+        all_emps = [e for e in all_emps if (e.get('department_id') or '') in dept_filter]
+        selected_dept_names = sorted({e.get('department', '—') for e in all_emps})
+        if not all_emps:
+            raise HTTPException(status_code=404, detail="No employees match the selected departments")
+
     wb = Workbook()
-    ws = wb.active
-    ws.title = "Payroll"
     hf = Font(name='Arial', size=14, bold=True)
     sf = Font(name='Arial', size=9, color='666666')
     cf = Font(name='Arial', size=9, bold=True, color='FFFFFF')
@@ -554,60 +630,114 @@ async def export_payroll_report_excel(payroll_id: str, user: dict = Depends(get_
     tfill = PatternFill(start_color='E0EDDF', end_color='E0EDDF', fill_type='solid')
     border = Border(left=Side(style='thin', color='CCCCCC'), right=Side(style='thin', color='CCCCCC'),
                     top=Side(style='thin', color='CCCCCC'), bottom=Side(style='thin', color='CCCCCC'))
-
-    cols = 16
-    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=cols)
-    ws['A1'] = company['name']
-    ws['A1'].font = hf
-    ws['A1'].alignment = Alignment(horizontal='center')
-    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=cols)
-    ws['A2'] = f"Payroll Register - {month_name} {year} | Status: {payroll['status'].upper()}"
-    ws['A2'].font = sf
-    ws['A2'].alignment = Alignment(horizontal='center')
-
     headers = ['S.No', 'Emp ID', 'Name', 'Dept', 'Days', 'Basic', 'HRA', 'DA', 'Other', 'Gross', 'PF', 'ESI', 'PT', 'TDS', 'Deductions', 'Net Pay']
-    for col_idx, h in enumerate(headers, 1):
-        cell = ws.cell(row=4, column=col_idx, value=h)
-        cell.font = cf
-        cell.fill = hfill
-        cell.alignment = Alignment(horizontal='center')
-        cell.border = border
+    cols = len(headers)
+    widths = [5, 8, 20, 14, 6, 8, 8, 7, 7, 10, 7, 7, 6, 7, 10, 10]
 
-    for i, emp in enumerate(payroll.get('employees', [])):
-        row = i + 5
-        values = [i + 1, emp.get('employee_code', ''), emp['name'], emp.get('department', ''),
-                  f"{emp['days_present']}/{emp['working_days']}",
-                  emp['earned_basic'], emp['earned_hra'], emp['earned_da'], emp['earned_other_allowances'],
-                  emp['gross_salary'], emp['pf_employee'], emp['esi_employee'], emp['professional_tax'],
-                  emp['tds'], emp['total_deductions'], emp['net_pay']]
-        for col_idx, val in enumerate(values, 1):
-            cell = ws.cell(row=row, column=col_idx, value=val)
-            cell.font = nf
-            cell.border = border
-            if col_idx >= 6:
+    def write_header(ws_, title):
+        ws_.merge_cells(start_row=1, start_column=1, end_row=1, end_column=cols)
+        ws_['A1'] = company['name']
+        ws_['A1'].font = hf
+        ws_['A1'].alignment = Alignment(horizontal='center')
+        ws_.merge_cells(start_row=2, start_column=1, end_row=2, end_column=cols)
+        ws_['A2'] = title
+        ws_['A2'].font = sf
+        ws_['A2'].alignment = Alignment(horizontal='center')
+        for col_idx, h in enumerate(headers, 1):
+            cell = ws_.cell(row=4, column=col_idx, value=h)
+            cell.font = cf; cell.fill = hfill
+            cell.alignment = Alignment(horizontal='center'); cell.border = border
+        for i, w in enumerate(widths):
+            ws_.column_dimensions[chr(65 + i)].width = w
+
+    def write_employees(ws_, emps_list, start_row=5):
+        for i, emp in enumerate(emps_list):
+            row = start_row + i
+            values = [i + 1, emp.get('employee_code', ''), emp['name'], emp.get('department', ''),
+                      f"{emp['days_present']}/{emp['working_days']}",
+                      emp['earned_basic'], emp['earned_hra'], emp['earned_da'], emp['earned_other_allowances'],
+                      emp['gross_salary'], emp['pf_employee'], emp['esi_employee'], emp['professional_tax'],
+                      emp['tds'], emp['total_deductions'], emp['net_pay']]
+            for col_idx, val in enumerate(values, 1):
+                cell = ws_.cell(row=row, column=col_idx, value=val)
+                cell.font = nf; cell.border = border
+                if col_idx >= 6:
+                    cell.number_format = '#,##0.00'
+        total_row = start_row + len(emps_list)
+        gross = sum(e['gross_salary'] for e in emps_list)
+        ded = sum(e['total_deductions'] for e in emps_list)
+        net = sum(e['net_pay'] for e in emps_list)
+        ws_.cell(row=total_row, column=3, value='TOTAL').font = bf
+        ws_.cell(row=total_row, column=10, value=gross).font = bf
+        ws_.cell(row=total_row, column=15, value=ded).font = bf
+        ws_.cell(row=total_row, column=16, value=net).font = bf
+        for c in range(1, cols + 1):
+            cell = ws_.cell(row=total_row, column=c)
+            cell.fill = tfill; cell.border = border
+            if c >= 6:
                 cell.number_format = '#,##0.00'
 
-    total_row = len(payroll.get('employees', [])) + 5
-    ws.cell(row=total_row, column=3, value='TOTAL').font = bf
-    ws.cell(row=total_row, column=10, value=payroll['total_gross']).font = bf
-    ws.cell(row=total_row, column=15, value=payroll['total_deductions']).font = bf
-    ws.cell(row=total_row, column=16, value=payroll['total_net_pay']).font = bf
-    for c in range(1, cols + 1):
-        cell = ws.cell(row=total_row, column=c)
-        cell.fill = tfill
-        cell.border = border
-        if c >= 6:
-            cell.number_format = '#,##0.00'
+    # Group by department for multi-sheet workbook
+    by_dept: Dict[str, list] = {}
+    for emp in all_emps:
+        by_dept.setdefault(emp.get('department', 'Unassigned'), []).append(emp)
 
-    widths = [5, 8, 20, 14, 6, 8, 8, 7, 7, 10, 7, 7, 6, 7, 10, 10]
-    for i, w in enumerate(widths):
-        ws.column_dimensions[chr(65 + i)].width = w
+    # Sheet 1: Summary
+    ws_summary = wb.active
+    ws_summary.title = 'Summary'
+    ws_summary.merge_cells('A1:E1')
+    ws_summary['A1'] = company['name']; ws_summary['A1'].font = hf; ws_summary['A1'].alignment = Alignment(horizontal='center')
+    ws_summary.merge_cells('A2:E2')
+    title_summary = f"Payroll Summary - {month_name} {year} | Status: {payroll['status'].upper()}"
+    if selected_dept_names:
+        title_summary += f" | Filtered: {', '.join(selected_dept_names)}"
+    ws_summary['A2'] = title_summary; ws_summary['A2'].font = sf; ws_summary['A2'].alignment = Alignment(horizontal='center')
+    sum_headers = ['Department', 'Employees', 'Total Gross', 'Total Deductions', 'Total Net Pay']
+    for col_idx, h in enumerate(sum_headers, 1):
+        cell = ws_summary.cell(row=4, column=col_idx, value=h)
+        cell.font = cf; cell.fill = hfill; cell.alignment = Alignment(horizontal='center'); cell.border = border
+    grand = {'cnt': 0, 'g': 0.0, 'd': 0.0, 'n': 0.0}
+    for r_idx, (dept_name, emps) in enumerate(sorted(by_dept.items()), start=5):
+        g = sum(e['gross_salary'] for e in emps); d = sum(e['total_deductions'] for e in emps); n = sum(e['net_pay'] for e in emps)
+        grand['cnt'] += len(emps); grand['g'] += g; grand['d'] += d; grand['n'] += n
+        for col_idx, val in enumerate([dept_name, len(emps), g, d, n], 1):
+            cell = ws_summary.cell(row=r_idx, column=col_idx, value=val)
+            cell.font = nf; cell.border = border
+            if col_idx >= 3:
+                cell.number_format = '#,##0.00'
+    total_r = len(by_dept) + 5
+    ws_summary.cell(row=total_r, column=1, value='GRAND TOTAL').font = bf
+    ws_summary.cell(row=total_r, column=2, value=grand['cnt']).font = bf
+    ws_summary.cell(row=total_r, column=3, value=grand['g']).font = bf
+    ws_summary.cell(row=total_r, column=4, value=grand['d']).font = bf
+    ws_summary.cell(row=total_r, column=5, value=grand['n']).font = bf
+    for c in range(1, 6):
+        cell = ws_summary.cell(row=total_r, column=c)
+        cell.fill = tfill; cell.border = border
+        if c >= 3:
+            cell.number_format = '#,##0.00'
+    for i, w in enumerate([28, 12, 16, 18, 16]):
+        ws_summary.column_dimensions[chr(65 + i)].width = w
+
+    # Sheets 2..N: one per department
+    for dept_name, emps in sorted(by_dept.items()):
+        sheet_name = (dept_name or 'Unassigned')[:28].replace('/', '-').replace('\\', '-')
+        ws = wb.create_sheet(title=sheet_name)
+        write_header(ws, f"{dept_name} - {month_name} {year} | {len(emps)} employee(s)")
+        write_employees(ws, emps)
 
     buf = BytesIO()
     wb.save(buf)
     buf.seek(0)
+
+    await log_audit(
+        user.get('id', ''), user.get('name', ''), 'export', 'payroll',
+        payroll_id, f"Excel · period {payroll['period']} · depts: {','.join(selected_dept_names) or 'ALL'}"
+    )
+
+    suffix = '_filtered' if selected_dept_names else ''
     return Response(content=buf.read(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    headers={"Content-Disposition": f'attachment; filename="Payroll_{month_name}_{year}.xlsx"'})
+                    headers={"Content-Disposition": f'attachment; filename="Payroll_{month_name}_{year}{suffix}.xlsx"'})
 
 
 

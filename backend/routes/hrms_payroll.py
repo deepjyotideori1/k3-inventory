@@ -368,6 +368,7 @@ async def run_payroll(data: dict, user: dict = Depends(get_current_user)):
             'employee_code': emp.get('employee_id', ''),
             'name': emp['name'],
             'department': dept['name'] if dept else 'Unassigned',
+            'department_id': emp.get('department_id', '') or '',
             'designation': emp.get('designation', ''),
             'bank_account_no': emp.get('bank_account_no', ''),
             'ifsc_code': emp.get('ifsc_code', ''),
