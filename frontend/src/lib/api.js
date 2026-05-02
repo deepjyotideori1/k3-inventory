@@ -85,6 +85,7 @@ export const getDashboardChartData = (params) => api.get('/dashboard/chart-data'
 
 // Audit Logs
 export const getAuditLogs = (params) => api.get('/audit-logs', { params });
+export const exportAuditLogs = (params) => api.get('/audit-logs/export', { params, responseType: 'blob' });
 
 // Dashboard
 export const getDashboardStats = () => api.get('/dashboard/stats');
