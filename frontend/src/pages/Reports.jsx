@@ -594,41 +594,52 @@ const Reports = () => {
 
                     {/* Delivery to Warehouses */}
                     <div className="bg-indigo-50 p-3 rounded-lg">
-                      <h4 className="font-semibold text-indigo-800 mb-2">Delivery to Warehouses (Filled Cylinders)</h4>
+                      <h4 className="font-semibold text-indigo-800 mb-2">Delivery to Warehouses / Dealers (Filled Cylinders)</h4>
                       {(report.delivery_15kg?.length > 0 || report.delivery_21kg?.length > 0) ? (
                         <div className="space-y-2">
                           <div className="overflow-x-auto">
                             <table className="w-full text-sm">
                               <thead>
                                 <tr className="bg-indigo-100">
-                                  <th className="px-3 py-2 text-left text-indigo-800">Warehouse</th>
+                                  <th className="px-3 py-2 text-left text-indigo-800">Recipient</th>
+                                  <th className="px-3 py-2 text-center text-indigo-800">Type</th>
                                   <th className="px-3 py-2 text-center text-indigo-800">15kg Filled</th>
                                   <th className="px-3 py-2 text-center text-indigo-800">21kg Filled</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {(() => {
-                                  const warehouseMap = {};
+                                  const rowKey = (d) => d.recipient_type === 'dealer'
+                                    ? `D:${d.dealer_name || d.dealer_id || 'Unknown Dealer'}`
+                                    : `W:${d.warehouse_name || 'Unknown Warehouse'}`;
+                                  const map = {};
                                   (report.delivery_15kg || []).forEach(d => {
-                                    if (!warehouseMap[d.warehouse_name]) warehouseMap[d.warehouse_name] = { qty15: 0, qty21: 0 };
-                                    warehouseMap[d.warehouse_name].qty15 = d.quantity || 0;
+                                    const k = rowKey(d);
+                                    if (!map[k]) map[k] = { name: k.slice(2), type: d.recipient_type === 'dealer' ? 'Dealer' : 'Warehouse', qty15: 0, qty21: 0 };
+                                    map[k].qty15 += d.quantity || 0;
                                   });
                                   (report.delivery_21kg || []).forEach(d => {
-                                    if (!warehouseMap[d.warehouse_name]) warehouseMap[d.warehouse_name] = { qty15: 0, qty21: 0 };
-                                    warehouseMap[d.warehouse_name].qty21 = d.quantity || 0;
+                                    const k = rowKey(d);
+                                    if (!map[k]) map[k] = { name: k.slice(2), type: d.recipient_type === 'dealer' ? 'Dealer' : 'Warehouse', qty15: 0, qty21: 0 };
+                                    map[k].qty21 += d.quantity || 0;
                                   });
-                                  return Object.entries(warehouseMap).map(([name, qty]) => (
-                                    <tr key={name} className="border-b border-indigo-100">
-                                      <td className="px-3 py-2 font-medium">{name}</td>
-                                      <td className="px-3 py-2 text-center font-bold text-indigo-700">{qty.qty15}</td>
-                                      <td className="px-3 py-2 text-center font-bold text-indigo-700">{qty.qty21}</td>
+                                  return Object.entries(map).map(([k, r]) => (
+                                    <tr key={k} className="border-b border-indigo-100">
+                                      <td className="px-3 py-2 font-medium">{r.name}</td>
+                                      <td className="px-3 py-2 text-center">
+                                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${r.type === 'Dealer' ? 'bg-violet-100 text-violet-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                          {r.type}
+                                        </span>
+                                      </td>
+                                      <td className="px-3 py-2 text-center font-bold text-indigo-700">{r.qty15}</td>
+                                      <td className="px-3 py-2 text-center font-bold text-indigo-700">{r.qty21}</td>
                                     </tr>
                                   ));
                                 })()}
                               </tbody>
                               <tfoot className="bg-indigo-100">
                                 <tr>
-                                  <td className="px-3 py-2 font-semibold">Total</td>
+                                  <td className="px-3 py-2 font-semibold" colSpan={2}>Total</td>
                                   <td className="px-3 py-2 text-center font-bold text-indigo-800">
                                     {(report.delivery_15kg || []).reduce((sum, d) => sum + (d.quantity || 0), 0)}
                                   </td>

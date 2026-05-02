@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Separator } from '../components/ui/separator';
 import { Badge } from '../components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../components/ui/dialog';
+import SearchableSelect from '../components/SearchableSelect';
 import { 
   Save,
   Loader2,
@@ -29,6 +30,86 @@ import {
 } from 'lucide-react';
 import { getTodayDate, formatDate } from '../lib/utils';
 import { toast } from 'sonner';
+
+// Single delivery row: toggle between Warehouse and Dealer recipient, then pick one, then enter qty.
+const DeliveryRow = ({ item, idx, cylinderType, warehouses, dealers, onUpdate, onRemove }) => {
+  const isDealer = item.recipient_type === 'dealer';
+  return (
+    <div
+      className="flex flex-wrap items-center gap-2 p-2 rounded-lg border border-slate-100 bg-slate-50/60"
+      data-testid={`delivery-row-${cylinderType}-${idx}`}
+    >
+      {/* Recipient type toggle */}
+      <div className="inline-flex rounded-md border border-slate-200 overflow-hidden text-xs">
+        <button
+          type="button"
+          onClick={() => onUpdate(cylinderType, idx, 'recipient_type', 'warehouse')}
+          className={`px-3 py-1.5 transition-colors ${
+            !isDealer ? 'bg-green-700 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'
+          }`}
+          data-testid={`recipient-toggle-warehouse-${cylinderType}-${idx}`}
+        >
+          Warehouse
+        </button>
+        <button
+          type="button"
+          onClick={() => onUpdate(cylinderType, idx, 'recipient_type', 'dealer')}
+          className={`px-3 py-1.5 transition-colors ${
+            isDealer ? 'bg-indigo-700 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'
+          }`}
+          data-testid={`recipient-toggle-dealer-${cylinderType}-${idx}`}
+        >
+          Dealer
+        </button>
+      </div>
+
+      {/* Recipient picker */}
+      {isDealer ? (
+        <div className="min-w-[220px] flex-1 max-w-sm">
+          <SearchableSelect
+            options={dealers.map(d => ({
+              ...d,
+              display: d.name + (d.contact ? ` (${d.contact})` : ''),
+            }))}
+            value={item.dealer_id || ''}
+            onChange={(val) => onUpdate(cylinderType, idx, 'dealer_id', val)}
+            placeholder="Select dealer"
+            labelField="display"
+            valueField="id"
+            searchFields={['name', 'contact', 'address']}
+            emptyMessage="No dealers found"
+          />
+        </div>
+      ) : (
+        <Select
+          value={item.warehouse_id || ''}
+          onValueChange={(val) => onUpdate(cylinderType, idx, 'warehouse_id', val)}
+        >
+          <SelectTrigger className="w-48" data-testid={`warehouse-select-${cylinderType}-${idx}`}>
+            <SelectValue placeholder="Select warehouse" />
+          </SelectTrigger>
+          <SelectContent>
+            {warehouses.map(w => (
+              <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+
+      <Input
+        type="number"
+        placeholder="Qty"
+        value={item.quantity}
+        onChange={(e) => onUpdate(cylinderType, idx, 'quantity', e.target.value)}
+        className="w-24"
+        data-testid={`qty-input-${cylinderType}-${idx}`}
+      />
+      <Button type="button" variant="ghost" size="icon" onClick={() => onRemove(cylinderType, idx)}>
+        <Trash2 className="w-4 h-4 text-red-500" />
+      </Button>
+    </div>
+  );
+};
 
 const PlantEntry = () => {
   const { user } = useAuth();
@@ -123,7 +204,12 @@ const PlantEntry = () => {
     const field = type === '15kg' ? 'delivery_15kg' : 'delivery_21kg';
     setFormData(prev => ({
       ...prev,
-      [field]: [...prev[field], { warehouse_id: '', warehouse_name: '', quantity: 0 }]
+      [field]: [...prev[field], {
+        recipient_type: 'warehouse',
+        warehouse_id: '', warehouse_name: '',
+        dealer_id: '', dealer_name: '',
+        quantity: 0,
+      }]
     }));
   };
 
@@ -139,12 +225,27 @@ const PlantEntry = () => {
     const field = type === '15kg' ? 'delivery_15kg' : 'delivery_21kg';
     setFormData(prev => {
       const updated = [...prev[field]];
-      if (key === 'warehouse_id') {
+      const row = { ...updated[index] };
+      if (key === 'recipient_type') {
+        row.recipient_type = value;
+        // Clear the other side when switching recipient type
+        if (value === 'warehouse') {
+          row.dealer_id = ''; row.dealer_name = '';
+        } else {
+          row.warehouse_id = ''; row.warehouse_name = '';
+        }
+      } else if (key === 'warehouse_id') {
         const warehouse = warehouses.find(w => w.id === value);
-        updated[index] = { ...updated[index], warehouse_id: value, warehouse_name: warehouse?.name || '' };
+        row.warehouse_id = value;
+        row.warehouse_name = warehouse?.name || '';
+      } else if (key === 'dealer_id') {
+        const dealer = dealers.find(d => d.id === value);
+        row.dealer_id = value;
+        row.dealer_name = dealer?.name || '';
       } else {
-        updated[index] = { ...updated[index], [key]: parseInt(value) || 0 };
+        row[key] = parseInt(value) || 0;
       }
+      updated[index] = row;
       return { ...prev, [field]: updated };
     });
   };
@@ -181,6 +282,51 @@ const PlantEntry = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Validate: every dealer row must have a dealer_id selected
+    const checkDeliveryList = (list, type) => {
+      for (const row of list) {
+        if (row.recipient_type === 'dealer' && !row.dealer_id) {
+          toast.error(`Please select a dealer for all ${type} dealer rows`);
+          return false;
+        }
+        if (row.recipient_type === 'warehouse' && !row.warehouse_id) {
+          toast.error(`Please select a warehouse for all ${type} warehouse rows`);
+          return false;
+        }
+        if (!row.quantity || row.quantity <= 0) {
+          toast.error(`Quantity must be greater than 0 for all ${type} rows`);
+          return false;
+        }
+      }
+      return true;
+    };
+    if (!checkDeliveryList(formData.delivery_15kg, '15kg')) return;
+    if (!checkDeliveryList(formData.delivery_21kg, '21kg')) return;
+
+    // Duplicate detection (same recipient + cylinder type in same submission)
+    const findDuplicates = (list) => {
+      const seen = new Map();
+      const dupes = [];
+      for (const row of list) {
+        const key = row.recipient_type === 'dealer'
+          ? `dealer:${row.dealer_id}`
+          : `wh:${row.warehouse_id}`;
+        if (seen.has(key)) dupes.push(row.recipient_type === 'dealer' ? row.dealer_name : row.warehouse_name);
+        else seen.set(key, true);
+      }
+      return dupes;
+    };
+    const dupes15 = findDuplicates(formData.delivery_15kg);
+    const dupes21 = findDuplicates(formData.delivery_21kg);
+    if (dupes15.length || dupes21.length) {
+      toast.warning(
+        `Duplicate recipients detected — they will be stored as separate rows. ` +
+        (dupes15.length ? `15kg: ${dupes15.join(', ')}. ` : '') +
+        (dupes21.length ? `21kg: ${dupes21.join(', ')}.` : '')
+      );
+    }
+
     setSubmitting(true);
 
     try {
@@ -807,53 +953,41 @@ const PlantEntry = () => {
             </CardContent>
           </Card>
 
-          {/* Delivery to Warehouses */}
+          {/* Delivery to Warehouses / Dealers */}
           <Card className="mb-6" data-testid="delivery-section">
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <Truck className="w-5 h-5 text-green-700" />
                 Delivery to Warehouses (Filled Cylinders)
               </CardTitle>
+              <CardDescription className="text-xs">
+                Each row may deliver to a <span className="font-medium">warehouse</span> or a <span className="font-medium">dealer</span>.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               {/* 15kg Deliveries */}
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="font-medium text-slate-700">15kg Delivery</h4>
-                  <Button type="button" variant="outline" size="sm" onClick={() => addDelivery('15kg')}>
+                  <Button type="button" variant="outline" size="sm" onClick={() => addDelivery('15kg')} data-testid="add-delivery-15kg">
                     <Plus className="w-4 h-4 mr-1" /> Add
                   </Button>
                 </div>
                 {formData.delivery_15kg.length === 0 ? (
                   <p className="text-slate-500 text-sm">No 15kg deliveries added</p>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {formData.delivery_15kg.map((item, idx) => (
-                      <div key={idx} className="flex items-center gap-2">
-                        <Select 
-                          value={item.warehouse_id} 
-                          onValueChange={(val) => updateDelivery('15kg', idx, 'warehouse_id', val)}
-                        >
-                          <SelectTrigger className="w-48">
-                            <SelectValue placeholder="Select warehouse" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {warehouses.map(w => (
-                              <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Input 
-                          type="number" 
-                          placeholder="Qty"
-                          value={item.quantity}
-                          onChange={(e) => updateDelivery('15kg', idx, 'quantity', e.target.value)}
-                          className="w-24"
-                        />
-                        <Button type="button" variant="ghost" size="icon" onClick={() => removeDelivery('15kg', idx)}>
-                          <Trash2 className="w-4 h-4 text-red-500" />
-                        </Button>
-                      </div>
+                      <DeliveryRow
+                        key={idx}
+                        item={item}
+                        idx={idx}
+                        cylinderType="15kg"
+                        warehouses={warehouses}
+                        dealers={dealers}
+                        onUpdate={updateDelivery}
+                        onRemove={removeDelivery}
+                      />
                     ))}
                   </div>
                 )}
@@ -865,40 +999,25 @@ const PlantEntry = () => {
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="font-medium text-slate-700">21kg Delivery</h4>
-                  <Button type="button" variant="outline" size="sm" onClick={() => addDelivery('21kg')}>
+                  <Button type="button" variant="outline" size="sm" onClick={() => addDelivery('21kg')} data-testid="add-delivery-21kg">
                     <Plus className="w-4 h-4 mr-1" /> Add
                   </Button>
                 </div>
                 {formData.delivery_21kg.length === 0 ? (
                   <p className="text-slate-500 text-sm">No 21kg deliveries added</p>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {formData.delivery_21kg.map((item, idx) => (
-                      <div key={idx} className="flex items-center gap-2">
-                        <Select 
-                          value={item.warehouse_id} 
-                          onValueChange={(val) => updateDelivery('21kg', idx, 'warehouse_id', val)}
-                        >
-                          <SelectTrigger className="w-48">
-                            <SelectValue placeholder="Select warehouse" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {warehouses.map(w => (
-                              <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Input 
-                          type="number" 
-                          placeholder="Qty"
-                          value={item.quantity}
-                          onChange={(e) => updateDelivery('21kg', idx, 'quantity', e.target.value)}
-                          className="w-24"
-                        />
-                        <Button type="button" variant="ghost" size="icon" onClick={() => removeDelivery('21kg', idx)}>
-                          <Trash2 className="w-4 h-4 text-red-500" />
-                        </Button>
-                      </div>
+                      <DeliveryRow
+                        key={idx}
+                        item={item}
+                        idx={idx}
+                        cylinderType="21kg"
+                        warehouses={warehouses}
+                        dealers={dealers}
+                        onUpdate={updateDelivery}
+                        onRemove={removeDelivery}
+                      />
                     ))}
                   </div>
                 )}
