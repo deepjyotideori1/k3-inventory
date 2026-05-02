@@ -17,7 +17,9 @@ import {
   Truck,
   ArrowDownToLine,
   Send,
-  Package
+  Package,
+  Warehouse as WarehouseIcon,
+  Store
 } from 'lucide-react';
 import { formatDate, getDateRange } from '../lib/utils';
 import { toast } from 'sonner';
@@ -36,7 +38,7 @@ const PlantHollongi = () => {
 
   useEffect(() => {
     const range = getDateRange('monthly');
-    setFilters({ start_date: range.startDate, end_date: range.endDate });
+    setFilters({ start_date: range.start, end_date: range.end });
     fetchWarehouses();
   }, []);
 
@@ -68,6 +70,39 @@ const PlantHollongi = () => {
 
   const grandIssuance15 = issuanceHistory.reduce((s, e) => s + (e.qty_15kg || 0), 0);
   const grandIssuance21 = issuanceHistory.reduce((s, e) => s + (e.qty_21kg || 0), 0);
+
+  // Today's delivery split: computed from the most recent plant report
+  // whose date matches today (in local time).
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayReport = reports.find(r => r.date === todayStr);
+  const todayDeliveryStats = (() => {
+    if (!todayReport) return null;
+    const deliveries = [
+      ...(todayReport.delivery_15kg || []).map(d => ({ ...d, _size: 15 })),
+      ...(todayReport.delivery_21kg || []).map(d => ({ ...d, _size: 21 })),
+    ];
+    const dealerSet = new Set();
+    const warehouseSet = new Set();
+    let dealerQty15 = 0, dealerQty21 = 0, whQty15 = 0, whQty21 = 0;
+    for (const d of deliveries) {
+      if (d.recipient_type === 'dealer' && d.dealer_id) {
+        dealerSet.add(d.dealer_id);
+        if (d._size === 15) dealerQty15 += d.quantity || 0;
+        else dealerQty21 += d.quantity || 0;
+      } else if (d.warehouse_id) {
+        warehouseSet.add(d.warehouse_id);
+        if (d._size === 15) whQty15 += d.quantity || 0;
+        else whQty21 += d.quantity || 0;
+      }
+    }
+    return {
+      dealers: dealerSet.size,
+      warehouses: warehouseSet.size,
+      dealerQty15, dealerQty21,
+      whQty15, whQty21,
+      totalQty: dealerQty15 + dealerQty21 + whQty15 + whQty21,
+    };
+  })();
 
   const fetchWarehouses = async () => {
     try {
@@ -146,6 +181,58 @@ const PlantHollongi = () => {
             </Button>
           </div>
         </div>
+
+        {/* Today's Delivery Split */}
+        {todayDeliveryStats && todayDeliveryStats.totalQty > 0 && (
+          <Card
+            className="border-l-4 border-l-indigo-500 bg-gradient-to-r from-indigo-50/70 via-white to-violet-50/60"
+            data-testid="today-delivery-strip"
+          >
+            <CardContent className="py-4 px-5">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-indigo-600 text-white flex items-center justify-center flex-shrink-0">
+                    <Truck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide font-semibold text-indigo-600">Delivered Today</p>
+                    <p className="text-sm text-slate-700">
+                      <span className="font-bold text-slate-800">{todayDeliveryStats.totalQty}</span> cylinders across{' '}
+                      <span className="font-bold text-slate-800">
+                        {todayDeliveryStats.dealers + todayDeliveryStats.warehouses}
+                      </span>{' '}
+                      recipient{todayDeliveryStats.dealers + todayDeliveryStats.warehouses !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge
+                    variant="outline"
+                    className="bg-emerald-50 border-emerald-300 text-emerald-700 font-semibold px-3 py-1.5 text-xs flex items-center gap-1.5"
+                    data-testid="today-delivery-warehouses"
+                  >
+                    <WarehouseIcon className="w-3.5 h-3.5" />
+                    {todayDeliveryStats.warehouses} warehouse{todayDeliveryStats.warehouses !== 1 ? 's' : ''}
+                    <span className="text-emerald-600 font-normal ml-1">
+                      ({todayDeliveryStats.whQty15}×15kg · {todayDeliveryStats.whQty21}×21kg)
+                    </span>
+                  </Badge>
+                  <Badge
+                    variant="outline"
+                    className="bg-violet-50 border-violet-300 text-violet-700 font-semibold px-3 py-1.5 text-xs flex items-center gap-1.5"
+                    data-testid="today-delivery-dealers"
+                  >
+                    <Store className="w-3.5 h-3.5" />
+                    {todayDeliveryStats.dealers} dealer{todayDeliveryStats.dealers !== 1 ? 's' : ''}
+                    <span className="text-violet-600 font-normal ml-1">
+                      ({todayDeliveryStats.dealerQty15}×15kg · {todayDeliveryStats.dealerQty21}×21kg)
+                    </span>
+                  </Badge>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Filters */}
         <Card data-testid="filters-card">
