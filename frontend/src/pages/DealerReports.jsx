@@ -797,52 +797,98 @@ const DealerReports = () => {
                   <p className="text-3xl font-bold text-green-800">{summary.grand_totals.total_issued_21kg || 0}</p>
                 </CardContent>
               </Card>
-              <Card className="bg-blue-50 border-blue-200">
+              <Card className="bg-amber-50 border-amber-200">
                 <CardContent className="p-4 text-center">
-                  <p className="text-sm text-blue-700 font-medium">Total 15kg Refilled</p>
-                  <p className="text-3xl font-bold text-blue-800">{summary.grand_totals.total_refilled_15kg || 0}</p>
+                  <p className="text-sm text-amber-700 font-medium">15kg Empties Returned</p>
+                  <p className="text-3xl font-bold text-amber-800">{summary.grand_totals.total_returned_empty_15kg || 0}</p>
                 </CardContent>
               </Card>
-              <Card className="bg-blue-50 border-blue-200">
+              <Card className="bg-amber-50 border-amber-200">
                 <CardContent className="p-4 text-center">
-                  <p className="text-sm text-blue-700 font-medium">Total 21kg Refilled</p>
-                  <p className="text-3xl font-bold text-blue-800">{summary.grand_totals.total_refilled_21kg || 0}</p>
+                  <p className="text-sm text-amber-700 font-medium">21kg Empties Returned</p>
+                  <p className="text-3xl font-bold text-amber-800">{summary.grand_totals.total_returned_empty_21kg || 0}</p>
                 </CardContent>
               </Card>
             </div>
+
+            {/* Empty Balance Strip (highlights outstanding empties) */}
+            <Card className="border-l-4 border-l-rose-500 bg-gradient-to-r from-rose-50/70 via-white to-amber-50/50" data-testid="empty-balance-strip">
+              <CardContent className="py-4 px-5">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide font-semibold text-rose-600">Outstanding Empties (Issued − Returned)</p>
+                    <p className="text-sm text-slate-700">Positive = dealers still owe empty cylinders to the plant.</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline" className={`px-3 py-1.5 text-xs font-semibold ${
+                      (summary.grand_totals.empty_balance_15kg || 0) > 0
+                        ? 'bg-rose-50 border-rose-300 text-rose-700'
+                        : 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                    }`}>
+                      15kg Balance: {summary.grand_totals.empty_balance_15kg ?? 0}
+                    </Badge>
+                    <Badge variant="outline" className={`px-3 py-1.5 text-xs font-semibold ${
+                      (summary.grand_totals.empty_balance_21kg || 0) > 0
+                        ? 'bg-rose-50 border-rose-300 text-rose-700'
+                        : 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                    }`}>
+                      21kg Balance: {summary.grand_totals.empty_balance_21kg ?? 0}
+                    </Badge>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Dealer-wise Summary */}
             <Card>
               <CardHeader>
                 <CardTitle>Dealer-wise Summary</CardTitle>
+                <CardDescription className="text-xs">Issued − Returned = outstanding empty cylinders per dealer</CardDescription>
               </CardHeader>
               <CardContent className="p-0">
                 {summary.dealers.length > 0 ? (
                   <div className="overflow-x-auto">
-                    <table className="data-table">
+                    <table className="data-table" data-testid="dealer-summary-table">
                       <thead>
                         <tr>
                           <th>Dealer</th>
                           <th>15kg Issued</th>
                           <th>21kg Issued</th>
-                          <th>15kg Refilled</th>
-                          <th>21kg Refilled</th>
+                          <th>15kg Empties Returned</th>
+                          <th>21kg Empties Returned</th>
+                          <th>15kg Balance</th>
+                          <th>21kg Balance</th>
                           <th>Entries</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {summary.dealers.map((d) => (
-                          <tr key={d.dealer_id}>
-                            <td className="font-medium">{d.dealer_name}</td>
-                            <td>{d.total_issued_15kg}</td>
-                            <td>{d.total_issued_21kg}</td>
-                            <td>{d.total_refilled_15kg}</td>
-                            <td>{d.total_refilled_21kg}</td>
-                            <td>
-                              <Badge variant="outline">{d.entries_count}</Badge>
-                            </td>
-                          </tr>
-                        ))}
+                        {summary.dealers.map((d) => {
+                          const bal15 = d.empty_balance_15kg ?? 0;
+                          const bal21 = d.empty_balance_21kg ?? 0;
+                          const pillClass = (n) => n > 0
+                            ? 'bg-rose-100 text-rose-700 border-rose-200'
+                            : n < 0
+                              ? 'bg-amber-100 text-amber-700 border-amber-200'
+                              : 'bg-emerald-100 text-emerald-700 border-emerald-200';
+                          return (
+                            <tr key={d.dealer_id}>
+                              <td className="font-medium">{d.dealer_name}</td>
+                              <td>{d.total_issued_15kg}</td>
+                              <td>{d.total_issued_21kg}</td>
+                              <td className="text-amber-700 font-medium">{d.total_returned_empty_15kg || 0}</td>
+                              <td className="text-amber-700 font-medium">{d.total_returned_empty_21kg || 0}</td>
+                              <td>
+                                <Badge variant="outline" className={`${pillClass(bal15)} font-semibold`}>{bal15}</Badge>
+                              </td>
+                              <td>
+                                <Badge variant="outline" className={`${pillClass(bal21)} font-semibold`}>{bal21}</Badge>
+                              </td>
+                              <td>
+                                <Badge variant="outline">{d.entries_count}</Badge>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

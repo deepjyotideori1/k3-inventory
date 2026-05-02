@@ -139,10 +139,12 @@ async def get_dealer_summary(
         {'$group': {
             '_id': '$dealer_id',
             'dealer_name': {'$first': '$dealer_name'},
-            'total_issued_15kg': {'$sum': '$issued_15kg'},
-            'total_issued_21kg': {'$sum': '$issued_21kg'},
-            'total_refilled_15kg': {'$sum': '$refilled_15kg'},
-            'total_refilled_21kg': {'$sum': '$refilled_21kg'},
+            'total_issued_15kg': {'$sum': {'$ifNull': ['$issued_15kg', 0]}},
+            'total_issued_21kg': {'$sum': {'$ifNull': ['$issued_21kg', 0]}},
+            'total_refilled_15kg': {'$sum': {'$ifNull': ['$refilled_15kg', 0]}},
+            'total_refilled_21kg': {'$sum': {'$ifNull': ['$refilled_21kg', 0]}},
+            'total_returned_empty_15kg': {'$sum': {'$ifNull': ['$returned_empty_15kg', 0]}},
+            'total_returned_empty_21kg': {'$sum': {'$ifNull': ['$returned_empty_21kg', 0]}},
             'entries_count': {'$sum': 1}
         }},
         {'$sort': {'dealer_name': 1}}
@@ -150,13 +152,22 @@ async def get_dealer_summary(
     
     summary = []
     async for item in db.dealer_entries.aggregate(pipeline):
+        issued15 = item['total_issued_15kg']
+        issued21 = item['total_issued_21kg']
+        returned15 = item['total_returned_empty_15kg']
+        returned21 = item['total_returned_empty_21kg']
         summary.append({
             'dealer_id': item['_id'],
             'dealer_name': item['dealer_name'],
-            'total_issued_15kg': item['total_issued_15kg'],
-            'total_issued_21kg': item['total_issued_21kg'],
+            'total_issued_15kg': issued15,
+            'total_issued_21kg': issued21,
             'total_refilled_15kg': item['total_refilled_15kg'],
             'total_refilled_21kg': item['total_refilled_21kg'],
+            'total_returned_empty_15kg': returned15,
+            'total_returned_empty_21kg': returned21,
+            # Net empty balance = issued - returned (positive = dealer owes empties)
+            'empty_balance_15kg': issued15 - returned15,
+            'empty_balance_21kg': issued21 - returned21,
             'entries_count': item['entries_count']
         })
     
@@ -166,6 +177,10 @@ async def get_dealer_summary(
         'total_issued_21kg': sum(s['total_issued_21kg'] for s in summary),
         'total_refilled_15kg': sum(s['total_refilled_15kg'] for s in summary),
         'total_refilled_21kg': sum(s['total_refilled_21kg'] for s in summary),
+        'total_returned_empty_15kg': sum(s['total_returned_empty_15kg'] for s in summary),
+        'total_returned_empty_21kg': sum(s['total_returned_empty_21kg'] for s in summary),
+        'empty_balance_15kg': sum(s['empty_balance_15kg'] for s in summary),
+        'empty_balance_21kg': sum(s['empty_balance_21kg'] for s in summary),
     }
     
     return {'dealers': summary, 'grand_totals': grand_totals}
