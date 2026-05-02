@@ -57,21 +57,63 @@ async def get_company_info():
 
 
 def decode_logo_to_tempfile(logo_data_uri):
-    """Decode base64 logo data URI to a temp file for ReportLab Image"""
-    if not logo_data_uri or not logo_data_uri.startswith('data:'):
+    """Decode a logo (data URI or local /app file path) to a temp PNG/JPG file
+    and return its path. Returns None when logo missing/invalid (caller falls back
+    to text-only header).
+    """
+    if not logo_data_uri:
         return None
     try:
-        header, data = logo_data_uri.split(',', 1)
-        img_bytes = base64.b64decode(data)
-        ext = '.png'
-        if 'jpeg' in header or 'jpg' in header:
-            ext = '.jpg'
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
-        tmp.write(img_bytes)
-        tmp.close()
-        return tmp.name
+        if logo_data_uri.startswith('data:'):
+            header, data = logo_data_uri.split(',', 1)
+            img_bytes = base64.b64decode(data)
+            ext = '.png'
+            if 'jpeg' in header or 'jpg' in header:
+                ext = '.jpg'
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
+            tmp.write(img_bytes)
+            tmp.close()
+            return tmp.name
+        # File path on the server
+        if logo_data_uri.startswith('/') and os.path.isfile(logo_data_uri):
+            return logo_data_uri
     except Exception:
         return None
+    return None
+
+
+def get_logo_tempfile_for_excel(company):
+    """Same as decode_logo_to_tempfile, but used by openpyxl image embedding.
+    Kept as a thin wrapper so future callers can swap in caching without touching
+    every export endpoint.
+    """
+    return decode_logo_to_tempfile(company.get('logo_url', ''))
+
+
+def embed_excel_logo(ws, company, anchor='A1'):
+    """Insert the company logo into an openpyxl worksheet at the given anchor.
+    Returns the temp-file path for cleanup (None if no logo).
+    Skips embedding gracefully if PIL/openpyxl image support isn't available.
+    """
+    logo_path = get_logo_tempfile_for_excel(company)
+    if not logo_path:
+        return None
+    try:
+        from openpyxl.drawing.image import Image as XLImage
+        img = XLImage(logo_path)
+        # Constrain logo to ~80x80 px so headers remain compact
+        img.width = 80
+        img.height = 80
+        ws.add_image(img, anchor)
+        # Make sure the anchored row is tall enough so the image doesn't overflow
+        try:
+            row_idx = int(''.join(c for c in anchor if c.isdigit()) or '1')
+            ws.row_dimensions[row_idx].height = max(ws.row_dimensions[row_idx].height or 0, 60)
+        except Exception:
+            pass
+        return logo_path
+    except Exception:
+        return logo_path  # caller still cleans up
 
 
 def build_report_header(elements, company, title, mm):
@@ -272,6 +314,7 @@ async def export_employees_excel(department_id: Optional[str] = None, status: Op
     wb = Workbook()
     ws = wb.active
     ws.title = "Employees"
+    excel_logo_paths = [embed_excel_logo(ws, company)]  # noqa: F841 used by cleanup_temp_logos at function end
     hf = Font(name='Arial', size=14, bold=True)
     sf = Font(name='Arial', size=9, color='666666')
     cf = Font(name='Arial', size=10, bold=True, color='FFFFFF')
@@ -685,6 +728,7 @@ async def export_payroll_report_excel(
     # Sheet 1: Summary
     ws_summary = wb.active
     ws_summary.title = 'Summary'
+    excel_logo_paths = [embed_excel_logo(ws_summary, company)]
     ws_summary.merge_cells('A1:E1')
     ws_summary['A1'] = company['name']; ws_summary['A1'].font = hf; ws_summary['A1'].alignment = Alignment(horizontal='center')
     ws_summary.merge_cells('A2:E2')
@@ -723,6 +767,7 @@ async def export_payroll_report_excel(
     for dept_name, emps in sorted(by_dept.items()):
         sheet_name = (dept_name or 'Unassigned')[:28].replace('/', '-').replace('\\', '-')
         ws = wb.create_sheet(title=sheet_name)
+        excel_logo_paths.append(embed_excel_logo(ws, company))
         write_header(ws, f"{dept_name} - {month_name} {year} | {len(emps)} employee(s)")
         write_employees(ws, emps)
 
@@ -887,6 +932,7 @@ async def export_employee_attendance_excel(
     wb = Workbook()
     ws = wb.active
     ws.title = "Attendance"
+    excel_logo_paths = [embed_excel_logo(ws, company)]  # noqa: F841 holds temp paths
     hf = Font(name='Arial', size=14, bold=True)
     sf = Font(name='Arial', size=9, color='666666')
     cf = Font(name='Arial', size=9, bold=True, color='FFFFFF')
