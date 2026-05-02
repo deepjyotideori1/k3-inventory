@@ -199,7 +199,7 @@ async def update_employee(employee_id: str, data: dict, user: dict = Depends(get
         'pf_number', 'esi_number', 'pan_number', 'aadhar_number',
         'bank_name', 'bank_account_no', 'ifsc_code',
         'emergency_contact_name', 'emergency_contact_phone',
-        'is_active', 'status', 'photo_url', 'tax_regime'
+        'is_active', 'status', 'photo_url', 'tax_regime', 'tds_applicable'
     ]
     update_fields = {}
     for field in updatable:

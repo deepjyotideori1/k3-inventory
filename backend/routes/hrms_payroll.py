@@ -275,18 +275,22 @@ def compute_employee_payroll(emp, config, working_days, days_present, tds_config
     pt = calc_professional_tax(gross, config)
 
     annual_gross = (basic + hra + da + other) * 12
-    # TDS: prefer versioned TDS config (regime-aware); fall back to legacy flat slabs on payroll_config
-    if tds_config:
-        regime = (emp.get('tax_regime') or tds_config.get('default_regime', 'new')).lower()
-        if regime not in ('new', 'old'):
-            regime = 'new'
+    # TDS is OPT-IN per employee. Only calculate when `emp.tds_applicable` is explicitly True.
+    # Default behaviour: no TDS deducted.
+    tds_applicable = bool(emp.get('tds_applicable', False))
+    regime = (emp.get('tax_regime') or (tds_config.get('default_regime', 'new') if tds_config else 'new')).lower()
+    if regime not in ('new', 'old'):
+        regime = 'new'
+
+    if not tds_applicable:
+        tds = 0.0
+    elif tds_config:
         tds = calc_tds_monthly(annual_gross, tds_config, regime)
     else:
         # Legacy path — treat payroll_config.tds_slabs as new regime with no surcharge/cess
         legacy_cfg = {'tds_slabs_new': config.get('tds_slabs', []), 'tds_slabs_old': [],
                       'cess_percent': 0, 'surcharge_percent': 0}
         tds = calc_tds_monthly(annual_gross, legacy_cfg, 'new')
-        regime = 'new'
 
     total_deductions = pf_emp + esi_emp + pt + tds
     net_pay = round(gross - total_deductions, 2)
@@ -303,6 +307,7 @@ def compute_employee_payroll(emp, config, working_days, days_present, tds_config
         'esi_employer': esi_emplr,
         'professional_tax': pt,
         'tds': tds,
+        'tds_applicable': tds_applicable,
         'tax_regime': regime,
         'total_deductions': round(total_deductions, 2),
         'net_pay': net_pay,

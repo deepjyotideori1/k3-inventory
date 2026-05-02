@@ -19,6 +19,7 @@ const emptyForm = {
   basic_salary: '', hra: '', da: '', other_allowances: '',
   pf_number: '', esi_number: '', pan_number: '', aadhar_number: '',
   bank_name: '', bank_account_no: '', ifsc_code: '',
+  tds_applicable: false, tax_regime: 'new',
   emergency_contact_name: '', emergency_contact_phone: '',
 };
 
@@ -96,6 +97,8 @@ const EmployeeManagement = () => {
       esi_number: emp.esi_number || '', pan_number: emp.pan_number || '', aadhar_number: emp.aadhar_number || '',
       bank_name: emp.bank_name || '', bank_account_no: emp.bank_account_no || '', ifsc_code: emp.ifsc_code || '',
       emergency_contact_name: emp.emergency_contact_name || '', emergency_contact_phone: emp.emergency_contact_phone || '',
+      tds_applicable: !!emp.tds_applicable,
+      tax_regime: emp.tax_regime || 'new',
     });
     setDialogOpen(true);
   };
@@ -666,6 +669,34 @@ const EmployeeManagement = () => {
             <div><Label>HRA</Label><Input type="number" value={form.hra} onChange={e => updateField('hra', e.target.value)} /></div>
             <div><Label>DA</Label><Input type="number" value={form.da} onChange={e => updateField('da', e.target.value)} /></div>
             <div><Label>Other Allowances</Label><Input type="number" value={form.other_allowances} onChange={e => updateField('other_allowances', e.target.value)} /></div>
+
+            {/* TDS (opt-in per employee) */}
+            <div className="col-span-full flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-lg border border-violet-200 bg-violet-50/60 mt-2">
+              <label className="inline-flex items-center gap-2 text-sm cursor-pointer" data-testid="tds-applicable-toggle">
+                <input
+                  type="checkbox"
+                  checked={!!form.tds_applicable}
+                  onChange={e => updateField('tds_applicable', e.target.checked)}
+                  className="h-4 w-4 accent-violet-600"
+                />
+                <span className="font-medium text-slate-700">Deduct TDS for this employee</span>
+              </label>
+              <span className="text-xs text-slate-500">Off by default — enable only when explicitly instructed.</span>
+              {form.tds_applicable && (
+                <div className="sm:ml-auto flex items-center gap-2">
+                  <Label className="text-xs text-slate-500">Regime</Label>
+                  <select
+                    value={form.tax_regime}
+                    onChange={e => updateField('tax_regime', e.target.value)}
+                    className="h-8 rounded-md border border-slate-300 px-2 text-xs bg-white"
+                    data-testid="tax-regime-select"
+                  >
+                    <option value="new">New</option>
+                    <option value="old">Old</option>
+                  </select>
+                </div>
+              )}
+            </div>
 
             <h3 className="col-span-full text-sm font-semibold text-slate-500 uppercase tracking-wider border-b pb-1 mt-2">Statutory & Banking</h3>
             <div><Label>PF Number</Label><Input value={form.pf_number} onChange={e => updateField('pf_number', e.target.value)} /></div>

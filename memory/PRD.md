@@ -601,4 +601,11 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 - Removed 25 unused AI/cloud packages from requirements.txt (128 → 104 lines)
 - OrderManagement: server-side customer search across full DB
 
-*Last Updated: May 2, 2026 — Department Edit/Merge/History + Versioned TDS Configuration*
+### TDS is opt-in per employee (May 2, 2026 — follow-up)
+Per user instruction, TDS is **never calculated by default**. Each employee's payroll record now respects a `tds_applicable` boolean flag:
+
+*Last Updated: May 2, 2026 — TDS opt-in per employee*
+
+- **Backend**: `compute_employee_payroll()` returns `tds=0` unless `emp.tds_applicable == True`; `hrms_employees.update` accepts `tds_applicable` + `tax_regime`; the payslip stamp still includes `tds_config_version` so audit stays intact.
+- **Frontend**: added a "Deduct TDS for this employee" checkbox in the Employee edit dialog (Salary section). Toggling it reveals a small Regime (New/Old) selector. Visibly off by default — HR has to explicitly turn it on per employee.
+- **Verified (curl)**: on 17-employee Aug 2026 payroll run with zero flags, every employee showed `tds=0`. Flagging a single employee resulted in exactly one `tds_applicable=true` record (math confirmed against v2 slabs).
