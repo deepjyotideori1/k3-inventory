@@ -37,6 +37,53 @@ DEFAULT_PAYROLL_CONFIG = {
 }
 
 
+# ---- TDS (versioned, regime-aware, effective-date gated) ----
+DEFAULT_TDS_SLABS_NEW = [
+    {'min': 0, 'max': 300000, 'rate': 0},
+    {'min': 300001, 'max': 700000, 'rate': 5},
+    {'min': 700001, 'max': 1000000, 'rate': 10},
+    {'min': 1000001, 'max': 1200000, 'rate': 15},
+    {'min': 1200001, 'max': 1500000, 'rate': 20},
+    {'min': 1500001, 'max': 999999999, 'rate': 30},
+]
+DEFAULT_TDS_SLABS_OLD = [
+    {'min': 0, 'max': 250000, 'rate': 0},
+    {'min': 250001, 'max': 500000, 'rate': 5},
+    {'min': 500001, 'max': 1000000, 'rate': 20},
+    {'min': 1000001, 'max': 999999999, 'rate': 30},
+]
+
+
+async def _get_latest_tds_version(effective_on: Optional[str] = None) -> dict:
+    """Return the TDS config version whose effective_date <= effective_on (or today)."""
+    if effective_on is None:
+        effective_on = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    doc = await db.hrms_tds_config_versions.find_one(
+        {'effective_date': {'$lte': effective_on}},
+        {'_id': 0},
+        sort=[('effective_date', -1), ('version', -1)],
+    )
+    if not doc:
+        # Seed a first version with defaults
+        now = datetime.now(timezone.utc).isoformat()
+        doc = {
+            'id': str(uuid.uuid4()),
+            'version': 1,
+            'tds_slabs_new': DEFAULT_TDS_SLABS_NEW,
+            'tds_slabs_old': DEFAULT_TDS_SLABS_OLD,
+            'default_regime': 'new',
+            'cess_percent': 4.0,
+            'surcharge_percent': 0.0,
+            'effective_date': '2020-04-01',
+            'reason': 'Auto-seeded initial TDS configuration',
+            'created_by_id': 'system',
+            'created_by_name': 'System',
+            'created_at': now,
+        }
+        await db.hrms_tds_config_versions.insert_one(doc.copy())
+    return doc
+
+
 @router.get("/hrms/payroll/config")
 async def get_payroll_config(user: dict = Depends(get_current_user)):
     config = await db.hrms_payroll_config.find_one({'key': 'payroll_config'}, {'_id': 0})
@@ -65,6 +112,98 @@ async def update_payroll_config(data: dict, user: dict = Depends(get_current_use
     return {"message": "Payroll configuration updated"}
 
 
+# ============ TDS CONFIGURATION (versioned) ============
+
+@router.get("/hrms/payroll/tds-config")
+async def get_tds_config(effective_on: Optional[str] = None, user: dict = Depends(get_current_user)):
+    """Returns the TDS config active as of `effective_on` (default: today)."""
+    doc = await _get_latest_tds_version(effective_on)
+    return doc
+
+
+@router.put("/hrms/payroll/tds-config")
+async def update_tds_config(data: dict, user: dict = Depends(get_current_user)):
+    """Saves a NEW version row (never mutates an existing one). Requires admin/hr_admin.
+    Body: tds_slabs_new, tds_slabs_old, default_regime, cess_percent, surcharge_percent,
+          effective_date (YYYY-MM-DD), reason.
+    Rejects effective dates that fall inside a finalized payroll period.
+    """
+    if user.get('role') not in ('admin', 'hr_admin'):
+        raise HTTPException(status_code=403, detail="Only Admin / HR Admin can modify TDS rules")
+
+    effective_date = (data.get('effective_date') or '').strip()
+    if not effective_date or len(effective_date) != 10:
+        raise HTTPException(status_code=400, detail="effective_date (YYYY-MM-DD) is required")
+    reason = (data.get('reason') or '').strip()
+    if not reason:
+        raise HTTPException(status_code=400, detail="A change reason is required")
+
+    # Block effective dates that land in or before an already-finalized payroll period
+    period = effective_date[:7]  # YYYY-MM
+    finalized = await db.hrms_payroll.find_one(
+        {'status': 'finalized', 'period': {'$gte': period}},
+        {'_id': 0, 'period': 1}
+    )
+    if finalized:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot set effective_date {effective_date}: payroll for {finalized['period']} "
+                   "is already finalized. Pick a future effective_date beyond all finalized periods."
+        )
+
+    # Build new version
+    prev = await db.hrms_tds_config_versions.find_one({}, sort=[('version', -1)])
+    new_version = int(prev.get('version', 0)) + 1 if prev else 1
+    now = datetime.now(timezone.utc).isoformat()
+
+    def _clean_slabs(raw, default):
+        if not isinstance(raw, list) or not raw:
+            return default
+        cleaned = []
+        for s in raw:
+            try:
+                cleaned.append({
+                    'min': int(s.get('min', 0)),
+                    'max': int(s.get('max', 0)),
+                    'rate': float(s.get('rate', 0)),
+                })
+            except (TypeError, ValueError):
+                continue
+        return cleaned or default
+
+    default_regime = (data.get('default_regime') or 'new').lower()
+    if default_regime not in ('new', 'old'):
+        raise HTTPException(status_code=400, detail="default_regime must be 'new' or 'old'")
+
+    doc = {
+        'id': str(uuid.uuid4()),
+        'version': new_version,
+        'tds_slabs_new': _clean_slabs(data.get('tds_slabs_new'), DEFAULT_TDS_SLABS_NEW),
+        'tds_slabs_old': _clean_slabs(data.get('tds_slabs_old'), DEFAULT_TDS_SLABS_OLD),
+        'default_regime': default_regime,
+        'cess_percent': float(data.get('cess_percent', 4.0) or 0),
+        'surcharge_percent': float(data.get('surcharge_percent', 0) or 0),
+        'effective_date': effective_date,
+        'reason': reason,
+        'created_by_id': user.get('id', ''),
+        'created_by_name': user.get('name', ''),
+        'created_at': now,
+    }
+    await db.hrms_tds_config_versions.insert_one(doc.copy())
+    await log_audit(
+        user.get('id', ''), user.get('name', ''), 'update', 'hrms_tds_config', doc['id'],
+        f"TDS v{new_version} effective {effective_date}: {reason}"
+    )
+    doc.pop('_id', None)
+    return doc
+
+
+@router.get("/hrms/payroll/tds-config/history")
+async def tds_config_history(user: dict = Depends(get_current_user)):
+    history = await db.hrms_tds_config_versions.find({}, {'_id': 0}).sort('version', -1).to_list(200)
+    return history
+
+
 # ============ PAYROLL CALCULATION HELPERS ============
 
 def calc_pf(basic_da, config):
@@ -90,21 +229,32 @@ def calc_professional_tax(gross, config):
     return 0
 
 
-def calc_tds_monthly(annual_gross, config):
-    slabs = config.get('tds_slabs', [])
-    total_tax = 0
-    remaining = annual_gross
+def calc_tds_monthly(annual_gross, tds_config, regime='new'):
+    """Progressive slab calc + cess + optional surcharge, divided by 12 months.
+    tds_config: dict with keys tds_slabs_new / tds_slabs_old / cess_percent / surcharge_percent.
+    """
+    slabs = tds_config.get('tds_slabs_new' if regime == 'new' else 'tds_slabs_old', [])
+    if not slabs:
+        return 0.0
+    total_tax = 0.0
     for slab in slabs:
-        if remaining <= 0:
+        slab_min = int(slab.get('min', 0))
+        slab_max = int(slab.get('max', 0))
+        rate = float(slab.get('rate', 0)) / 100.0
+        if annual_gross <= slab_min:
             break
-        slab_range = slab['max'] - slab['min'] + 1
-        taxable = min(remaining, slab_range)
-        total_tax += taxable * slab['rate'] / 100
-        remaining -= taxable
-    return round(total_tax / 12, 2)
+        taxable = min(annual_gross, slab_max) - slab_min + 1
+        if taxable <= 0:
+            continue
+        total_tax += taxable * rate
+    # Surcharge (flat % on total_tax)
+    surcharge = total_tax * float(tds_config.get('surcharge_percent', 0) or 0) / 100.0
+    # Cess (% on total_tax + surcharge)
+    cess = (total_tax + surcharge) * float(tds_config.get('cess_percent', 0) or 0) / 100.0
+    return round((total_tax + surcharge + cess) / 12, 2)
 
 
-def compute_employee_payroll(emp, config, working_days, days_present):
+def compute_employee_payroll(emp, config, working_days, days_present, tds_config=None):
     basic = emp.get('basic_salary', 0)
     hra = emp.get('hra', 0)
     da = emp.get('da', 0)
@@ -125,7 +275,18 @@ def compute_employee_payroll(emp, config, working_days, days_present):
     pt = calc_professional_tax(gross, config)
 
     annual_gross = (basic + hra + da + other) * 12
-    tds = calc_tds_monthly(annual_gross, config)
+    # TDS: prefer versioned TDS config (regime-aware); fall back to legacy flat slabs on payroll_config
+    if tds_config:
+        regime = (emp.get('tax_regime') or tds_config.get('default_regime', 'new')).lower()
+        if regime not in ('new', 'old'):
+            regime = 'new'
+        tds = calc_tds_monthly(annual_gross, tds_config, regime)
+    else:
+        # Legacy path — treat payroll_config.tds_slabs as new regime with no surcharge/cess
+        legacy_cfg = {'tds_slabs_new': config.get('tds_slabs', []), 'tds_slabs_old': [],
+                      'cess_percent': 0, 'surcharge_percent': 0}
+        tds = calc_tds_monthly(annual_gross, legacy_cfg, 'new')
+        regime = 'new'
 
     total_deductions = pf_emp + esi_emp + pt + tds
     net_pay = round(gross - total_deductions, 2)
@@ -142,6 +303,7 @@ def compute_employee_payroll(emp, config, working_days, days_present):
         'esi_employer': esi_emplr,
         'professional_tax': pt,
         'tds': tds,
+        'tax_regime': regime,
         'total_deductions': round(total_deductions, 2),
         'net_pay': net_pay,
     }
@@ -169,6 +331,10 @@ async def run_payroll(data: dict, user: dict = Depends(get_current_user)):
     if not config_doc:
         config_doc = DEFAULT_PAYROLL_CONFIG
 
+    # Versioned TDS config: pick the version effective on the 1st of the payroll month
+    period_start = f"{year}-{month:02d}-01"
+    tds_config = await _get_latest_tds_version(period_start)
+
     working_days = int(data.get('working_days', 26))
     _, total_days_in_month = calendar.monthrange(year, month)
 
@@ -190,7 +356,7 @@ async def run_payroll(data: dict, user: dict = Depends(get_current_user)):
             days_present = working_days  # If no attendance data, assume full
 
         dept = await db.hrms_departments.find_one({'id': emp.get('department_id')}, {'_id': 0})
-        payroll_data = compute_employee_payroll(emp, config_doc, working_days, days_present)
+        payroll_data = compute_employee_payroll(emp, config_doc, working_days, days_present, tds_config=tds_config)
 
         employees.append({
             'employee_id': emp['id'],
@@ -225,6 +391,9 @@ async def run_payroll(data: dict, user: dict = Depends(get_current_user)):
         'total_pf_employer': round(sum(e['pf_employer'] for e in employees), 2),
         'total_esi_employer': round(sum(e['esi_employer'] for e in employees), 2),
         'status': 'draft',
+        'tds_config_version': tds_config.get('version'),
+        'tds_effective_date': tds_config.get('effective_date'),
+        'default_regime_used': tds_config.get('default_regime', 'new'),
         'created_by': user.get('name', ''),
         'created_at': datetime.now(timezone.utc).isoformat(),
     }

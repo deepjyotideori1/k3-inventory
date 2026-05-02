@@ -8,6 +8,7 @@ import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Textarea } from '../components/ui/textarea';
+import { Badge } from '../components/ui/badge';
 import { formatINR } from '../lib/utils';
 import { toast } from 'sonner';
 import {
@@ -25,6 +26,14 @@ const PayrollManagement = () => {
   const [runDialogOpen, setRunDialogOpen] = useState(false);
   const [configDialog, setConfigDialog] = useState(false);
   const [config, setConfig] = useState(null);
+  // TDS (versioned) state
+  const [tdsConfig, setTdsConfig] = useState(null);
+  const [tdsRegimeTab, setTdsRegimeTab] = useState('new'); // 'new' | 'old'
+  const [tdsEffectiveDate, setTdsEffectiveDate] = useState('');
+  const [tdsReason, setTdsReason] = useState('');
+  const [tdsSaving, setTdsSaving] = useState(false);
+  const [tdsHistory, setTdsHistory] = useState([]);
+  const [tdsHistoryOpen, setTdsHistoryOpen] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [runMonth, setRunMonth] = useState(new Date().getMonth() + 1);
   const [runYear, setRunYear] = useState(new Date().getFullYear());
@@ -53,9 +62,69 @@ const PayrollManagement = () => {
 
   const fetchConfig = async () => {
     try {
-      const res = await api.get('/hrms/payroll/config');
-      setConfig(res.data);
+      const [configRes, tdsRes] = await Promise.all([
+        api.get('/hrms/payroll/config'),
+        api.get('/hrms/payroll/tds-config'),
+      ]);
+      setConfig(configRes.data);
+      setTdsConfig(tdsRes.data);
+      // Default effective_date = first day of next month
+      const now = new Date();
+      const next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      setTdsEffectiveDate(next.toISOString().split('T')[0]);
+      setTdsReason('');
     } catch (e) { console.error(e); }
+  };
+
+  const fetchTdsHistory = async () => {
+    try {
+      const res = await api.get('/hrms/payroll/tds-config/history');
+      setTdsHistory(res.data || []);
+      setTdsHistoryOpen(true);
+    } catch (e) { toast.error('Failed to load TDS history'); }
+  };
+
+  const handleSaveTds = async () => {
+    if (!tdsEffectiveDate) { toast.error('Effective date is required'); return; }
+    if (!tdsReason.trim()) { toast.error('Reason is required for TDS rule changes'); return; }
+    setTdsSaving(true);
+    try {
+      const res = await api.put('/hrms/payroll/tds-config', {
+        tds_slabs_new: tdsConfig.tds_slabs_new,
+        tds_slabs_old: tdsConfig.tds_slabs_old,
+        default_regime: tdsConfig.default_regime,
+        cess_percent: Number(tdsConfig.cess_percent ?? 4),
+        surcharge_percent: Number(tdsConfig.surcharge_percent ?? 0),
+        effective_date: tdsEffectiveDate,
+        reason: tdsReason,
+      });
+      toast.success(`TDS v${res.data.version} saved (effective ${res.data.effective_date})`);
+      setTdsConfig(res.data);
+      setTdsReason('');
+    } catch (e) { toast.error(e.response?.data?.detail || 'Failed to save TDS'); }
+    setTdsSaving(false);
+  };
+
+  const updateTdsSlab = (regime, i, key, value) => {
+    const fieldName = regime === 'new' ? 'tds_slabs_new' : 'tds_slabs_old';
+    const slabs = [...(tdsConfig[fieldName] || [])];
+    slabs[i] = { ...slabs[i], [key]: Number(value) || 0 };
+    setTdsConfig({ ...tdsConfig, [fieldName]: slabs });
+  };
+
+  const addTdsSlab = (regime) => {
+    const fieldName = regime === 'new' ? 'tds_slabs_new' : 'tds_slabs_old';
+    const slabs = [...(tdsConfig[fieldName] || [])];
+    const lastMax = slabs.length ? Number(slabs[slabs.length - 1].max) : 0;
+    slabs.push({ min: lastMax + 1, max: lastMax + 500000, rate: 0 });
+    setTdsConfig({ ...tdsConfig, [fieldName]: slabs });
+  };
+
+  const removeTdsSlab = (regime, i) => {
+    const fieldName = regime === 'new' ? 'tds_slabs_new' : 'tds_slabs_old';
+    const slabs = [...(tdsConfig[fieldName] || [])];
+    slabs.splice(i, 1);
+    setTdsConfig({ ...tdsConfig, [fieldName]: slabs });
   };
 
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
@@ -727,10 +796,131 @@ const PayrollManagement = () => {
                   </div>
                 ))}
               </div>
+
+              {/* === TDS Configuration (versioned) === */}
+              {tdsConfig && (
+                <div className="p-3 bg-violet-50 rounded-lg" data-testid="tds-config-block">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-semibold text-sm text-violet-800">TDS Configuration</h4>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-[10px]">v{tdsConfig.version} eff {tdsConfig.effective_date}</Badge>
+                      <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={fetchTdsHistory} data-testid="tds-history-btn">History</Button>
+                    </div>
+                  </div>
+
+                  {/* Default regime + cess + surcharge */}
+                  <div className="grid grid-cols-3 gap-2 mb-3">
+                    <div>
+                      <Label className="text-[10px] text-slate-500">Default Regime</Label>
+                      <Select value={tdsConfig.default_regime || 'new'} onValueChange={v => setTdsConfig({ ...tdsConfig, default_regime: v })}>
+                        <SelectTrigger className="h-8" data-testid="tds-default-regime"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="new">New Regime</SelectItem>
+                          <SelectItem value="old">Old Regime</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-[10px] text-slate-500">Cess %</Label>
+                      <Input type="number" step="0.1" value={tdsConfig.cess_percent ?? 0} onChange={e => setTdsConfig({ ...tdsConfig, cess_percent: Number(e.target.value) })} className="h-8" data-testid="tds-cess" />
+                    </div>
+                    <div>
+                      <Label className="text-[10px] text-slate-500">Surcharge %</Label>
+                      <Input type="number" step="0.1" value={tdsConfig.surcharge_percent ?? 0} onChange={e => setTdsConfig({ ...tdsConfig, surcharge_percent: Number(e.target.value) })} className="h-8" data-testid="tds-surcharge" />
+                    </div>
+                  </div>
+
+                  {/* Regime tab switch */}
+                  <div className="inline-flex rounded-md border border-violet-200 overflow-hidden text-xs mb-2">
+                    <button type="button" className={`px-3 py-1.5 ${tdsRegimeTab === 'new' ? 'bg-violet-600 text-white' : 'bg-white text-slate-600'}`} onClick={() => setTdsRegimeTab('new')} data-testid="tds-tab-new">New Regime Slabs</button>
+                    <button type="button" className={`px-3 py-1.5 ${tdsRegimeTab === 'old' ? 'bg-violet-600 text-white' : 'bg-white text-slate-600'}`} onClick={() => setTdsRegimeTab('old')} data-testid="tds-tab-old">Old Regime Slabs</button>
+                  </div>
+
+                  {/* Slabs editor */}
+                  <div className="space-y-1 mb-3" data-testid={`tds-slabs-${tdsRegimeTab}`}>
+                    <div className="grid grid-cols-[1fr,1fr,80px,32px] gap-2 text-[10px] text-slate-500 px-1">
+                      <span>Min (₹)</span><span>Max (₹)</span><span>Rate %</span><span></span>
+                    </div>
+                    {(tdsRegimeTab === 'new' ? tdsConfig.tds_slabs_new : tdsConfig.tds_slabs_old)?.map((slab, i) => (
+                      <div key={i} className="grid grid-cols-[1fr,1fr,80px,32px] gap-2 text-xs">
+                        <Input type="number" value={slab.min} onChange={e => updateTdsSlab(tdsRegimeTab, i, 'min', e.target.value)} className="h-8" />
+                        <Input type="number" value={slab.max} onChange={e => updateTdsSlab(tdsRegimeTab, i, 'max', e.target.value)} className="h-8" />
+                        <Input type="number" step="0.1" value={slab.rate} onChange={e => updateTdsSlab(tdsRegimeTab, i, 'rate', e.target.value)} className="h-8" />
+                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeTdsSlab(tdsRegimeTab, i)} data-testid={`remove-tds-slab-${i}`}><Trash2 className="w-3.5 h-3.5 text-red-500" /></Button>
+                      </div>
+                    ))}
+                    <Button type="button" variant="outline" size="sm" className="h-7 mt-2 text-xs" onClick={() => addTdsSlab(tdsRegimeTab)} data-testid="add-tds-slab-btn">
+                      <PlusCircle className="w-3 h-3 mr-1" /> Add Slab
+                    </Button>
+                  </div>
+
+                  {/* Effective date + reason */}
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <div>
+                      <Label className="text-[10px] text-slate-500">Effective Date *</Label>
+                      <Input type="date" value={tdsEffectiveDate} onChange={e => setTdsEffectiveDate(e.target.value)} className="h-8" data-testid="tds-effective-date" />
+                    </div>
+                    <div>
+                      <Label className="text-[10px] text-slate-500">Reason *</Label>
+                      <Input value={tdsReason} onChange={e => setTdsReason(e.target.value)} placeholder="e.g., Budget 2026 slab revision" className="h-8" data-testid="tds-reason" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mb-2">
+                    New version is saved on every change. Finalized payroll periods use the slabs that were effective at that time — retroactive changes are blocked.
+                  </p>
+                  <Button type="button" className="w-full h-8 bg-violet-600 hover:bg-violet-700" onClick={handleSaveTds} disabled={tdsSaving} data-testid="save-tds-btn">
+                    {tdsSaving ? 'Saving…' : 'Save TDS Version'}
+                  </Button>
+                </div>
+              )}
+
               <Button className="w-full" onClick={handleSaveConfig} data-testid="save-config-btn">Save Configuration</Button>
             </div>
           ) : (
             <div className="py-6 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* TDS History dialog */}
+      <Dialog open={tdsHistoryOpen} onOpenChange={setTdsHistoryOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto" data-testid="tds-history-dialog">
+          <DialogHeader><DialogTitle>TDS Configuration History</DialogTitle></DialogHeader>
+          {tdsHistory.length === 0 ? (
+            <p className="py-6 text-center text-slate-400 text-sm">No history yet</p>
+          ) : (
+            <div className="space-y-3">
+              {tdsHistory.map(h => (
+                <div key={h.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50/50">
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <Badge variant="outline" className="text-xs">v{h.version}</Badge>
+                    <Badge className="text-xs bg-violet-100 text-violet-700">Eff {h.effective_date}</Badge>
+                    <Badge variant="outline" className="text-[10px]">Regime default: {h.default_regime || 'new'}</Badge>
+                    <span className="text-xs text-slate-500 ml-auto">by <span className="font-medium text-slate-700">{h.created_by_name || '—'}</span></span>
+                  </div>
+                  {h.reason && <p className="text-xs text-slate-600 mb-2 italic">"{h.reason}"</p>}
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <p className="font-semibold text-slate-600 mb-1">New Regime ({h.tds_slabs_new?.length || 0} slabs)</p>
+                      <ul className="space-y-0.5 text-slate-500 font-mono text-[10px]">
+                        {(h.tds_slabs_new || []).map((s, i) => (
+                          <li key={i}>{s.min.toLocaleString()} – {s.max.toLocaleString()} @ {s.rate}%</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-600 mb-1">Old Regime ({h.tds_slabs_old?.length || 0} slabs)</p>
+                      <ul className="space-y-0.5 text-slate-500 font-mono text-[10px]">
+                        {(h.tds_slabs_old || []).map((s, i) => (
+                          <li key={i}>{s.min.toLocaleString()} – {s.max.toLocaleString()} @ {s.rate}%</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-2">Cess: {h.cess_percent || 0}% · Surcharge: {h.surcharge_percent || 0}%</p>
+                </div>
+              ))}
+            </div>
           )}
         </DialogContent>
       </Dialog>

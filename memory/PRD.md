@@ -564,8 +564,41 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 
 ---
 
-## CHANGELOG (Apr 29, 2026)
-- Fixed Bulk Attendance Update dual-toast bug: parent `AttendanceManagement.jsx` was calling undefined `fetchAttendance/fetchSummary` functions inside the `onSuccess` callback, throwing a `ReferenceError` caught by the submit handler and triggering a spurious "Failed to apply bulk update" toast right after the success toast. Renamed to `fetchDailyAttendance/fetchMonthlySummary`.
-- Added Audit Log Viewer UI at `/audit-logs` (admin-only). Features: paginated table (50/page), resource-type filter (employee/attendance/payroll/customer/order/user/etc.), client-side search across user/action/details/resource ID, action-color badges, and a detail dialog showing full timestamp/user/resource/details. Wired into App.js routing and Layout adminLinks sidebar.
+## CHANGELOG (May 2, 2026)
 
-*Last Updated: April 29, 2026 - Bulk Attendance Toast Fix + Audit Log Viewer*
+### Department Management + TDS Configuration (Phase A + Merge)
+**Backend**:
+- `GET /api/hrms/departments?status=all|active|inactive` — annotated with HOD name, active/total employee counts.
+- `POST /api/hrms/departments` — creates v1 record + history entry, adds `code` and `hod_employee_id` fields.
+- `PUT /api/hrms/departments/{id}` — edits name/code/HOD/description; increments version; uniqueness check; writes old→new snapshot to `hrms_department_versions` + audit log.
+- `POST /api/hrms/departments/{id}/toggle-status` — blocks deactivation if active employees still assigned.
+- `POST /api/hrms/departments/{id}/merge` — reassigns all employees to target, deactivates source, versions both sides.
+- `GET /api/hrms/departments/{id}/history` — per-dept audit trail.
+- `GET/PUT /api/hrms/payroll/tds-config` + `GET /api/hrms/payroll/tds-config/history` — versioned TDS config in `hrms_tds_config_versions`:
+  - Separate slab arrays for **new** and **old** regimes
+  - `default_regime`, `cess_percent`, `surcharge_percent`, `effective_date`, `reason` required on every update
+  - Finalized-period lock: rejects `effective_date` that lands before/within a finalized payroll period
+- `calc_tds_monthly()` rewritten — regime-aware progressive slab + surcharge + cess
+- `run_payroll()` picks TDS version effective on period start and stamps `tds_config_version`, `tds_effective_date`, `default_regime_used` onto the payroll record
+- `hrms_employees.update` now accepts `tax_regime` (per-employee override)
+
+**Frontend**:
+- `HRMSDepartments.jsx` — rewritten with Edit / Deactivate / Merge / History dialogs; HOD employee picker; code field; status badge; action toolbar
+- `PayrollManagement.jsx` — Statutory Config dialog now has a **TDS Configuration** section with tabbed editable slab tables (New/Old regime), default-regime selector, cess/surcharge inputs, effective-date picker, mandatory reason, and a **TDS History** dialog
+- All changes version-stamped; no retroactive impact on already-finalized payroll runs (TDS config snapshot stays with the run)
+
+**Verified via screenshots + curl**:
+- Dept edit persists v2 change with before/after diff in history modal
+- TDS v2 saved with `effective_date=2026-08-01, reason="Revised slabs Aug 2026"`
+- Payroll for Aug 2026 → `tds_config_version=2` · May 2026 → `tds_config_version=1` (regime picks correct version dynamically)
+
+### Prior fixes in this session
+- Fixed Bulk Attendance Update dual-toast bug (undefined fetchAttendance/fetchSummary)
+- Added Audit Log Viewer UI at `/audit-logs`
+- Dealer Integration in Plant Daily Entry with auto-sync to `dealer_entries`
+- "Delivered Today" strip on Plant Hollongi dashboard (also fixed latent getDateRange key mismatch)
+- Customer dashboard FY2024-25 sync-from-sales endpoint + robust bulk-upload date parser
+- Removed 25 unused AI/cloud packages from requirements.txt (128 → 104 lines)
+- OrderManagement: server-side customer search across full DB
+
+*Last Updated: May 2, 2026 — Department Edit/Merge/History + Versioned TDS Configuration*
