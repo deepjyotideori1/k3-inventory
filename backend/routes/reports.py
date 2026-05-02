@@ -383,32 +383,41 @@ async def create_plant_report(data: PlantReportCreate, user: dict = Depends(get_
     else:
         await db.plant_reports.insert_one(report)
 
-    # === Mirror dealer deliveries into dealer_entries ===
+    # === Mirror dealer deliveries AND dealer empty-receipts into dealer_entries ===
     # So the Dealer Reports / Dispatch summary / Inventory logs all reflect
-    # the plant's "Delivery to Dealer" rows automatically.
+    # the plant's dealer-direction rows automatically.
     # Idempotent: every re-submit for the same date wipes prior plant-sourced
     # entries for that date first, then re-creates them from the latest payload.
     await db.dealer_entries.delete_many({
         'date': data.date,
-        'source': 'plant_delivery'
+        'source': {'$in': ['plant_delivery', 'plant_empty_receipt']}
     })
+
+    # Build a per-dealer totals dict: one row combines issued + returned empties.
     dealer_totals: Dict[str, Dict[str, int]] = {}
+
+    def _add(did: str, key: str, qty):
+        dealer_totals.setdefault(did, {
+            'issued_15kg': 0, 'issued_21kg': 0,
+            'returned_empty_15kg': 0, 'returned_empty_21kg': 0,
+        })
+        try:
+            dealer_totals[did][key] += int(qty or 0)
+        except (TypeError, ValueError):
+            pass
+
     for row in (data.delivery_15kg or []):
         if row.get('recipient_type') == 'dealer' and row.get('dealer_id'):
-            did = row['dealer_id']
-            dealer_totals.setdefault(did, {'issued_15kg': 0, 'issued_21kg': 0})
-            try:
-                dealer_totals[did]['issued_15kg'] += int(row.get('quantity', 0) or 0)
-            except (TypeError, ValueError):
-                pass
+            _add(row['dealer_id'], 'issued_15kg', row.get('quantity'))
     for row in (data.delivery_21kg or []):
         if row.get('recipient_type') == 'dealer' and row.get('dealer_id'):
-            did = row['dealer_id']
-            dealer_totals.setdefault(did, {'issued_15kg': 0, 'issued_21kg': 0})
-            try:
-                dealer_totals[did]['issued_21kg'] += int(row.get('quantity', 0) or 0)
-            except (TypeError, ValueError):
-                pass
+            _add(row['dealer_id'], 'issued_21kg', row.get('quantity'))
+    for row in (data.received_empty_15kg or []):
+        if row.get('recipient_type') == 'dealer' and row.get('dealer_id'):
+            _add(row['dealer_id'], 'returned_empty_15kg', row.get('quantity'))
+    for row in (data.received_empty_21kg or []):
+        if row.get('recipient_type') == 'dealer' and row.get('dealer_id'):
+            _add(row['dealer_id'], 'returned_empty_21kg', row.get('quantity'))
 
     if dealer_totals:
         # Enrich with dealer names
@@ -420,21 +429,42 @@ async def create_plant_report(data: PlantReportCreate, user: dict = Depends(get_
         now_iso = datetime.now(timezone.utc).isoformat()
         bulk = []
         for did, qtys in dealer_totals.items():
-            bulk.append({
-                'id': str(uuid.uuid4()),
-                'dealer_id': did,
-                'dealer_name': dealer_name_map.get(did, ''),
-                'date': data.date,
-                'issued_15kg': qtys['issued_15kg'],
-                'issued_21kg': qtys['issued_21kg'],
-                'refilled_15kg': 0,
-                'refilled_21kg': 0,
-                'remarks': f"Auto-synced from Plant Daily Entry ({data.date})",
-                'source': 'plant_delivery',
-                'source_report_id': report['id'],
-                'submitted_by': user['name'],
-                'submitted_at': now_iso,
-            })
+            has_issue = qtys['issued_15kg'] + qtys['issued_21kg'] > 0
+            has_receipt = qtys['returned_empty_15kg'] + qtys['returned_empty_21kg'] > 0
+            if has_issue:
+                bulk.append({
+                    'id': str(uuid.uuid4()),
+                    'dealer_id': did,
+                    'dealer_name': dealer_name_map.get(did, ''),
+                    'date': data.date,
+                    'issued_15kg': qtys['issued_15kg'],
+                    'issued_21kg': qtys['issued_21kg'],
+                    'refilled_15kg': 0,
+                    'refilled_21kg': 0,
+                    'remarks': f"Auto-synced from Plant Daily Entry ({data.date})",
+                    'source': 'plant_delivery',
+                    'source_report_id': report['id'],
+                    'submitted_by': user['name'],
+                    'submitted_at': now_iso,
+                })
+            if has_receipt:
+                bulk.append({
+                    'id': str(uuid.uuid4()),
+                    'dealer_id': did,
+                    'dealer_name': dealer_name_map.get(did, ''),
+                    'date': data.date,
+                    'issued_15kg': 0,
+                    'issued_21kg': 0,
+                    'refilled_15kg': 0,
+                    'refilled_21kg': 0,
+                    'returned_empty_15kg': qtys['returned_empty_15kg'],
+                    'returned_empty_21kg': qtys['returned_empty_21kg'],
+                    'remarks': f"Empties received from dealer ({data.date})",
+                    'source': 'plant_empty_receipt',
+                    'source_report_id': report['id'],
+                    'submitted_by': user['name'],
+                    'submitted_at': now_iso,
+                })
         if bulk:
             await db.dealer_entries.insert_many(bulk)
 

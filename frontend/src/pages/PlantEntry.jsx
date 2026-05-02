@@ -254,7 +254,12 @@ const PlantEntry = () => {
     const field = type === '15kg' ? 'received_empty_15kg' : 'received_empty_21kg';
     setFormData(prev => ({
       ...prev,
-      [field]: [...prev[field], { warehouse_id: '', warehouse_name: '', quantity: 0 }]
+      [field]: [...prev[field], {
+        recipient_type: 'warehouse',
+        warehouse_id: '', warehouse_name: '',
+        dealer_id: '', dealer_name: '',
+        quantity: 0,
+      }]
     }));
   };
 
@@ -270,12 +275,26 @@ const PlantEntry = () => {
     const field = type === '15kg' ? 'received_empty_15kg' : 'received_empty_21kg';
     setFormData(prev => {
       const updated = [...prev[field]];
-      if (key === 'warehouse_id') {
+      const row = { ...updated[index] };
+      if (key === 'recipient_type') {
+        row.recipient_type = value;
+        if (value === 'warehouse') {
+          row.dealer_id = ''; row.dealer_name = '';
+        } else {
+          row.warehouse_id = ''; row.warehouse_name = '';
+        }
+      } else if (key === 'warehouse_id') {
         const warehouse = warehouses.find(w => w.id === value);
-        updated[index] = { ...updated[index], warehouse_id: value, warehouse_name: warehouse?.name || '' };
+        row.warehouse_id = value;
+        row.warehouse_name = warehouse?.name || '';
+      } else if (key === 'dealer_id') {
+        const dealer = dealers.find(d => d.id === value);
+        row.dealer_id = value;
+        row.dealer_name = dealer?.name || '';
       } else {
-        updated[index] = { ...updated[index], [key]: parseInt(value) || 0 };
+        row[key] = parseInt(value) || 0;
       }
+      updated[index] = row;
       return { ...prev, [field]: updated };
     });
   };
@@ -303,6 +322,8 @@ const PlantEntry = () => {
     };
     if (!checkDeliveryList(formData.delivery_15kg, '15kg')) return;
     if (!checkDeliveryList(formData.delivery_21kg, '21kg')) return;
+    if (!checkDeliveryList(formData.received_empty_15kg, '15kg empty-received')) return;
+    if (!checkDeliveryList(formData.received_empty_21kg, '21kg empty-received')) return;
 
     // Duplicate detection (same recipient + cylinder type in same submission)
     const findDuplicates = (list) => {
@@ -835,15 +856,15 @@ const PlantEntry = () => {
             </CardContent>
           </Card>
 
-          {/* Empty Received from Warehouses */}
+          {/* Empty Received from Warehouses / Dealers */}
           <Card className="mb-6 border-2 border-amber-200 bg-amber-50" data-testid="received-section">
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <ArrowDownToLine className="w-5 h-5 text-amber-700" />
-                Empty Received from Warehouses
+                Empty Received from Warehouses / Dealers
               </CardTitle>
               <CardDescription className="text-amber-700">
-                Enter empty cylinders received from warehouses
+                Each row may record empties returned from a warehouse or directly from a dealer.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -851,7 +872,7 @@ const PlantEntry = () => {
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="font-medium text-slate-700">15kg Empty Received</h4>
-                  <Button type="button" variant="outline" size="sm" onClick={() => addReceived('15kg')}>
+                  <Button type="button" variant="outline" size="sm" onClick={() => addReceived('15kg')} data-testid="add-received-15kg">
                     <Plus className="w-4 h-4 mr-1" /> Add Entry
                   </Button>
                 </div>
@@ -862,34 +883,18 @@ const PlantEntry = () => {
                     <p className="text-slate-400 text-xs mt-1">Click "Add Entry" to add received empties</p>
                   </div>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {formData.received_empty_15kg.map((item, idx) => (
-                      <div key={idx} className="flex items-center gap-2 p-2 bg-white rounded-lg border border-amber-200">
-                        <Select 
-                          value={item.warehouse_id} 
-                          onValueChange={(val) => updateReceived('15kg', idx, 'warehouse_id', val)}
-                        >
-                          <SelectTrigger className="w-40">
-                            <SelectValue placeholder="Select warehouse" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {warehouses.map(w => (
-                              <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Input 
-                          type="number" 
-                          placeholder="Qty"
-                          value={item.quantity}
-                          onChange={(e) => updateReceived('15kg', idx, 'quantity', e.target.value)}
-                          className="w-24"
-                        />
-                        <span className="text-sm text-slate-500">units</span>
-                        <Button type="button" variant="ghost" size="icon" onClick={() => removeReceived('15kg', idx)}>
-                          <Trash2 className="w-4 h-4 text-red-500" />
-                        </Button>
-                      </div>
+                      <DeliveryRow
+                        key={idx}
+                        item={item}
+                        idx={idx}
+                        cylinderType="15kg"
+                        warehouses={warehouses}
+                        dealers={dealers}
+                        onUpdate={updateReceived}
+                        onRemove={removeReceived}
+                      />
                     ))}
                     <div className="flex justify-end pt-2 border-t border-amber-200">
                       <span className="font-semibold text-amber-800">Total: {totalReceivedFromWarehouses['15kg']} units</span>
@@ -904,7 +909,7 @@ const PlantEntry = () => {
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="font-medium text-slate-700">21kg Empty Received</h4>
-                  <Button type="button" variant="outline" size="sm" onClick={() => addReceived('21kg')}>
+                  <Button type="button" variant="outline" size="sm" onClick={() => addReceived('21kg')} data-testid="add-received-21kg">
                     <Plus className="w-4 h-4 mr-1" /> Add Entry
                   </Button>
                 </div>
@@ -915,34 +920,18 @@ const PlantEntry = () => {
                     <p className="text-slate-400 text-xs mt-1">Click "Add Entry" to add received empties</p>
                   </div>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {formData.received_empty_21kg.map((item, idx) => (
-                      <div key={idx} className="flex items-center gap-2 p-2 bg-white rounded-lg border border-amber-200">
-                        <Select 
-                          value={item.warehouse_id} 
-                          onValueChange={(val) => updateReceived('21kg', idx, 'warehouse_id', val)}
-                        >
-                          <SelectTrigger className="w-40">
-                            <SelectValue placeholder="Select warehouse" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {warehouses.map(w => (
-                              <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Input 
-                          type="number" 
-                          placeholder="Qty"
-                          value={item.quantity}
-                          onChange={(e) => updateReceived('21kg', idx, 'quantity', e.target.value)}
-                          className="w-24"
-                        />
-                        <span className="text-sm text-slate-500">units</span>
-                        <Button type="button" variant="ghost" size="icon" onClick={() => removeReceived('21kg', idx)}>
-                          <Trash2 className="w-4 h-4 text-red-500" />
-                        </Button>
-                      </div>
+                      <DeliveryRow
+                        key={idx}
+                        item={item}
+                        idx={idx}
+                        cylinderType="21kg"
+                        warehouses={warehouses}
+                        dealers={dealers}
+                        onUpdate={updateReceived}
+                        onRemove={removeReceived}
+                      />
                     ))}
                     <div className="flex justify-end pt-2 border-t border-amber-200">
                       <span className="font-semibold text-amber-800">Total: {totalReceivedFromWarehouses['21kg']} units</span>
