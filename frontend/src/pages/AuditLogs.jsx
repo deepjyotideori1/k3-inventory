@@ -102,6 +102,7 @@ const AuditLogs = () => {
 
   const handleExport = async () => {
     setExporting(true);
+    const toastId = toast.loading('Generating CSV...');
     try {
       const params = {};
       if (resourceType !== 'all') params.resource_type = resourceType;
@@ -116,13 +117,16 @@ const AuditLogs = () => {
       const today = new Date().toISOString().split('T')[0];
       const suffix = (startDate || endDate) ? `_${startDate || 'all'}_to_${endDate || today}` : `_${today}`;
       link.download = `audit_logs${suffix}.csv`;
+      link.style.display = 'none';
       document.body.appendChild(link);
       link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-      toast.success('Audit logs exported');
+      setTimeout(() => {
+        link.remove();
+        window.URL.revokeObjectURL(url);
+      }, 1000);
+      toast.success('Audit logs exported', { id: toastId });
     } catch (e) {
-      toast.error('Failed to export CSV');
+      toast.error('Failed to export CSV', { id: toastId });
     } finally {
       setExporting(false);
     }

@@ -209,17 +209,50 @@ const PayrollManagement = () => {
     finally { setDetailLoading(false); }
   };
 
-  const downloadPayslip = async (payrollId, empId, empName) => {
+  // Robust blob download helper.
+  // - appendChild is REQUIRED (Chrome ignores .click() on detached anchors).
+  // - Reads server error message from blob if response was actually JSON.
+  const downloadBlob = async (apiPromise, filename, errorMsg = 'Download failed') => {
+    const toastId = toast.loading('Generating...');
     try {
-      const res = await api.get(`/hrms/payroll/${payrollId}/payslip/${empId}/pdf`, { responseType: 'blob' });
-      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const res = await apiPromise;
+      // If server returned JSON error wrapped as blob, parse it.
+      const ct = (res.headers?.['content-type'] || '').toLowerCase();
+      if (ct.includes('application/json')) {
+        const txt = await res.data.text();
+        let detail = errorMsg;
+        try { detail = JSON.parse(txt).detail || detail; } catch { /* keep default */ }
+        toast.error(detail, { id: toastId });
+        return;
+      }
+      const blob = res.data instanceof Blob ? res.data : new Blob([res.data]);
+      const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `Payslip_${empName.replace(/\s/g, '_')}.pdf`;
+      link.download = filename;
+      link.style.display = 'none';
+      document.body.appendChild(link);
       link.click();
-      window.URL.revokeObjectURL(url);
-    } catch (e) { toast.error('Failed to download payslip'); }
+      // Defer cleanup so the browser has time to start the download.
+      setTimeout(() => {
+        link.remove();
+        window.URL.revokeObjectURL(url);
+      }, 1000);
+      toast.success('Downloaded', { id: toastId });
+    } catch (e) {
+      console.error(errorMsg, e);
+      const detail = e.response?.data instanceof Blob
+        ? await (async () => { try { return JSON.parse(await e.response.data.text()).detail; } catch { return null; } })()
+        : e.response?.data?.detail;
+      toast.error(detail || errorMsg, { id: toastId });
+    }
   };
+
+  const downloadPayslip = (payrollId, empId, empName) => downloadBlob(
+    api.get(`/hrms/payroll/${payrollId}/payslip/${empId}/pdf`, { responseType: 'blob' }),
+    `Payslip_${empName.replace(/\s/g, '_')}.pdf`,
+    'Failed to download payslip'
+  );
 
   const handleSaveConfig = async () => {
     try {
@@ -640,16 +673,16 @@ const PayrollManagement = () => {
                                     <h4 className="font-semibold text-sm text-slate-700">Employee Breakdown</h4>
                                     <div className="flex items-center gap-3">
                                       <span className="text-xs text-slate-400">PF Employer: {formatINR(payrollDetail.total_pf_employer)} | ESI Employer: {formatINR(payrollDetail.total_esi_employer)}</span>
-                                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => {
-                                        api.get(`/hrms/reports/payroll/${p.id}/pdf`, { responseType: 'blob' })
-                                          .then(r => { const u = window.URL.createObjectURL(new Blob([r.data])); const a = document.createElement('a'); a.href = u; a.download = `Payroll_${p.period}.pdf`; a.click(); })
-                                          .catch(() => toast.error('Failed'));
-                                      }} data-testid={`export-payroll-pdf-${p.id}`}><FileText className="w-3 h-3 mr-1" /> PDF</Button>
-                                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => {
-                                        api.get(`/hrms/reports/payroll/${p.id}/excel`, { responseType: 'blob' })
-                                          .then(r => { const u = window.URL.createObjectURL(new Blob([r.data])); const a = document.createElement('a'); a.href = u; a.download = `Payroll_${p.period}.xlsx`; a.click(); })
-                                          .catch(() => toast.error('Failed'));
-                                      }} data-testid={`export-payroll-excel-${p.id}`}><Download className="w-3 h-3 mr-1" /> Excel</Button>
+                                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => downloadBlob(
+                                        api.get(`/hrms/reports/payroll/${p.id}/pdf`, { responseType: 'blob' }),
+                                        `Payroll_${p.period}.pdf`,
+                                        'Failed to download payroll PDF'
+                                      )} data-testid={`export-payroll-pdf-${p.id}`}><FileText className="w-3 h-3 mr-1" /> PDF</Button>
+                                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => downloadBlob(
+                                        api.get(`/hrms/reports/payroll/${p.id}/excel`, { responseType: 'blob' }),
+                                        `Payroll_${p.period}.xlsx`,
+                                        'Failed to download payroll Excel'
+                                      )} data-testid={`export-payroll-excel-${p.id}`}><Download className="w-3 h-3 mr-1" /> Excel</Button>
                                     </div>
                                   </div>
                                   <div className="overflow-x-auto">
