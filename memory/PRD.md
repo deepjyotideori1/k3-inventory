@@ -53,9 +53,37 @@ Route: `/gst-billing` (Admin only)
 - Default tax mode: intra_state (CGST+SGST) for Arunachal Pradesh
 
 ### Tests
-- Backend: 19/19 GST + 14/14 Plans + 6/6 Phase A = **39/39 pytest cases pass**
-- Frontend: All flows verified by testing_agent_v3_fork (iter 43, 44, 45)
-- Iteration reports: `/app/test_reports/iteration_43.json`, `44.json`, `45.json`
+- Backend: 19/19 GST + 14/14 Plans + 6/6 Phase A + **38/38 Phase B Reports** = **77/77 pytest cases pass**
+- Frontend: All flows verified by testing_agent_v3_fork (iter 43, 44, 45, 47, 48, 49)
+- Iteration reports: `/app/test_reports/iteration_43...49.json`
+
+### Phase B: GST Reports Module (Added 2026-03-02)
+New **Reports tab** in GST Billing dashboard with **10 reports**, each supporting date range filter + Excel export (frozen header, autofilter, autowidth, wrapped text, bold totals, right-aligned amounts, landscape for >6 columns) + PDF export (company header, repeating header, page footer with name/label/page-number, landscape for wide reports).
+
+**Reports:**
+1. **Daily Sales** — group by date, totals per day
+2. **Monthly Sales** — group by YYYY-MM
+3. **GST Report (GSTR-1 style)** — B2B (with customer GSTIN) + B2C breakdown
+4. **HSN Summary** — group line items by HSN code + unit + GST rate (consolidated)
+5. **Item-wise Sales** — group by item_name + HSN, sorted by total value desc
+6. **Customer-wise Sales** — group by customer, sorted by grand_total desc
+7. **Warehouse-wise Sales** — group by warehouse (Plant excluded)
+8. **Cancelled Invoice Report** — status=cancelled only, with reason/cancelled_by/date
+9. **Payment-wise Sales** — group by payment_mode (cash/online/pending/split)
+10. **Tax Summary** — group line items by GST rate (5/12/18/28/0)
+
+**Backend module**: `/app/backend/routes/gst_reports.py` (~530 lines). Routes:
+- `GET /api/gst/reports/list` — list available reports
+- `GET /api/gst/reports/{report_type}` — JSON data for preview
+- `GET /api/gst/reports/{report_type}/excel` — Excel download
+- `GET /api/gst/reports/{report_type}/pdf` — PDF download
+
+All routes are admin-only (`require_admin`). Invalid `report_type` returns 400 with valid keys.
+
+**Frontend**: New "Reports" TabsTrigger in `GSTBilling.jsx`. Filter row (report type select + start/end dates), action buttons (Refresh, Export Excel, Export PDF), and a live data table with bold blue header + highlighted totals footer. Indian number formatting (`toLocaleString('en-IN')`) on all amount cells. Mobile/tablet/desktop responsive.
+
+---
+
 
 ### Phase A: Print-Preview Dialogs & Spec-Compliant Exports (Added 2026-03-02)
 **Dialogs**: All 8 GST Billing dialogs (View/Add/Edit/Cancel/Item/Plan/Settings/Generate) now use `w-[95vw] max-h-[90vh] overflow-y-auto` for full mobile/tablet/desktop responsiveness.
