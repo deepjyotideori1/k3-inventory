@@ -231,14 +231,18 @@ def fy_string(d: datetime) -> str:
 
 
 def amount_in_words_inr(amount: float) -> str:
-    """Convert an Indian rupee amount to title-cased words. Returns 'Rupees X Only' or with paise."""
+    """Convert an Indian rupee amount to title-cased words. Returns 'Rupees X Only' or with paise.
+    Normalises num2words en_IN output (removes 'And' connectors and hyphens) to match the
+    frontend amountInWords helper so PDF and on-screen wording stay identical."""
+    def _normalise(t: str) -> str:
+        return t.replace(" And ", " ").replace("-", " ").replace("  ", " ").strip()
     try:
         from num2words import num2words
         whole = int(amount)
         paise = int(round((amount - whole) * 100))
-        rupees_text = num2words(whole, lang='en_IN').replace(',', '').title()
+        rupees_text = _normalise(num2words(whole, lang='en_IN').replace(',', '').title())
         if paise > 0:
-            paise_text = num2words(paise, lang='en_IN').replace(',', '').title()
+            paise_text = _normalise(num2words(paise, lang='en_IN').replace(',', '').title())
             return f"Rupees {rupees_text} and {paise_text} Paise Only"
         return f"Rupees {rupees_text} Only"
     except Exception:

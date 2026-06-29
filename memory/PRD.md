@@ -53,9 +53,27 @@ Route: `/gst-billing` (Admin only)
 - Default tax mode: intra_state (CGST+SGST) for Arunachal Pradesh
 
 ### Tests
-- Backend: 19/19 + 14/14 (Connection Plans) pytest cases pass
-- Frontend: All flows verified by testing_agent_v3_fork
-- Iteration reports: `/app/test_reports/iteration_43.json`, `/app/test_reports/iteration_44.json`
+- Backend: 19/19 GST + 14/14 Plans + 6/6 Phase A = **39/39 pytest cases pass**
+- Frontend: All flows verified by testing_agent_v3_fork (iter 43, 44, 45)
+- Iteration reports: `/app/test_reports/iteration_43.json`, `44.json`, `45.json`
+
+### Phase A: Print-Preview Dialogs & Spec-Compliant Exports (Added 2026-03-02)
+**Dialogs**: All 8 GST Billing dialogs (View/Add/Edit/Cancel/Item/Plan/Settings/Generate) now use `w-[95vw] max-h-[90vh] overflow-y-auto` for full mobile/tablet/desktop responsiveness.
+
+**View Invoice Dialog redesigned as print-preview**: full company header (logo + name + address + GSTIN + state code), TAX INVOICE banner, customer block, items table with CGST+SGST or IGST columns based on tax_mode, totals row, **Amount in Words**, summary box, **Bank Details**, **Terms & Conditions**, **Signatory** cell. Top action bar: Print (window.print + @media print CSS), Download PDF, Edit, Cancel, Close.
+
+**Settings Dialog rebuilt with 4 tabs**: Numbering / Company / Bank / Terms & Signatory. Captures 22 fields: prefix/suffix/tax mode/place + company name/tagline/address/GSTIN/state/state_code/phone/email/logo_url + bank name/holder/A/c/IFSC/branch + T&C/signatory_name/designation.
+
+**Single-invoice PDF** rebuilt as professional Tax Invoice format with logo header, customer block, items table (CGST/SGST split or IGST), totals tile, amount-in-words, bank+T&C+signatory footer (`KeepTogether`), state jurisdiction footer.
+
+**Invoice Register Excel** rewritten as 32-column item-wise report: Sl No · Invoice No · Date · Status · Customer Name/Mobile/GSTIN · Item Name · HSN · Qty · Unit · Rate · Taxable · GST%/CGST%/CGST Amt/SGST%/SGST Amt/IGST%/IGST Amt · Total GST · Discount · Round Off · Grand Total · Payment Mode · Warehouse · Sales Executive · Created By/Date · Cancelled By/Date/Reason. Frozen pane at A6, autofilter on header row, autosize widths, wrapped text, bold highlighted totals row, right-aligned amounts, DD-MM-YYYY date format. Cancelled rows shown with strike-through red.
+
+**Plant Warehouse Exclusion**: Sales entries on Plant Hollongi (or any warehouse with 'plant'/'hollongi' in name) DO NOT auto-generate GST invoices (internal plant operations are not customer invoices).
+
+**Amount in Words**: Backend `amount_in_words_inr` (num2words + 'And'/hyphen normalisation) and frontend `amountInWords` JS helper now produce identical wording (e.g. 1234.56 → "Rupees One Thousand Two Hundred Thirty Four and Fifty Six Paise Only").
+
+---
+
 
 ### Connection Plans (Added 2026-03-01)
 Imported from K3 Gas Service Excel "new connection plans with items details":
