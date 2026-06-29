@@ -687,6 +687,12 @@ export const createGstItem = (data) => api.post('/gst/items', data);
 export const updateGstItem = (itemId, data) => api.put(`/gst/items/${itemId}`, data);
 export const deleteGstItem = (itemId) => api.delete(`/gst/items/${itemId}`);
 
+export const getGstPlans = () => api.get('/gst/plans');
+export const getGstPlan = (planId) => api.get(`/gst/plans/${planId}`);
+export const createGstPlan = (data) => api.post('/gst/plans', data);
+export const updateGstPlan = (planId, data) => api.put(`/gst/plans/${planId}`, data);
+export const deleteGstPlan = (planId) => api.delete(`/gst/plans/${planId}`);
+
 export const getGstInvoices = (params) => api.get('/gst/invoices', { params });
 export const getGstInvoice = (invoiceId) => api.get(`/gst/invoices/${invoiceId}`);
 export const createGstInvoice = (data) => api.post('/gst/invoices', data);

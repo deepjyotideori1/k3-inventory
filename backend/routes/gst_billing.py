@@ -41,14 +41,133 @@ DEFAULT_ITEMS = [
 ]
 
 
+# ---------- Connection Plans (auto-itemize new connection sales) ----------
+# Sourced from K3 Gas Service Excel: "new connection plans with items details"
+# Unit prices are 0 by default - admin must set them via the UI.
+# Naming: plan_type uses domestic_X / commercial_X format.
+DEFAULT_PLANS = [
+    {
+        "name": "New Single Domestic Connection (without Accessories)",
+        "plan_type": "domestic_single_basic",
+        "connection_type": "domestic",
+        "cylinder_count": 1,
+        "has_accessories": False,
+        "items": [
+            {"item_name": "Domestic LPG", "hsn": "271119", "unit": "KG", "quantity": 15, "gst_rate": 5},
+            {"item_name": "Empty Cylinder Domestic 15 KG", "hsn": "73110010", "unit": "Nos", "quantity": 1, "gst_rate": 18},
+            {"item_name": "Domestic Regulator", "hsn": "84812000", "unit": "Nos", "quantity": 1, "gst_rate": 18},
+            {"item_name": "Hose Pipe 1.3 Mtr", "hsn": "40092100", "unit": "Nos", "quantity": 1, "gst_rate": 18},
+            {"item_name": "Lighter & Knife", "hsn": "96131000", "unit": "Nos", "quantity": 1, "gst_rate": 18},
+            {"item_name": "Cooker 3.5 Ltr", "hsn": "73211110", "unit": "Nos", "quantity": 1, "gst_rate": 18},
+            {"item_name": "Gas Card", "hsn": "996913", "unit": "Nos", "quantity": 1, "gst_rate": 12},
+            {"item_name": "Admin Charge", "hsn": "998399", "unit": "Package", "quantity": 1, "gst_rate": 18},
+        ],
+    },
+    {
+        "name": "New Single Domestic Connection (with Accessories)",
+        "plan_type": "domestic_single_full",
+        "connection_type": "domestic",
+        "cylinder_count": 1,
+        "has_accessories": True,
+        "items": [
+            {"item_name": "Domestic LPG", "hsn": "271119", "unit": "KG", "quantity": 15, "gst_rate": 5},
+            {"item_name": "Empty Cylinder Domestic 15 KG", "hsn": "73110010", "unit": "Nos", "quantity": 1, "gst_rate": 18},
+            {"item_name": "Domestic Regulator", "hsn": "84812000", "unit": "Nos", "quantity": 1, "gst_rate": 18},
+            {"item_name": "Hose Pipe 1.3 Mtr", "hsn": "40092100", "unit": "Nos", "quantity": 1, "gst_rate": 18},
+            {"item_name": "Lighter & Knife", "hsn": "96131000", "unit": "Nos", "quantity": 1, "gst_rate": 18},
+            {"item_name": "Cooker 3.5 Ltr", "hsn": "73211110", "unit": "Nos", "quantity": 1, "gst_rate": 18},
+            {"item_name": "Two Stove Burner", "hsn": "73211210", "unit": "Nos", "quantity": 1, "gst_rate": 18},
+            {"item_name": "Gas Card", "hsn": "996913", "unit": "Nos", "quantity": 1, "gst_rate": 12},
+            {"item_name": "Admin Charge", "hsn": "998399", "unit": "Package", "quantity": 1, "gst_rate": 18},
+        ],
+    },
+    {
+        "name": "New Double Domestic Connection (without Accessories)",
+        "plan_type": "domestic_double_basic",
+        "connection_type": "domestic",
+        "cylinder_count": 2,
+        "has_accessories": False,
+        "items": [
+            {"item_name": "Domestic LPG", "hsn": "271119", "unit": "KG", "quantity": 30, "gst_rate": 5},
+            {"item_name": "Empty Cylinder Domestic 15 KG", "hsn": "73110010", "unit": "Nos", "quantity": 2, "gst_rate": 18},
+            {"item_name": "Domestic Regulator", "hsn": "84812000", "unit": "Nos", "quantity": 1, "gst_rate": 18},
+            {"item_name": "Hose Pipe 1.3 Mtr", "hsn": "40092100", "unit": "Nos", "quantity": 1, "gst_rate": 18},
+            {"item_name": "Lighter & Knife", "hsn": "96131000", "unit": "Nos", "quantity": 1, "gst_rate": 18},
+            {"item_name": "Cooker 3.5 Ltr", "hsn": "73211110", "unit": "Nos", "quantity": 1, "gst_rate": 18},
+            {"item_name": "Gas Card", "hsn": "996913", "unit": "Nos", "quantity": 1, "gst_rate": 12},
+            {"item_name": "Admin Charge", "hsn": "998399", "unit": "Package", "quantity": 1, "gst_rate": 18},
+        ],
+    },
+    {
+        "name": "New Double Domestic Connection (with Accessories)",
+        "plan_type": "domestic_double_full",
+        "connection_type": "domestic",
+        "cylinder_count": 2,
+        "has_accessories": True,
+        "items": [
+            {"item_name": "Domestic LPG", "hsn": "271119", "unit": "KG", "quantity": 30, "gst_rate": 5},
+            {"item_name": "Empty Cylinder Domestic 15 KG", "hsn": "73110010", "unit": "Nos", "quantity": 2, "gst_rate": 18},
+            {"item_name": "Domestic Regulator", "hsn": "84812000", "unit": "Nos", "quantity": 1, "gst_rate": 18},
+            {"item_name": "Hose Pipe 1.3 Mtr", "hsn": "40092100", "unit": "Nos", "quantity": 1, "gst_rate": 18},
+            {"item_name": "Lighter & Knife", "hsn": "96131000", "unit": "Nos", "quantity": 1, "gst_rate": 18},
+            {"item_name": "Cooker 3.5 Ltr", "hsn": "73211110", "unit": "Nos", "quantity": 1, "gst_rate": 18},
+            {"item_name": "Two Stove Burner", "hsn": "73211210", "unit": "Nos", "quantity": 1, "gst_rate": 18},
+            {"item_name": "Gas Card", "hsn": "996913", "unit": "Nos", "quantity": 1, "gst_rate": 12},
+            {"item_name": "Admin Charge", "hsn": "998399", "unit": "Package", "quantity": 1, "gst_rate": 18},
+        ],
+    },
+]
+
+
+def _commercial_plan(name: str, plan_type: str, count: int) -> dict:
+    return {
+        "name": name,
+        "plan_type": plan_type,
+        "connection_type": "commercial",
+        "cylinder_count": count,
+        "has_accessories": False,
+        "items": [
+            {"item_name": "Commercial LPG", "hsn": "271119", "unit": "KG", "quantity": 21 * count, "gst_rate": 18},
+            {"item_name": "Empty Cylinder Commercial 21 KG", "hsn": "73110010", "unit": "Nos", "quantity": count, "gst_rate": 18},
+            {"item_name": "Commercial Regulator", "hsn": "84812000", "unit": "Nos", "quantity": 1, "gst_rate": 18},
+            {"item_name": "Hose Pipe 1.3 Mtr", "hsn": "40092100", "unit": "Nos", "quantity": 1, "gst_rate": 18},
+            {"item_name": "Gas Card", "hsn": "996913", "unit": "Nos", "quantity": 1, "gst_rate": 12},
+            {"item_name": "Admin Charge", "hsn": "998399", "unit": "Package", "quantity": 1, "gst_rate": 18},
+        ],
+    }
+
+
+DEFAULT_PLANS.extend([
+    _commercial_plan("Single Commercial New Connection Plan", "commercial_1", 1),
+    _commercial_plan("2 Nos Commercial New Connection Plan", "commercial_2", 2),
+    _commercial_plan("3 Nos Commercial New Connection Plan", "commercial_3", 3),
+    _commercial_plan("4 Nos Commercial New Connection Plan", "commercial_4", 4),
+    _commercial_plan("6 Nos Commercial New Connection Plan", "commercial_6", 6),
+    _commercial_plan("10 Nos Commercial New Connection Plan", "commercial_10", 10),
+    _commercial_plan("15 Nos Commercial New Connection Plan", "commercial_15", 15),
+])
+
+
 async def ensure_seed():
-    """Idempotent: seeds default items + config if missing."""
+    """Idempotent: seeds default items + plans + config if missing."""
     if await db.gst_items.count_documents({}) == 0:
         await db.gst_items.insert_many([
             {**it, "id": str(uuid.uuid4()), "is_active": True,
              "default_rate": 0,
              "created_at": datetime.now(timezone.utc).isoformat()}
             for it in DEFAULT_ITEMS
+        ])
+    if await db.gst_plans.count_documents({}) == 0:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        await db.gst_plans.insert_many([
+            {
+                **{k: v for k, v in p.items() if k != "items"},
+                "id": str(uuid.uuid4()),
+                "is_active": True,
+                "items": [{**it, "unit_price": 0} for it in p["items"]],
+                "created_at": now_iso,
+            }
+            for p in DEFAULT_PLANS
         ])
     if not await db.gst_config.find_one({"key": "gst_config"}):
         await db.gst_config.insert_one({
@@ -202,6 +321,126 @@ async def update_item(item_id: str, data: dict, user: dict = Depends(require_adm
 async def delete_item(item_id: str, user: dict = Depends(require_admin)):
     await db.gst_items.update_one({"id": item_id}, {"$set": {"is_active": False}})
     return {"message": "Item deactivated"}
+
+
+# ============ CONNECTION PLANS (Item-wise billing templates) ============
+def _validate_plan_items(items: list) -> list:
+    if not isinstance(items, list) or not items:
+        raise HTTPException(status_code=400, detail="At least one plan item is required")
+    cleaned_items = []
+    for it in items:
+        if not (it.get("item_name") or "").strip():
+            raise HTTPException(status_code=400, detail="item_name required for every line")
+        cleaned_items.append({
+            "item_name": it["item_name"].strip(),
+            "hsn": (it.get("hsn") or "").strip(),
+            "unit": it.get("unit") or "Nos",
+            "quantity": float(it.get("quantity") or 0),
+            "gst_rate": float(it.get("gst_rate") or 0),
+            "unit_price": float(it.get("unit_price") or 0),
+        })
+    return cleaned_items
+
+
+def _validate_plan_payload(data: dict) -> list:
+    if not (data.get("name") or "").strip():
+        raise HTTPException(status_code=400, detail="Plan name required")
+    return _validate_plan_items(data.get("items") or [])
+
+
+@router.get("/gst/plans")
+async def list_plans(user: dict = Depends(require_admin)):
+    await ensure_seed()
+    plans = await db.gst_plans.find({}, {"_id": 0}).sort("plan_type", 1).to_list(200)
+    return plans
+
+
+@router.get("/gst/plans/{plan_id}")
+async def get_plan(plan_id: str, user: dict = Depends(require_admin)):
+    plan = await db.gst_plans.find_one({"id": plan_id}, {"_id": 0})
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    return plan
+
+
+@router.post("/gst/plans")
+async def create_plan(data: dict, user: dict = Depends(require_admin)):
+    items = _validate_plan_payload(data)
+    plan = {
+        "id": str(uuid.uuid4()),
+        "name": data["name"].strip(),
+        "plan_type": (data.get("plan_type") or "custom").strip(),
+        "connection_type": data.get("connection_type") or "domestic",
+        "cylinder_count": int(data.get("cylinder_count") or 1),
+        "has_accessories": bool(data.get("has_accessories", False)),
+        "items": items,
+        "is_active": True,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.gst_plans.insert_one(plan.copy())
+    plan.pop("_id", None)
+    await log_audit(user.get("id", ""), user.get("name", ""), "create", "gst_plan",
+                    plan["id"], f"Plan: {plan['name']}")
+    return plan
+
+
+@router.put("/gst/plans/{plan_id}")
+async def update_plan(plan_id: str, data: dict, user: dict = Depends(require_admin)):
+    existing = await db.gst_plans.find_one({"id": plan_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    items = _validate_plan_items(data["items"]) if data.get("items") is not None else existing.get("items", [])
+    updates = {
+        "name": (data.get("name") or existing["name"]).strip(),
+        "plan_type": data.get("plan_type") or existing.get("plan_type"),
+        "connection_type": data.get("connection_type") or existing.get("connection_type"),
+        "cylinder_count": int(data.get("cylinder_count") or existing.get("cylinder_count", 1)),
+        "has_accessories": bool(data.get("has_accessories", existing.get("has_accessories", False))),
+        "items": items,
+        "is_active": bool(data.get("is_active", existing.get("is_active", True))),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.gst_plans.update_one({"id": plan_id}, {"$set": updates})
+    await log_audit(user.get("id", ""), user.get("name", ""), "update", "gst_plan",
+                    plan_id, f"Updated plan {updates['name']}")
+    return await db.gst_plans.find_one({"id": plan_id}, {"_id": 0})
+
+
+@router.delete("/gst/plans/{plan_id}")
+async def delete_plan(plan_id: str, user: dict = Depends(require_admin)):
+    res = await db.gst_plans.update_one({"id": plan_id}, {"$set": {"is_active": False}})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    return {"message": "Plan deactivated"}
+
+
+def _match_plan_for_sale(plans: List[dict], connection_type: str, cylinder_count: int,
+                         has_accessories: bool) -> Optional[dict]:
+    """Pick the best plan matching a new connection sale.
+    Domestic: matches cylinder_count (1 or 2) + has_accessories flag.
+    Commercial: matches the closest cylinder count (1, 2, 3, 4, 6, 10, 15).
+    """
+    is_commercial = "commercial" in (connection_type or "")
+    is_domestic = "domestic" in (connection_type or "") or not is_commercial
+    candidates = [p for p in plans if p.get("is_active") and
+                  ((is_commercial and p.get("connection_type") == "commercial") or
+                   (is_domestic and p.get("connection_type") == "domestic"))]
+    if not candidates:
+        return None
+    if is_domestic:
+        # Pick by cylinder_count + has_accessories
+        target_count = 2 if cylinder_count >= 2 else 1
+        filtered = [p for p in candidates
+                    if p.get("cylinder_count") == target_count
+                    and p.get("has_accessories") == has_accessories]
+        if filtered:
+            return filtered[0]
+        # Fallback: ignore accessories preference
+        filtered = [p for p in candidates if p.get("cylinder_count") == target_count]
+        return filtered[0] if filtered else None
+    # Commercial: find closest cylinder_count
+    candidates_sorted = sorted(candidates, key=lambda p: abs((p.get("cylinder_count") or 1) - cylinder_count))
+    return candidates_sorted[0] if candidates_sorted else None
 
 
 # ============ INVOICES - LIST / SUMMARY / EXPORTS (must come BEFORE /{id} routes) ============
@@ -510,40 +749,80 @@ async def _auto_generate_invoice(sale: dict, sale_type: str, user: dict) -> Opti
             ct = sale.get("connection_type", "")
             is_refill = "refill" in ct
             is_commercial = "commercial" in ct
-            # Determine item & quantity
-            if is_refill:
-                item_name = "Commercial LPG Refill" if is_commercial else "Domestic LPG Refill"
-                qty = int(sale.get("no_of_refills", 0) or 0) or 1
-            else:
-                item_name = "Commercial New Connection" if is_commercial else "Domestic New Connection"
-                # cylinder_nos may be a number or comma list
-                cyl = str(sale.get("cylinder_nos", "")).strip()
-                try:
-                    qty = int(cyl) if cyl else 1
-                except ValueError:
-                    qty = max(1, len([p for p in cyl.split(",") if p.strip()]))
-            amount = float(sale.get("amount") or 0)
-            if amount <= 0 or qty <= 0:
-                return None
-            rate = round(amount / qty, 2)
-            # gst-inclusive amount -> back-calc taxable to keep grand_total == sale amount
-            gst_item = await db.gst_items.find_one({"name": item_name}, {"_id": 0})
-            gst_rate = float(gst_item.get("gst_rate") if gst_item else 5)
-            hsn = gst_item.get("hsn") if gst_item else "271119"
-            unit = gst_item.get("unit") if gst_item else "Cylinder"
-            # Treat sale amount as inclusive of GST
-            taxable_per_unit = round(rate * 100.0 / (100.0 + gst_rate), 2)
-            line_items.append({
-                "item_name": item_name,
-                "hsn": hsn,
-                "unit": unit,
-                "gst_rate": gst_rate,
-                "quantity": qty,
-                "rate": taxable_per_unit,
-            })
-            bill_type = "refill" if is_refill else "new_connection"
             cust_name = sale.get("consumer_name") or ""
             cust_addr = sale.get("address") or ""
+
+            if is_refill:
+                # Refills stay single-line (per agreed business rule)
+                item_name = "Commercial LPG Refill" if is_commercial else "Domestic LPG Refill"
+                qty = int(sale.get("no_of_refills", 0) or 0) or 1
+                amount = float(sale.get("amount") or 0)
+                if amount <= 0 or qty <= 0:
+                    return None
+                rate = round(amount / qty, 2)
+                gst_item = await db.gst_items.find_one({"name": item_name}, {"_id": 0})
+                gst_rate = float(gst_item.get("gst_rate") if gst_item else 5)
+                hsn = gst_item.get("hsn") if gst_item else "271119"
+                unit = gst_item.get("unit") if gst_item else "Cylinder"
+                taxable_per_unit = round(rate * 100.0 / (100.0 + gst_rate), 2)
+                line_items.append({
+                    "item_name": item_name,
+                    "hsn": hsn,
+                    "unit": unit,
+                    "gst_rate": gst_rate,
+                    "quantity": qty,
+                    "rate": taxable_per_unit,
+                })
+                bill_type = "refill"
+            else:
+                # NEW CONNECTION: try plan-based itemized billing
+                cyl = str(sale.get("cylinder_nos", "")).strip()
+                try:
+                    cyl_count = int(cyl) if cyl else 1
+                except ValueError:
+                    cyl_count = max(1, len([p for p in cyl.split(",") if p.strip()]))
+                amount = float(sale.get("amount") or 0)
+                if amount <= 0 or cyl_count <= 0:
+                    return None
+
+                has_accessories = bool(sale.get("has_accessories"))  # set explicitly from sales form
+                plan_id = sale.get("connection_plan_id")
+                plan: Optional[dict] = None
+                if plan_id:
+                    plan = await db.gst_plans.find_one({"id": plan_id, "is_active": True}, {"_id": 0})
+                if not plan:
+                    plans = await db.gst_plans.find({"is_active": True}, {"_id": 0}).to_list(200)
+                    plan = _match_plan_for_sale(plans, ct, cyl_count, has_accessories)
+
+                # Only use plan if every item has a unit_price > 0 (admin has configured rates)
+                if plan and plan.get("items") and all(float(it.get("unit_price") or 0) > 0 for it in plan["items"]):
+                    for it in plan["items"]:
+                        line_items.append({
+                            "item_name": it["item_name"],
+                            "hsn": it.get("hsn", ""),
+                            "unit": it.get("unit", "Nos"),
+                            "gst_rate": float(it.get("gst_rate") or 0),
+                            "quantity": float(it.get("quantity") or 0),
+                            "rate": float(it.get("unit_price") or 0),
+                        })
+                else:
+                    # Fallback: single-line invoice using sale amount as inclusive total
+                    item_name = "Commercial New Connection" if is_commercial else "Domestic New Connection"
+                    rate = round(amount / cyl_count, 2)
+                    gst_item = await db.gst_items.find_one({"name": item_name}, {"_id": 0})
+                    gst_rate = float(gst_item.get("gst_rate") if gst_item else 18)
+                    hsn = gst_item.get("hsn") if gst_item else "271119"
+                    unit = gst_item.get("unit") if gst_item else "Cylinder"
+                    taxable_per_unit = round(rate * 100.0 / (100.0 + gst_rate), 2)
+                    line_items.append({
+                        "item_name": item_name,
+                        "hsn": hsn,
+                        "unit": unit,
+                        "gst_rate": gst_rate,
+                        "quantity": cyl_count,
+                        "rate": taxable_per_unit,
+                    })
+                bill_type = "new_connection"
 
         elif sale_type == "accessory_sale":
             items = sale.get("items") or []

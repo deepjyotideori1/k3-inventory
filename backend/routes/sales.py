@@ -178,6 +178,8 @@ async def create_sales_entry(
         'credit_amount': entry.credit_amount,
         'no_of_refills': entry.no_of_refills,
         'remarks': entry.remarks,
+        'connection_plan_id': entry.connection_plan_id,
+        'has_accessories': entry.has_accessories,
         'created_by': user['id'],
         'created_at': datetime.now(timezone.utc).isoformat()
     }
@@ -275,6 +277,8 @@ async def create_sales_entry_for_warehouse(
         'credit_amount': entry.credit_amount,
         'no_of_refills': entry.no_of_refills,
         'remarks': entry.remarks,
+        'connection_plan_id': entry.connection_plan_id,
+        'has_accessories': entry.has_accessories,
         'created_by': user['id'],
         'created_at': datetime.now(timezone.utc).isoformat()
     }

@@ -174,7 +174,9 @@ const SalesDashboard = () => {
     credit_amount: '',
     no_of_refills: '',
     remarks: '',
-    warehouse_id: ''
+    warehouse_id: '',
+    connection_plan_id: '',
+    has_accessories: false
   });
 
   const [editForm, setEditForm] = useState({});
@@ -372,7 +374,9 @@ const SalesDashboard = () => {
         credit_amount: '',
         no_of_refills: '',
         remarks: '',
-        warehouse_id: ''
+        warehouse_id: '',
+        connection_plan_id: '',
+        has_accessories: false
       });
       fetchData();
     } catch (error) {
@@ -1350,7 +1354,25 @@ const SalesDashboard = () => {
                         />
                       </div>
                     )}
-                    
+                  </div>
+
+                  {/* Includes Accessories toggle for Domestic new connections (affects GST invoice itemization) */}
+                  {customerMode === 'new' && formData.connection_type === 'domestic' && (
+                    <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded px-3 py-2">
+                      <input
+                        type="checkbox"
+                        id="has-accessories"
+                        checked={!!formData.has_accessories}
+                        onChange={(e) => setFormData({ ...formData, has_accessories: e.target.checked })}
+                        data-testid="new-conn-has-accessories"
+                      />
+                      <Label htmlFor="has-accessories" className="cursor-pointer text-sm">
+                        Includes Accessories (Two Stove Burner) — uses &quot;with accessories&quot; plan for GST invoice itemization
+                      </Label>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     {/* No. of Cylinders Refilled for Existing Customer (refill types) */}
                     {customerMode === 'existing' && (
                       <div>

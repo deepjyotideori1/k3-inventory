@@ -1,0 +1,35 @@
+{
+  "summary": "Tested GST Billing Connection Plans enhancement end-to-end. Backend: 14/14 new pytest cases passed (test_gst_connection_plans.py) covering: (a) 11 default plans seeded (4 domestic + 7 commercial), all expected plan_types present; (b) domestic_single_full has 9 items including 'Two Stove Burner', domestic_single_basic has 8 items, has_accessories flag correct; (c) GET /api/gst/plans/{id} returns single plan with items; (d) Plan CRUD - POST validation (400 for missing name, 400 for empty items), POST create custom plan, DELETE soft-deactivates; (e) Non-admin (jullang) gets 403 on /api/gst/plans; (f) AUTO-GEN WITH PLAN: After PUT updating unit_price=100 on all items of domestic_single_basic, creating a domestic new-connection sale auto-generates an 8-line invoice with correct HSN/rate/qty; (g) AUTO-GEN with_accessories: setting prices on domestic_single_full and creating sale with has_accessories=true generates 9-line invoice including Stove Burner; (h) AUTO-GEN double: domestic cylinder_nos='2' picks domestic_double_basic, Empty Cylinder qty=2; (i) FALLBACK: commercial sale (rates not set) falls back to single-line 'Commercial New Connection' invoice; (j) REFILL unchanged: domestic_refill still single-line, bill_type='refill'; (k) EXPLICIT plan_id: passing connection_plan_id=domestic_single_full while has_accessories=false uses that exact plan (9 lines).\nFrontend: Logged in as admin, /gst-billing loads, 'Connection Plans' tab (data-testid=tab-plans) shows table with 12 plans (11 seeded + 1 TEST_CustomPlan from prior test), columns: Plan Name/Type/Cylinders/Accessories/Items/Rates Set/Status/Actions. 'Set rates' amber badge on 11 default plans (no prices), 'All set' green badge on TEST_CustomPlan. Edit dialog opens with all testids verified: plan-dialog, plan-name, plan-accessories, save-plan-btn, plan-line-name-0, plan-line-price-0. 'Add Plan' button present. New Manual Invoice dialog contains the 'Load from Connection Plan...' Select (data-testid=load-from-plan-select).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "GSTBilling Invoices tab", "issues": ["Pre-existing React hydration warning still present: a <span data-ve-dynamic='true'> wrapper is rendered inside <tbody> wrapping <tr> rows. Console: 'In HTML, <tr> cannot be a child of <span>' & 'In HTML, <span> cannot be a child of <tbody>'. Same as iteration_43. Non-breaking but should be removed."]},
+      {"screen": "Plan edit dialog", "issues": ["Console warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent} - add DialogDescription for a11y."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_gst_connection_plans.py",
+    "/app/test_reports/pytest/pytest_gst_connection_plans.xml"
+  ],
+  "action_items": [
+    "(Optional) Clean up <span data-ve-dynamic> wrapper inside <tbody> in GSTBilling.jsx invoices table - pre-existing from iteration_43.",
+    "(Optional) Add DialogDescription / aria-describedby to plan-dialog for accessibility.",
+    "Frontend 'Includes Accessories' checkbox (data-testid=new-conn-has-accessories) in SalesDashboard new-connection form was NOT visually exercised in this run because triggering the customerMode='new' + connection_type='domestic' branch requires navigating Sales Entry's add-sale wizard whose entry button label is unknown from /sales-dashboard root. Backend coverage confirms has_accessories flag flows correctly through sale creation -> invoice generation (verified by tests test_domestic_single_full_with_accessories and test_explicit_plan_id_override). Recommend main agent self-verify checkbox visibility on the Sales Entry page (label appears only for new+domestic per the code at SalesDashboard.jsx ~line 1360)."
+  ],
+  "critical_code_review_comments": [
+    "_match_plan_for_sale: commercial plan matching by abs(cylinder_count - target) ties are resolved arbitrarily (sort is stable); for cyl_count=5 (between commercial_4 and commercial_6) both have abs diff=1 - currently picks commercial_4 (first in sort). Acceptable but document the tie-breaker rule.",
+    "_auto_generate_invoice trusts plan rates blindly - if admin sets unit_price on only some items, the all() check correctly falls back, but partial-fill case (e.g., 7 of 8 items set) silently drops to single-line. Consider surfacing a warning in audit log so admin knows plan was NOT used.",
+    "PUT /api/gst/plans/{id} now allows passing only `items` (validated correctly) - good. But coercion in _validate_plan_items casts gst_rate to float without bounds check (e.g., negative or >100 accepted). Add range validation (0-28 is realistic for India).",
+    "gst_billing.py is now 998 lines (was 711 in iteration 43) - exceeds the 700-line guideline. Recommend splitting into gst_invoices.py, gst_plans.py, gst_items.py, gst_pdf.py, gst_excel.py."
+  ],
+  "updated_files": ["/app/backend/tests/test_gst_connection_plans.py (new)"],
+  "success_rate": {"backend": "100% (14/14 new + 19/19 existing GST tests)", "frontend": "90% - Connection Plans tab, plan dialog, load-from-plan select all verified; 'Includes Accessories' checkbox in Sales Entry not exercised UI-side (deep flow), but backend confirms data path."},
+  "test_credentials": "admin@k3gas.com / Admin@123 (admin), jullang@k3gas.com / Jullang@123 (non-admin, 403 verified)",
+  "seed_data_creation": "Tests temporarily set plan unit_prices then reset to 0 in finally blocks. Sales created with TEST_ prefix (TEST_PlanBasic, TEST_PlanFull, TEST_DoubleBasic, TEST_CommFallback, TEST_RefillSingle, TEST_ExplicitPlan). 1 custom plan TEST_CustomPlan left soft-deleted (is_active=false).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "11 default plans seeded with plan_type values: domestic_single_basic, domestic_single_full, domestic_double_basic, domestic_double_full, commercial_1/2/3/4/6/10/15. Plans are seeded only when collection is empty (idempotent). Soft delete (is_active=false). Plan rates default to 0; admin must set unit_price>0 on ALL items for auto-gen to use the plan, else single-line fallback. Refills (connection_type containing 'refill') ALWAYS single-line. Sale field connection_plan_id forces a specific plan. has_accessories sale field maps to domestic_*_full vs domestic_*_basic. Test file at /app/backend/tests/test_gst_connection_plans.py. Set REACT_APP_BACKEND_URL env var when running pytest from CLI (load_dotenv isn't auto-applied).",
+  "rca of the issue": "N/A - all tests pass. The only remaining concerns are non-blocking: span-in-tbody hydration warning (pre-existing) and gst_billing.py size growing past 700-line guideline."
+}

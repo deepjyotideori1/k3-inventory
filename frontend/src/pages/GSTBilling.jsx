@@ -22,6 +22,7 @@ import {
 import {
   getGstInvoices, getGstSummary, getGstConfig, updateGstConfig,
   getGstItems, createGstItem, updateGstItem, deleteGstItem,
+  getGstPlans, createGstPlan, updateGstPlan, deleteGstPlan,
   createGstInvoice, updateGstInvoice, cancelGstInvoice, deleteGstInvoice,
   generateGstFromSale, downloadGstInvoicePdf, exportGstInvoicesExcel,
   getSalesEntries, getAccessorySales
@@ -56,6 +57,7 @@ const GSTBilling = () => {
   const [totalInvoices, setTotalInvoices] = useState(0);
   const [summary, setSummary] = useState({});
   const [items, setItems] = useState([]);
+  const [plans, setPlans] = useState([]);
   const [config, setConfig] = useState({});
   const [loading, setLoading] = useState(false);
 
@@ -71,6 +73,8 @@ const GSTBilling = () => {
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelReason, setCancelReason] = useState('');
   const [editingItem, setEditingItem] = useState(null);
+  const [showPlanDialog, setShowPlanDialog] = useState(false);
+  const [editingPlan, setEditingPlan] = useState(null);
 
   // Manual invoice form state
   const [invForm, setInvForm] = useState(null);
@@ -131,6 +135,13 @@ const GSTBilling = () => {
     } catch (e) { /* swallow */ }
   }, []);
 
+  const loadPlans = useCallback(async () => {
+    try {
+      const { data } = await getGstPlans();
+      setPlans(data || []);
+    } catch (e) { /* swallow */ }
+  }, []);
+
   useEffect(() => {
     loadInvoices();
     loadSummary();
@@ -139,7 +150,8 @@ const GSTBilling = () => {
   useEffect(() => {
     loadConfig();
     loadItems();
-  }, [loadConfig, loadItems]);
+    loadPlans();
+  }, [loadConfig, loadItems, loadPlans]);
 
   // ----- HANDLERS -----
   const handleCancel = async () => {
@@ -407,6 +419,85 @@ const GSTBilling = () => {
     }
   };
 
+  // ---- Connection Plans ----
+  const handleSavePlan = async () => {
+    if (!editingPlan?.name) {
+      toast.error('Plan name required');
+      return;
+    }
+    if (!editingPlan.items?.length) {
+      toast.error('At least one item required');
+      return;
+    }
+    try {
+      if (editingPlan.id) {
+        await updateGstPlan(editingPlan.id, editingPlan);
+        toast.success('Plan updated');
+      } else {
+        await createGstPlan(editingPlan);
+        toast.success('Plan created');
+      }
+      setShowPlanDialog(false);
+      setEditingPlan(null);
+      loadPlans();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Failed to save plan');
+    }
+  };
+
+  const handleDeletePlan = async (plan) => {
+    if (!window.confirm(`Deactivate ${plan.name}?`)) return;
+    try {
+      await deleteGstPlan(plan.id);
+      toast.success('Plan deactivated');
+      loadPlans();
+    } catch (e) {
+      toast.error('Failed to deactivate');
+    }
+  };
+
+  const loadInvoiceFromPlan = (planId) => {
+    const p = plans.find(pl => pl.id === planId);
+    if (!p) return;
+    const newLines = p.items.map(it => ({
+      item_name: it.item_name,
+      hsn: it.hsn,
+      unit: it.unit,
+      quantity: Number(it.quantity) || 1,
+      rate: Number(it.unit_price) || 0,
+      gst_rate: Number(it.gst_rate) || 0,
+    }));
+    setInvForm(prev => ({
+      ...prev,
+      line_items: newLines,
+      bill_type: 'new_connection',
+      remarks: prev?.remarks || `Connection Plan: ${p.name}`,
+    }));
+    toast.success(`Loaded ${newLines.length} items from "${p.name}"`);
+  };
+
+  const updatePlanItem = (idx, key, value) => {
+    setEditingPlan(prev => {
+      const items = [...prev.items];
+      items[idx] = { ...items[idx], [key]: value };
+      return { ...prev, items };
+    });
+  };
+
+  const addPlanItem = () => {
+    setEditingPlan(prev => ({
+      ...prev,
+      items: [...(prev.items || []), { item_name: '', hsn: '', unit: 'Nos', quantity: 1, gst_rate: 18, unit_price: 0 }],
+    }));
+  };
+
+  const removePlanItem = (idx) => {
+    setEditingPlan(prev => ({
+      ...prev,
+      items: prev.items.length > 1 ? prev.items.filter((_, i) => i !== idx) : prev.items,
+    }));
+  };
+
   if (!isAdmin) {
     return (
       <Layout>
@@ -485,6 +576,7 @@ const GSTBilling = () => {
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="invoices" data-testid="tab-invoices">Invoices</TabsTrigger>
+            <TabsTrigger value="plans" data-testid="tab-plans">Connection Plans</TabsTrigger>
             <TabsTrigger value="items" data-testid="tab-items">Item Master</TabsTrigger>
           </TabsList>
 
@@ -617,6 +709,83 @@ const GSTBilling = () => {
                     </Button>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* CONNECTION PLANS TAB */}
+          <TabsContent value="plans">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-base">Connection Plans (Item-wise Billing Templates)</CardTitle>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Set unit prices per item per plan. Once all items have prices, new connection sales will auto-itemize using the matching plan.
+                  </p>
+                </div>
+                <Button size="sm" onClick={() => {
+                  setEditingPlan({
+                    name: '', plan_type: 'custom', connection_type: 'domestic',
+                    cylinder_count: 1, has_accessories: false,
+                    items: [{ item_name: '', hsn: '', unit: 'Nos', quantity: 1, gst_rate: 18, unit_price: 0 }],
+                  });
+                  setShowPlanDialog(true);
+                }} data-testid="add-plan-btn">
+                  <Plus className="w-4 h-4 mr-1" /> Add Plan
+                </Button>
+              </CardHeader>
+              <CardContent className="p-0">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 border-b">
+                    <tr>
+                      <th className="text-left p-3 font-medium">Plan Name</th>
+                      <th className="text-left p-3 font-medium">Type</th>
+                      <th className="text-center p-3 font-medium">Cylinders</th>
+                      <th className="text-center p-3 font-medium">Accessories</th>
+                      <th className="text-center p-3 font-medium">Items</th>
+                      <th className="text-center p-3 font-medium">Rates Set</th>
+                      <th className="text-center p-3 font-medium">Status</th>
+                      <th className="text-center p-3 font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {plans.length === 0 ? (
+                      <tr><td colSpan="8" className="p-8 text-center text-slate-500">No plans yet.</td></tr>
+                    ) : plans.map(p => {
+                      const ratesSet = p.items?.every(i => Number(i.unit_price) > 0);
+                      return (
+                        <tr key={p.id} className="border-b hover:bg-slate-50" data-testid={`plan-row-${p.id}`}>
+                          <td className="p-3 font-medium">{p.name}</td>
+                          <td className="p-3"><Badge variant="outline">{p.connection_type}</Badge></td>
+                          <td className="p-3 text-center">{p.cylinder_count}</td>
+                          <td className="p-3 text-center">{p.has_accessories ? 'Yes' : 'No'}</td>
+                          <td className="p-3 text-center">{p.items?.length || 0}</td>
+                          <td className="p-3 text-center">
+                            {ratesSet
+                              ? <Badge className="bg-green-100 text-green-700">All set</Badge>
+                              : <Badge className="bg-amber-100 text-amber-700">Set rates</Badge>}
+                          </td>
+                          <td className="p-3 text-center">
+                            {p.is_active
+                              ? <Badge className="bg-green-100 text-green-700">Active</Badge>
+                              : <Badge variant="outline">Inactive</Badge>}
+                          </td>
+                          <td className="p-3 text-center">
+                            <Button size="icon" variant="ghost" onClick={() => {
+                              setEditingPlan({ ...p, items: p.items.map(it => ({ ...it })) });
+                              setShowPlanDialog(true);
+                            }} data-testid={`edit-plan-${p.id}`}>
+                              <Edit2 className="w-4 h-4" />
+                            </Button>
+                            <Button size="icon" variant="ghost" onClick={() => handleDeletePlan(p)}>
+                              <Trash2 className="w-4 h-4 text-red-600" />
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </CardContent>
             </Card>
           </TabsContent>
@@ -885,11 +1054,23 @@ const GSTBilling = () => {
 
                 {/* Line items */}
                 <div>
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
                     <Label className="text-base">Line Items</Label>
-                    <Button size="sm" variant="outline" onClick={addLineItem} data-testid="add-line-item-btn">
-                      <Plus className="w-4 h-4 mr-1" /> Add Line
-                    </Button>
+                    <div className="flex gap-2 items-center">
+                      <Select value="" onValueChange={loadInvoiceFromPlan}>
+                        <SelectTrigger className="w-64 h-9" data-testid="load-from-plan-select">
+                          <SelectValue placeholder="Load from Connection Plan..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {plans.filter(p => p.is_active).map(p => (
+                            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button size="sm" variant="outline" onClick={addLineItem} data-testid="add-line-item-btn">
+                        <Plus className="w-4 h-4 mr-1" /> Add Line
+                      </Button>
+                    </div>
                   </div>
                   <div className="overflow-x-auto border rounded">
                     <table className="w-full text-xs">
@@ -1088,6 +1269,130 @@ const GSTBilling = () => {
               <DialogFooter>
                 <Button variant="outline" onClick={() => { setShowItemDialog(false); setEditingItem(null); }}>Cancel</Button>
                 <Button onClick={handleSaveItem} data-testid="save-item-btn">Save</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
+
+        {/* PLAN DIALOG */}
+        {editingPlan && (
+          <Dialog open={showPlanDialog} onOpenChange={(o) => { setShowPlanDialog(o); if (!o) setEditingPlan(null); }}>
+            <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto" data-testid="plan-dialog">
+              <DialogHeader>
+                <DialogTitle>{editingPlan.id ? `Edit Plan: ${editingPlan.name}` : 'New Connection Plan'}</DialogTitle>
+                <DialogDescription>Set unit prices for each item. Plans with all rates set will auto-itemize matching new-connection invoices.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="md:col-span-2">
+                    <Label>Plan Name *</Label>
+                    <Input value={editingPlan.name} onChange={e => setEditingPlan({ ...editingPlan, name: e.target.value })} data-testid="plan-name" />
+                  </div>
+                  <div>
+                    <Label>Connection Type</Label>
+                    <Select value={editingPlan.connection_type} onValueChange={v => setEditingPlan({ ...editingPlan, connection_type: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="domestic">Domestic</SelectItem>
+                        <SelectItem value="commercial">Commercial</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Cylinder Count</Label>
+                    <Input type="number" value={editingPlan.cylinder_count} onChange={e => setEditingPlan({ ...editingPlan, cylinder_count: e.target.value })} />
+                  </div>
+                  <div>
+                    <Label>Plan Code</Label>
+                    <Input value={editingPlan.plan_type || ''} onChange={e => setEditingPlan({ ...editingPlan, plan_type: e.target.value })} />
+                  </div>
+                  <div className="flex items-end gap-2">
+                    <input
+                      type="checkbox"
+                      id="plan-acc"
+                      checked={!!editingPlan.has_accessories}
+                      onChange={e => setEditingPlan({ ...editingPlan, has_accessories: e.target.checked })}
+                      data-testid="plan-accessories"
+                    />
+                    <Label htmlFor="plan-acc" className="cursor-pointer">Includes Accessories (Stove Burner etc.)</Label>
+                  </div>
+                  <div className="flex items-end gap-2">
+                    <input
+                      type="checkbox"
+                      id="plan-active"
+                      checked={!!editingPlan.is_active}
+                      onChange={e => setEditingPlan({ ...editingPlan, is_active: e.target.checked })}
+                    />
+                    <Label htmlFor="plan-active" className="cursor-pointer">Active</Label>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label className="text-base">Plan Items</Label>
+                    <Button size="sm" variant="outline" onClick={addPlanItem} data-testid="add-plan-item-btn">
+                      <Plus className="w-4 h-4 mr-1" /> Add Item
+                    </Button>
+                  </div>
+                  <div className="overflow-x-auto border rounded">
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-50">
+                        <tr>
+                          <th className="text-left p-2">Item Name *</th>
+                          <th className="text-left p-2 w-24">HSN</th>
+                          <th className="text-left p-2 w-20">Unit</th>
+                          <th className="text-right p-2 w-20">Qty</th>
+                          <th className="text-right p-2 w-24">Unit Price *</th>
+                          <th className="text-right p-2 w-20">GST%</th>
+                          <th className="text-right p-2 w-24">Line Total</th>
+                          <th className="w-8"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {editingPlan.items.map((it, idx) => {
+                          const q = Number(it.quantity) || 0;
+                          const r = Number(it.unit_price) || 0;
+                          const g = Number(it.gst_rate) || 0;
+                          const total = q * r * (1 + g / 100);
+                          return (
+                            <tr key={idx} className="border-t">
+                              <td className="p-1">
+                                <Input className="h-8" value={it.item_name} onChange={e => updatePlanItem(idx, 'item_name', e.target.value)} data-testid={`plan-line-name-${idx}`} />
+                              </td>
+                              <td className="p-1"><Input className="h-8" value={it.hsn || ''} onChange={e => updatePlanItem(idx, 'hsn', e.target.value)} /></td>
+                              <td className="p-1"><Input className="h-8" value={it.unit || ''} onChange={e => updatePlanItem(idx, 'unit', e.target.value)} /></td>
+                              <td className="p-1"><Input className="h-8 text-right" type="number" value={it.quantity} onChange={e => updatePlanItem(idx, 'quantity', e.target.value)} /></td>
+                              <td className="p-1"><Input className="h-8 text-right" type="number" value={it.unit_price || 0} onChange={e => updatePlanItem(idx, 'unit_price', e.target.value)} data-testid={`plan-line-price-${idx}`} /></td>
+                              <td className="p-1"><Input className="h-8 text-right" type="number" value={it.gst_rate} onChange={e => updatePlanItem(idx, 'gst_rate', e.target.value)} /></td>
+                              <td className="p-2 text-right">{formatRs(total)}</td>
+                              <td className="p-1">
+                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => removePlanItem(idx)}>
+                                  <Trash2 className="w-3 h-3 text-red-600" />
+                                </Button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot className="bg-slate-100">
+                        <tr>
+                          <td colSpan="6" className="p-2 text-right font-semibold">Total Plan Value (with GST):</td>
+                          <td className="p-2 text-right font-bold text-blue-700">
+                            {formatRs(editingPlan.items.reduce((s, it) => {
+                              const q = Number(it.quantity) || 0, r = Number(it.unit_price) || 0, g = Number(it.gst_rate) || 0;
+                              return s + q * r * (1 + g / 100);
+                            }, 0))}
+                          </td>
+                          <td></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => { setShowPlanDialog(false); setEditingPlan(null); }}>Cancel</Button>
+                <Button onClick={handleSavePlan} className="bg-blue-700 hover:bg-blue-800" data-testid="save-plan-btn">Save Plan</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>

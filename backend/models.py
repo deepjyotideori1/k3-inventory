@@ -453,6 +453,8 @@ class SalesEntryCreate(BaseModel):
     credit_amount: float = 0
     no_of_refills: int = 0
     remarks: str = ""
+    connection_plan_id: Optional[str] = None
+    has_accessories: bool = False
 
 class SalesEntryUpdate(BaseModel):
     date: Optional[str] = None
@@ -469,6 +471,8 @@ class SalesEntryUpdate(BaseModel):
     credit_amount: Optional[float] = None
     no_of_refills: Optional[int] = None
     remarks: Optional[str] = None
+    connection_plan_id: Optional[str] = None
+    has_accessories: Optional[bool] = None
 
 
 # ============ ORDER MODELS ============
