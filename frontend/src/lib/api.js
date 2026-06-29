@@ -693,6 +693,32 @@ export const createGstPlan = (data) => api.post('/gst/plans', data);
 export const updateGstPlan = (planId, data) => api.put(`/gst/plans/${planId}`, data);
 export const deleteGstPlan = (planId) => api.delete(`/gst/plans/${planId}`);
 
+// GST Reports
+export const listGstReports = () => api.get('/gst/reports/list');
+export const getGstReport = (reportType, params) => api.get(`/gst/reports/${reportType}`, { params });
+export const exportGstReportExcel = async (reportType, params = {}, label = 'Report') => {
+  const response = await api.get(`/gst/reports/${reportType}/excel`, { params, responseType: 'blob' });
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', `${label.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+};
+export const exportGstReportPdf = async (reportType, params = {}, label = 'Report') => {
+  const response = await api.get(`/gst/reports/${reportType}/pdf`, { params, responseType: 'blob' });
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', `${label.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+};
+
 export const getGstInvoices = (params) => api.get('/gst/invoices', { params });
 export const getGstInvoice = (invoiceId) => api.get(`/gst/invoices/${invoiceId}`);
 export const createGstInvoice = (data) => api.post('/gst/invoices', data);

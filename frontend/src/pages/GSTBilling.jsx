@@ -23,6 +23,7 @@ import {
   getGstInvoices, getGstSummary, getGstConfig, updateGstConfig,
   getGstItems, createGstItem, updateGstItem, deleteGstItem,
   getGstPlans, createGstPlan, updateGstPlan, deleteGstPlan,
+  listGstReports, getGstReport, exportGstReportExcel, exportGstReportPdf,
   createGstInvoice, updateGstInvoice, cancelGstInvoice, deleteGstInvoice,
   generateGstFromSale, downloadGstInvoicePdf, exportGstInvoicesExcel,
   getSalesEntries, getAccessorySales
@@ -105,6 +106,14 @@ const GSTBilling = () => {
   const [showPlanDialog, setShowPlanDialog] = useState(false);
   const [editingPlan, setEditingPlan] = useState(null);
 
+  // Reports state
+  const [reportsList, setReportsList] = useState([]);
+  const [reportType, setReportType] = useState('daily_sales');
+  const [reportData, setReportData] = useState(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportStart, setReportStart] = useState(monthStartISO());
+  const [reportEnd, setReportEnd] = useState(todayISO());
+
   // Manual invoice form state
   const [invForm, setInvForm] = useState(null);
 
@@ -171,6 +180,47 @@ const GSTBilling = () => {
     } catch (e) { /* swallow */ }
   }, []);
 
+  const loadReportsList = useCallback(async () => {
+    try {
+      const { data } = await listGstReports();
+      setReportsList(data || []);
+    } catch (e) { /* swallow */ }
+  }, []);
+
+  const runReport = useCallback(async () => {
+    if (!reportType) return;
+    setReportLoading(true);
+    try {
+      const { data } = await getGstReport(reportType, { start_date: reportStart, end_date: reportEnd });
+      setReportData(data);
+    } catch (e) {
+      toast.error('Failed to load report');
+      setReportData(null);
+    } finally {
+      setReportLoading(false);
+    }
+  }, [reportType, reportStart, reportEnd]);
+
+  const handleExportReportExcel = async () => {
+    try {
+      const label = reportData?.label || reportType;
+      await exportGstReportExcel(reportType, { start_date: reportStart, end_date: reportEnd }, label);
+      toast.success('Excel downloaded');
+    } catch (e) {
+      toast.error('Excel export failed');
+    }
+  };
+
+  const handleExportReportPdf = async () => {
+    try {
+      const label = reportData?.label || reportType;
+      await exportGstReportPdf(reportType, { start_date: reportStart, end_date: reportEnd }, label);
+      toast.success('PDF downloaded');
+    } catch (e) {
+      toast.error('PDF export failed');
+    }
+  };
+
   useEffect(() => {
     loadInvoices();
     loadSummary();
@@ -180,7 +230,15 @@ const GSTBilling = () => {
     loadConfig();
     loadItems();
     loadPlans();
-  }, [loadConfig, loadItems, loadPlans]);
+    loadReportsList();
+  }, [loadConfig, loadItems, loadPlans, loadReportsList]);
+
+  // Auto-run report when type/dates change AND user is on Reports tab
+  useEffect(() => {
+    if (activeTab === 'reports') {
+      runReport();
+    }
+  }, [activeTab, runReport]);
 
   // ----- HANDLERS -----
   const handleCancel = async () => {
@@ -622,6 +680,7 @@ const GSTBilling = () => {
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="invoices" data-testid="tab-invoices">Invoices</TabsTrigger>
+            <TabsTrigger value="reports" data-testid="tab-reports">Reports</TabsTrigger>
             <TabsTrigger value="plans" data-testid="tab-plans">Connection Plans</TabsTrigger>
             <TabsTrigger value="items" data-testid="tab-items">Item Master</TabsTrigger>
           </TabsList>
@@ -755,6 +814,122 @@ const GSTBilling = () => {
                     </Button>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* REPORTS TAB */}
+          <TabsContent value="reports" className="space-y-4">
+            <Card>
+              <CardContent className="p-4 space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <div className="md:col-span-2">
+                    <Label>Report Type</Label>
+                    <Select value={reportType} onValueChange={setReportType}>
+                      <SelectTrigger data-testid="report-type-select"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {reportsList.map(r => (
+                          <SelectItem key={r.key} value={r.key}>{r.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Start Date</Label>
+                    <Input type="date" value={reportStart} onChange={e => setReportStart(e.target.value)} data-testid="report-start" />
+                  </div>
+                  <div>
+                    <Label>End Date</Label>
+                    <Input type="date" value={reportEnd} onChange={e => setReportEnd(e.target.value)} data-testid="report-end" />
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 justify-end">
+                  <Button variant="outline" onClick={runReport} disabled={reportLoading} data-testid="report-refresh">
+                    <RefreshCw className={`w-4 h-4 mr-1 ${reportLoading ? 'animate-spin' : ''}`} />
+                    {reportLoading ? 'Loading...' : 'Refresh'}
+                  </Button>
+                  <Button variant="outline" onClick={handleExportReportExcel} data-testid="report-excel-btn">
+                    <FileSpreadsheet className="w-4 h-4 mr-1" /> Export Excel
+                  </Button>
+                  <Button variant="outline" onClick={handleExportReportPdf} data-testid="report-pdf-btn">
+                    <FileDown className="w-4 h-4 mr-1" /> Export PDF
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Report data */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center justify-between">
+                  <span>{reportData?.label || 'Report'}</span>
+                  <span className="text-xs font-normal text-slate-500">
+                    {reportData ? `${reportData.rows.length} rows` : ''}
+                  </span>
+                </CardTitle>
+                <p className="text-xs text-slate-500">
+                  Period: {reportStart || 'All'} to {reportEnd || 'All'}
+                </p>
+              </CardHeader>
+              <CardContent className="p-0">
+                {reportLoading ? (
+                  <div className="p-8 text-center text-slate-500">Loading report...</div>
+                ) : !reportData || reportData.rows.length === 0 ? (
+                  <div className="p-8 text-center text-slate-500">No data for selected period.</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs" data-testid="report-table">
+                      <thead className="bg-blue-700 text-white sticky top-0">
+                        <tr>
+                          {reportData.columns.map(c => (
+                            <th key={c.key} className={`p-2 ${c.align === 'amount' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left'} font-medium`}>
+                              {c.label}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {reportData.rows.map((r, idx) => (
+                          <tr key={idx} className="border-b hover:bg-slate-50 align-top">
+                            {reportData.columns.map(c => {
+                              const val = r[c.key];
+                              const isAmount = c.align === 'amount';
+                              return (
+                                <td key={c.key} className={`p-2 ${isAmount ? 'text-right font-mono' : c.align === 'center' ? 'text-center' : 'text-left'} break-words max-w-[260px]`}>
+                                  {isAmount && typeof val === 'number' ? val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (val ?? '—')}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="bg-blue-50 font-semibold border-t-2 border-blue-300">
+                        <tr>
+                          {reportData.columns.map((c, idx) => {
+                            if (idx === 0) {
+                              return <td key={c.key} className="p-2 text-right">TOTAL</td>;
+                            }
+                            const val = reportData.summary?.[c.key];
+                            if (c.align === 'amount' && typeof val === 'number') {
+                              return <td key={c.key} className="p-2 text-right font-mono text-blue-800">{val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>;
+                            }
+                            if (c.key === 'invoices' && reportData.summary?.invoices != null) {
+                              return <td key={c.key} className="p-2 text-center">{reportData.summary.invoices}</td>;
+                            }
+                            return <td key={c.key} className="p-2"></td>;
+                          })}
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+                {/* GST Report summary footer (B2B/B2C counts) */}
+                {reportData && reportType === 'gst_report' && (
+                  <div className="p-3 border-t bg-slate-50 text-xs flex flex-wrap gap-4">
+                    <span><strong>B2B Invoices:</strong> {reportData.summary?.b2b_count || 0}</span>
+                    <span><strong>B2C Invoices:</strong> {reportData.summary?.b2c_count || 0}</span>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

@@ -1,0 +1,37 @@
+{
+  "summary": "Tested Phase B GST Reports module (10 reports + Excel/PDF exports + admin-only access) end-to-end. Backend pytest: 37/38 passed (97%). Frontend: 100% (Reports tab renders, 10 options in select, switching report types auto-loads data, Excel + PDF downloads work, totals row highlighted blue, Indian number formatting verified, no horizontal overflow at 1920/1366/375). Found 1 real backend bug: HSN Summary produces duplicate rows for same (hsn, unit, gst_rate) tuple because dict grouping key is built from raw li.get('gst_rate', 0) value — when DB stores some line items with gst_rate as int 5 and others as float 5.0, the f-string produces different keys ('271119|Cylinder|5' vs '271119|Cylinder|5.0'), so rows fail to merge even though final output displays both as 5.0. Verified live: 2 separate rows for HSN 271119 Cylinder 5.0 GST appearing instead of 1 merged row. All other 9 reports + 20 export endpoints + admin-only enforcement work correctly. Plant warehouse exclusion in warehouse_wise verified. Payment modes correctly uppercased. Tax summary sorted asc by rate. Item-wise sorted desc by total_value. Customer-wise sorted desc by grand_total. GST report B2B/B2C separated with counts. Cancelled returns only cancelled invoices with lost_value. Invalid report_type returns 400 with valid keys in detail. Date range filter works. Non-admin (jullang) gets 403 on all 4 report routes.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/gst/reports/hsn_summary", "issue": "Duplicate rows for same (HSN, unit, gst_rate) — grouping key uses raw li.get('gst_rate') which is sometimes int and sometimes float in DB, so 5 and 5.0 produce different dict keys. Fix: build key with `float(li.get('gst_rate') or 0)` (mirror what is already used for the row value). Live evidence: HSN 271119 Cylinder 5.0% appears twice with 6 qty / 8190.48 taxable AND 2 qty / 2000 taxable instead of being merged into 8 qty / 10190.48."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_gst_reports_phase_b.py",
+    "/app/test_reports/pytest/pytest_gst_reports_phase_b.xml"
+  ],
+  "action_items": [
+    "Fix HSN Summary grouping bug in /app/backend/routes/gst_reports.py (_build_hsn_summary): change `key = f\"{hsn}|{unit}|{li.get('gst_rate', 0)}\"` to `key = f\"{hsn}|{unit}|{float(li.get('gst_rate') or 0)}\"` so int/float DB values normalize to a single key."
+  ],
+  "critical_code_review_comments": [
+    "_build_hsn_summary uses non-normalized gst_rate in grouping key — causes silent data-correctness bug when DB has mixed int/float storage for gst_rate.",
+    "PRE-EXISTING (carried over from Phase A iter 47): React hydration warnings persist on /gst-billing - `<span data-ve-dynamic='true' style='display:contents'>` wrapper inserted between <tbody> and <tr> / <tr> and <th> / <tr> and <td>. Cosmetic dev-only warning. Affects both invoice table and the new reports table.",
+    "Excel export sheet title is correctly truncated to 31 chars but only one report ('GST Report (GSTR-1 Style)' = 25 chars) would have hit that limit anyway — no truncation observed for current labels.",
+    "PDF Table style applies LIGHT background+bold ONLY when rows is truthy via conditional tuple inside TableStyle list — the conditional `('FONTSIZE', ...) if rows else ('FONTSIZE', ...)` works but is dense; non-issue functionally."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_gst_reports_phase_b.py (new file)"
+  ],
+  "success_rate": {"backend": "97% (37/38 pytest cases)", "frontend": "100% (Reports tab, 10 options, switching reports, Excel/PDF download, responsive 1920/1366/375)"},
+  "test_credentials": "admin@k3gas.com / Admin@123 (admin), jullang@k3gas.com / Jullang@123 (non-admin 403 verified)",
+  "seed_data_creation": "None — used existing 19 active invoices and existing gst_config from Phase A.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase B reports module at /app/backend/routes/gst_reports.py with 4 endpoints under /api/gst/reports/{list,<type>,<type>/excel,<type>/pdf}. data-testids: tab-reports, report-type-select, report-start, report-end, report-refresh, report-excel-btn, report-pdf-btn, report-table. Shadcn Select renders options as [role='option'] — to click programmatically: open select then click option by text. Verified Excel filename pattern 'Daily_Sales_Report_<YYYY-MM-DD>.xlsx', PDF same with .pdf. All 19 active invoices generated 2026-06-29. No cancelled invoices in DB (so cancelled report shows 0 rows). Plant Hollongi correctly excluded from warehouse_wise. Single HSN bug isolated to gst_rate type-mixing in dict key.",
+  "rca of the issue": "HSN Summary duplicate row bug RCA — In _build_hsn_summary (line 207), the dict key is constructed as f'{hsn}|{unit}|{li.get(\"gst_rate\", 0)}'. When invoice line items are stored with gst_rate as int (e.g. 5) vs float (e.g. 5.0) — which happens because different code paths in invoice generation use different types — the f-string produces 2 distinct strings '271119|Cylinder|5' and '271119|Cylinder|5.0'. setdefault therefore creates 2 separate row dicts, both later rendered with gst_rate normalized to 5.0 via float() — so they LOOK identical to the user but are not aggregated. Reproduction: GET /api/gst/reports/hsn_summary as admin → rows[1] and rows[2] both have hsn='271119', unit='Cylinder', gst_rate=5.0 but different qty/value. Mitigation: in _build_hsn_summary change the key to f'{hsn}|{unit}|{float(li.get(\"gst_rate\") or 0)}'. Same defensive normalization is already used in _build_tax_summary (line 421) — apply the same pattern here."
+}
