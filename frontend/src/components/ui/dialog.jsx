@@ -42,7 +42,7 @@ const DialogContent = React.forwardRef(({ className, children, onPointerDownOuts
         // Mobile-first: full width with margins, vertically scrollable
         "inset-x-4 top-[50%] translate-y-[-50%] max-h-[90vh] overflow-y-auto overflow-x-hidden",
         // Small screens and up: centered with max-width
-        "sm:inset-x-auto sm:left-[50%] sm:translate-x-[-50%] sm:w-full sm:max-w-lg",
+        "sm:inset-x-auto sm:left-[50%] sm:translate-x-[-50%] sm:w-full sm:max-w-2xl",
         // Padding responsive
         "p-4 sm:p-6",
         // Border radius
