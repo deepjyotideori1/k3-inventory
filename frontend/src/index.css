@@ -4,6 +4,30 @@
 @tailwind components;
 @tailwind utilities;
 
+/* GST Invoice print styles - hide everything except the invoice print area */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #invoice-print-area, #invoice-print-area * {
+    visibility: visible;
+  }
+  #invoice-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 12px !important;
+  }
+  [data-radix-dialog-overlay], .print\\:hidden {
+    display: none !important;
+  }
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+}
+
 body {
     margin: 0;
     font-family: 'Public Sans', -apple-system, BlinkMacSystemFont, sans-serif;

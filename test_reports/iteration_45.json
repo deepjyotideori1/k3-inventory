@@ -1,0 +1,41 @@
+{
+  "summary": "Phase A enhancement tested end-to-end. Backend: 6/6 NEW pytest cases in test_gst_billing_phase_a.py pass + 19/19 existing test_gst_billing.py pass (zero regression). Coverage: (a) GET /api/gst/config returns all 17 new branding/bank/T&C/signatory fields with defaults; (b) PUT /api/gst/config persists all 17 fields and reads back unchanged; (c) PLANT WAREHOUSE EXCLUSION: hollongi user creates a sales-entry on 'Plant Hollongi' warehouse -> no GST invoice auto-generated (verified via /api/gst/invoices?search=customer); (d) Excel export 32-column structure verified: company title at A1, GSTIN+address at A2, 'Invoice Register' meta at A3, exact 32 header cells at row 5 (Sl No., Invoice Number ... Cancellation Reason), freeze_panes='A6', autofilter starting at 'A5:AF'; (e) PDF export returns valid %PDF with size >1500 bytes; (f) amount_in_words_inr backend helper produces num2words(en_IN) output for 100/1234.56/123456 - format includes 'And' connectors and hyphens (see issues).\nFrontend: Logged in as admin@k3gas.com, /gst-billing. Settings button opens 4-tab dialog - ALL TESTIDS PRESENT: cfg-tab-numbering, cfg-tab-company, cfg-tab-bank, cfg-tab-terms; field testids cfg-co-name, cfg-co-address, cfg-co-gstin, cfg-co-logo, cfg-bank-name, cfg-bank-acc, cfg-bank-ifsc, cfg-terms, cfg-sig-name all present. Saved settings produced 'Settings saved' toast and persisted. Clicking View on invoice INV/2026-27/0001 opens redesigned print-preview dialog showing: company header (TEST K3 GAS SERVICE, tagline 'Reliable LPG Distribution', address, phone, email, GSTIN, state code 12), TAX INVOICE banner, invoice meta block, Bill To block, items table with CGST/SGST split (intra-state), totals row, Amount in Words ('Rupees One Thousand One Hundred Only'), Summary box (Sub Total/CGST/SGST/Round Off/Grand Total), Bank Details box (Bank/A/c Holder/A/c No/IFSC/Branch all populated), Terms & Conditions box, Signatory cell. Action buttons all present with correct testids: view-print-btn, view-pdf-btn, view-edit-btn, view-cancel-btn + Close. Clicking Edit closes View and opens Edit Invoice dialog prefilled with line items. Mobile responsiveness verified: at 375px width, Settings dialog renders at 356px (within viewport), all tabs accessible, no horizontal overflow.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/gst/invoices/{id}/pdf", "issue": "amount_in_words_inr uses num2words(lang='en_IN') which inserts 'And' connectors and hyphens, e.g. for 1234.56 -> 'Rupees One Thousand Two Hundred And Thirty-Four and Fifty-Six Paise Only'; for 123456 -> 'Rupees One Lakh Twenty-Three Thousand Four Hundred And Fifty-Six Only'. Spec requested 'Rupees One Thousand Two Hundred Thirty Four and Fifty Six Paise Only' (no 'And', no hyphens). Frontend View dialog uses its own JS amountInWords helper which DOES match spec. PDF & frontend therefore produce slightly different wording for the same invoice. Recommend post-processing in amount_in_words_inr: replace ' And ' with ' ' and '-' with ' ' to match spec & frontend."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "GSTBilling Invoices tab + View Invoice dialog", "issues": ["Pre-existing React hydration warning: '<span> cannot be a child of <tbody>' and '<tr> cannot be a child of <span>' (same as iter 43/44 from emergent visual-editor data-ve-dynamic wrapper). NEW (View dialog only): same wrapper inside the items table also triggers '<span> cannot be a child of <tr>', '<th> cannot be a child of <span>', '<td> cannot be a child of <span>'. Non-breaking but pollutes console."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_gst_billing_phase_a.py",
+    "/app/backend/tests/test_gst_billing.py",
+    "/app/test_reports/pytest/pytest_gst_billing_phase_a.xml"
+  ],
+  "action_items": [
+    "Backend (LOW): normalise amount_in_words_inr output to remove 'And' and hyphens to match spec format and the frontend JS helper. Example: rupees_text.replace(' And ', ' ').replace('-', ' ')",
+    "Frontend (OPTIONAL/PRE-EXISTING): remove <span data-ve-dynamic> wrappers around <tr>/<td>/<th> in invoices table and view-dialog items table - resolves hydration warnings carried over from prior iterations."
+  ],
+  "critical_code_review_comments": [
+    "gst_billing.py is now 1390 lines (was 998 in iter 44, 711 in iter 43). Strongly exceeds 700-line guideline - split into gst_config.py, gst_invoices.py, gst_plans.py, gst_items.py, gst_pdf.py, gst_excel.py.",
+    "amount_in_words_inr divergence (backend num2words vs frontend custom JS) means PDF and on-screen View show different words. Either unify on the JS helper format (preferred) or expose backend helper to frontend via a shared formatter.",
+    "_auto_generate_invoice plant-skip uses substring match 'plant' or 'hollongi' in warehouse_name.lower() - works for current set but a warehouse named 'Hollongi Sales' (non-plant) would also be skipped. Consider keying skip off warehouse.type=='plant' instead of name substring.",
+    "Excel export builds title rows 1-3 with merge A1:H1 only - if exported when columns extend to AF, the title visually spans <25% of the data width. Recommend merging A1:AF1 etc. for visual alignment."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_gst_billing_phase_a.py (new, 6 tests)"
+  ],
+  "success_rate": {"backend": "100% (6/6 new + 19/19 existing = 25/25)", "frontend": "100% - all data-testids present, all 4 Settings tabs work, View dialog renders full print-preview, Edit transition works, mobile responsive at 375px"},
+  "test_credentials": "admin@k3gas.com / Admin@123 (admin), hollongi@k3gas.com / Hollongi@123 (plant warehouse - verified invoice skip)",
+  "seed_data_creation": "Settings overwritten with TEST_ values (company_name='TEST K3 GAS SERVICE' etc). One sales-entry created on Plant Hollongi (TEST_PlantCust_*) confirmed no invoice generated.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase A complete & passing. Settings dialog now has 4 tabs (Numbering/Company/Bank/Terms&Signatory) with all spec testids. View Invoice dialog is a full print-preview (#invoice-print-area) with Print/PDF/Edit/Cancel/Close buttons (testids view-print-btn etc). Excel export is item-wise 32 columns frozen at A6 with autofilter A5:AF<lastRow>. PDF export is full Tax Invoice format. Plant warehouse sales DO NOT auto-generate invoices (warehouse_name lowercase contains 'plant' or 'hollongi'). Known divergence: backend num2words PDF output uses 'And' + hyphens whereas frontend JS amountInWords helper omits them - the on-screen View shows e.g. 'Rupees One Thousand One Hundred Only' but PDF could show '...One Hundred And...' for compound numbers. For Phase B (Reports tab with 12 reports incl GSTR-1, HSN Summary), keep using admin@k3gas.com.",
+  "rca of the issue": "amount-in-words divergence RCA: backend uses `num2words(amount, lang='en_IN')` which by design emits English-Indian compound numbers with 'And' before tens and hyphens between tens-units (e.g. 'Twenty-Four', 'Four Hundred And Fifty-Six'). Frontend JS amountInWords helper in GSTBilling.jsx builds numbers manually with the Indian lakh/crore grouping but without 'And' / hyphens. Mitigation: in routes/gst_billing.py amount_in_words_inr, post-process output: `rupees_text = rupees_text.replace(' And ', ' ').replace('-', ' ')` and same for paise_text. Single-line fix, no API change."
+}

@@ -33,6 +33,35 @@ const formatRs = (n) => {
   return 'Rs. ' + num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
+// Convert Indian amount to words (e.g. 12345 -> "Rupees Twelve Thousand Three Hundred Forty Five Only")
+const amountInWords = (amount) => {
+  const num = Math.floor(Number(amount) || 0);
+  const paise = Math.round(((Number(amount) || 0) - num) * 100);
+  if (num === 0 && paise === 0) return 'Rupees Zero Only';
+  const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+    'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+  const twoDigit = (n) => {
+    if (n < 20) return ones[n];
+    return tens[Math.floor(n / 10)] + (n % 10 ? ' ' + ones[n % 10] : '');
+  };
+  const threeDigit = (n) => {
+    const h = Math.floor(n / 100);
+    const r = n % 100;
+    return (h ? ones[h] + ' Hundred' + (r ? ' ' : '') : '') + (r ? twoDigit(r) : '');
+  };
+  const inWords = (n) => {
+    if (n === 0) return '';
+    if (n < 1000) return threeDigit(n);
+    if (n < 100000) return twoDigit(Math.floor(n / 1000)) + ' Thousand' + (n % 1000 ? ' ' + threeDigit(n % 1000) : '');
+    if (n < 10000000) return twoDigit(Math.floor(n / 100000)) + ' Lakh' + (n % 100000 ? ' ' + inWords(n % 100000) : '');
+    return twoDigit(Math.floor(n / 10000000)) + ' Crore' + (n % 10000000 ? ' ' + inWords(n % 10000000) : '');
+  };
+  let words = 'Rupees ' + inWords(num);
+  if (paise > 0) words += ' and ' + twoDigit(paise) + ' Paise';
+  return words.trim().replace(/\s+/g, ' ') + ' Only';
+};
+
 const todayISO = () => new Date().toISOString().split('T')[0];
 const monthStartISO = () => {
   const d = new Date();
@@ -337,6 +366,23 @@ const GSTBilling = () => {
         default_tax_mode: config.default_tax_mode,
         place_of_supply: config.place_of_supply,
         auto_generate: !!config.auto_generate,
+        company_name: config.company_name,
+        company_tagline: config.company_tagline,
+        company_address: config.company_address,
+        company_gstin: config.company_gstin,
+        company_state: config.company_state,
+        company_state_code: config.company_state_code,
+        company_phone: config.company_phone,
+        company_email: config.company_email,
+        company_logo_url: config.company_logo_url,
+        bank_name: config.bank_name,
+        bank_account_no: config.bank_account_no,
+        bank_ifsc: config.bank_ifsc,
+        bank_branch: config.bank_branch,
+        bank_account_holder: config.bank_account_holder,
+        terms_conditions: config.terms_conditions,
+        signatory_name: config.signatory_name,
+        signatory_designation: config.signatory_designation,
       });
       toast.success('Settings saved');
       setShowConfigDialog(false);
@@ -844,65 +890,168 @@ const GSTBilling = () => {
 
         {/* SETTINGS DIALOG */}
         <Dialog open={showConfigDialog} onOpenChange={setShowConfigDialog}>
-          <DialogContent className="max-w-md" data-testid="config-dialog">
+          <DialogContent className="max-w-3xl w-[95vw] max-h-[90vh] overflow-y-auto" data-testid="config-dialog">
             <DialogHeader>
               <DialogTitle>GST Billing Settings</DialogTitle>
-              <DialogDescription>Changes apply to new invoices only. Existing invoices keep their original number.</DialogDescription>
+              <DialogDescription>
+                Configure invoice numbering, company branding, bank details and terms shown on every invoice PDF.
+              </DialogDescription>
             </DialogHeader>
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>Invoice Prefix</Label>
-                  <Input value={config.prefix || ''} onChange={e => setConfig({ ...config, prefix: e.target.value })} data-testid="config-prefix" />
-                  <p className="text-xs text-slate-500 mt-1">Default: INV</p>
+            <Tabs defaultValue="numbering">
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="numbering" data-testid="cfg-tab-numbering">Numbering</TabsTrigger>
+                <TabsTrigger value="company" data-testid="cfg-tab-company">Company</TabsTrigger>
+                <TabsTrigger value="bank" data-testid="cfg-tab-bank">Bank</TabsTrigger>
+                <TabsTrigger value="terms" data-testid="cfg-tab-terms">Terms &amp; Signatory</TabsTrigger>
+              </TabsList>
+
+              {/* NUMBERING */}
+              <TabsContent value="numbering" className="space-y-3 mt-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <Label>Invoice Prefix</Label>
+                    <Input value={config.prefix || ''} onChange={e => setConfig({ ...config, prefix: e.target.value })} data-testid="config-prefix" />
+                    <p className="text-xs text-slate-500 mt-1">Default: INV</p>
+                  </div>
+                  <div>
+                    <Label>Invoice Suffix</Label>
+                    <Input value={config.suffix || ''} onChange={e => setConfig({ ...config, suffix: e.target.value })} data-testid="config-suffix" />
+                    <p className="text-xs text-slate-500 mt-1">Optional</p>
+                  </div>
+                  <div>
+                    <Label>Default Tax Mode</Label>
+                    <Select value={config.default_tax_mode || 'intra_state'} onValueChange={v => setConfig({ ...config, default_tax_mode: v })}>
+                      <SelectTrigger data-testid="config-tax-mode"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="intra_state">Intra-state (CGST + SGST)</SelectItem>
+                        <SelectItem value="inter_state">Inter-state (IGST)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Place of Supply</Label>
+                    <Input value={config.place_of_supply || ''} onChange={e => setConfig({ ...config, place_of_supply: e.target.value })} data-testid="config-place" />
+                  </div>
                 </div>
-                <div>
-                  <Label>Invoice Suffix</Label>
-                  <Input value={config.suffix || ''} onChange={e => setConfig({ ...config, suffix: e.target.value })} data-testid="config-suffix" />
-                  <p className="text-xs text-slate-500 mt-1">Optional</p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="auto-gen"
+                    checked={!!config.auto_generate}
+                    onChange={e => setConfig({ ...config, auto_generate: e.target.checked })}
+                    data-testid="config-auto-gen"
+                  />
+                  <Label htmlFor="auto-gen" className="cursor-pointer">Auto-generate invoice on new sales</Label>
                 </div>
-              </div>
-              <div>
-                <Label>Default Tax Mode</Label>
-                <Select value={config.default_tax_mode || 'intra_state'} onValueChange={v => setConfig({ ...config, default_tax_mode: v })}>
-                  <SelectTrigger data-testid="config-tax-mode"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="intra_state">Intra-state (CGST + SGST)</SelectItem>
-                    <SelectItem value="inter_state">Inter-state (IGST)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Place of Supply</Label>
-                <Input value={config.place_of_supply || ''} onChange={e => setConfig({ ...config, place_of_supply: e.target.value })} data-testid="config-place" />
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="auto-gen"
-                  checked={!!config.auto_generate}
-                  onChange={e => setConfig({ ...config, auto_generate: e.target.checked })}
-                  data-testid="config-auto-gen"
-                />
-                <Label htmlFor="auto-gen" className="cursor-pointer">Auto-generate invoice on new sales</Label>
-              </div>
-              <div className="text-xs text-slate-500 p-2 bg-slate-50 rounded">
-                <strong>Format preview:</strong> {config.prefix || 'INV'}/{config.current_fy || 'YYYY-YY'}/0001{config.suffix ? `/${config.suffix}` : ''}
-              </div>
-              <div className="text-xs text-slate-500">
-                Next invoice number: <strong>{config.next_seq || 1}</strong> (FY {config.current_fy || '-'})
-              </div>
-            </div>
-            <DialogFooter>
+                <div className="text-xs text-slate-600 p-3 bg-blue-50 border border-blue-100 rounded">
+                  <div><strong>Format preview:</strong> {config.prefix || 'INV'}/{config.current_fy || 'YYYY-YY'}/0001{config.suffix ? `/${config.suffix}` : ''}</div>
+                  <div className="mt-1">Next invoice number: <strong>{config.next_seq || 1}</strong> (FY {config.current_fy || '-'})</div>
+                </div>
+              </TabsContent>
+
+              {/* COMPANY */}
+              <TabsContent value="company" className="space-y-3 mt-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="md:col-span-2">
+                    <Label>Company Name *</Label>
+                    <Input value={config.company_name || ''} onChange={e => setConfig({ ...config, company_name: e.target.value })} data-testid="cfg-co-name" />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label>Tagline</Label>
+                    <Input value={config.company_tagline || ''} onChange={e => setConfig({ ...config, company_tagline: e.target.value })} />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label>GST Registered Address</Label>
+                    <Textarea rows={2} value={config.company_address || ''} onChange={e => setConfig({ ...config, company_address: e.target.value })} data-testid="cfg-co-address" />
+                  </div>
+                  <div>
+                    <Label>Company GSTIN</Label>
+                    <Input value={config.company_gstin || ''} onChange={e => setConfig({ ...config, company_gstin: e.target.value.toUpperCase() })} data-testid="cfg-co-gstin" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label>State</Label>
+                      <Input value={config.company_state || ''} onChange={e => setConfig({ ...config, company_state: e.target.value })} />
+                    </div>
+                    <div>
+                      <Label>State Code</Label>
+                      <Input value={config.company_state_code || ''} onChange={e => setConfig({ ...config, company_state_code: e.target.value })} />
+                    </div>
+                  </div>
+                  <div>
+                    <Label>Phone</Label>
+                    <Input value={config.company_phone || ''} onChange={e => setConfig({ ...config, company_phone: e.target.value })} />
+                  </div>
+                  <div>
+                    <Label>Email</Label>
+                    <Input value={config.company_email || ''} onChange={e => setConfig({ ...config, company_email: e.target.value })} />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label>Logo URL</Label>
+                    <Input placeholder="https://..." value={config.company_logo_url || ''} onChange={e => setConfig({ ...config, company_logo_url: e.target.value })} data-testid="cfg-co-logo" />
+                    {config.company_logo_url && (
+                      <img src={config.company_logo_url} alt="logo preview" className="mt-2 h-16 object-contain border rounded p-1 bg-white" onError={(e) => { e.target.style.display = 'none'; }} />
+                    )}
+                  </div>
+                </div>
+              </TabsContent>
+
+              {/* BANK */}
+              <TabsContent value="bank" className="space-y-3 mt-4">
+                <p className="text-xs text-slate-500">Bank details printed in the footer of every invoice PDF.</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="md:col-span-2">
+                    <Label>Bank Name</Label>
+                    <Input value={config.bank_name || ''} onChange={e => setConfig({ ...config, bank_name: e.target.value })} data-testid="cfg-bank-name" />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label>Account Holder Name</Label>
+                    <Input value={config.bank_account_holder || ''} onChange={e => setConfig({ ...config, bank_account_holder: e.target.value })} />
+                  </div>
+                  <div>
+                    <Label>Account Number</Label>
+                    <Input value={config.bank_account_no || ''} onChange={e => setConfig({ ...config, bank_account_no: e.target.value })} data-testid="cfg-bank-acc" />
+                  </div>
+                  <div>
+                    <Label>IFSC Code</Label>
+                    <Input value={config.bank_ifsc || ''} onChange={e => setConfig({ ...config, bank_ifsc: e.target.value.toUpperCase() })} data-testid="cfg-bank-ifsc" />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label>Branch</Label>
+                    <Input value={config.bank_branch || ''} onChange={e => setConfig({ ...config, bank_branch: e.target.value })} />
+                  </div>
+                </div>
+              </TabsContent>
+
+              {/* TERMS & SIGNATORY */}
+              <TabsContent value="terms" className="space-y-3 mt-4">
+                <div>
+                  <Label>Terms &amp; Conditions</Label>
+                  <Textarea rows={6} placeholder="Enter one term per line" value={config.terms_conditions || ''} onChange={e => setConfig({ ...config, terms_conditions: e.target.value })} data-testid="cfg-terms" />
+                  <p className="text-xs text-slate-500 mt-1">These print at the bottom of every invoice PDF. One term per line.</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <Label>Authorized Signatory Name</Label>
+                    <Input value={config.signatory_name || ''} onChange={e => setConfig({ ...config, signatory_name: e.target.value })} data-testid="cfg-sig-name" />
+                  </div>
+                  <div>
+                    <Label>Designation</Label>
+                    <Input value={config.signatory_designation || ''} onChange={e => setConfig({ ...config, signatory_designation: e.target.value })} />
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
+            <DialogFooter className="mt-4">
               <Button variant="outline" onClick={() => setShowConfigDialog(false)}>Cancel</Button>
-              <Button onClick={handleSaveConfig} data-testid="save-config-btn">Save</Button>
+              <Button onClick={handleSaveConfig} className="bg-blue-700 hover:bg-blue-800" data-testid="save-config-btn">Save Settings</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
         {/* CANCEL DIALOG */}
         <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
-          <DialogContent className="max-w-md" data-testid="cancel-dialog">
+          <DialogContent className="max-w-md w-[95vw]" data-testid="cancel-dialog">
             <DialogHeader>
               <DialogTitle>Cancel Invoice {cancelTarget?.invoice_number}</DialogTitle>
               <DialogDescription>
@@ -924,7 +1073,7 @@ const GSTBilling = () => {
 
         {/* GENERATE FROM SALE DIALOG */}
         <Dialog open={showGenerateDialog} onOpenChange={setShowGenerateDialog}>
-          <DialogContent className="max-w-3xl" data-testid="generate-dialog">
+          <DialogContent className="max-w-3xl w-[95vw] max-h-[90vh] overflow-y-auto" data-testid="generate-dialog">
             <DialogHeader>
               <DialogTitle>Generate Invoice from Existing Sale</DialogTitle>
               <DialogDescription>
@@ -988,7 +1137,7 @@ const GSTBilling = () => {
         {/* INVOICE CREATE/EDIT DIALOG */}
         {invForm && (
           <Dialog open={showInvoiceDialog} onOpenChange={(o) => { setShowInvoiceDialog(o); if (!o) { setInvForm(null); setEditingInvoice(null); } }}>
-            <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto" data-testid="invoice-dialog">
+            <DialogContent className="max-w-5xl w-[95vw] max-h-[90vh] overflow-y-auto" data-testid="invoice-dialog">
               <DialogHeader>
                 <DialogTitle>{editingInvoice ? `Edit Invoice ${editingInvoice.invoice_number}` : 'New Manual Invoice'}</DialogTitle>
               </DialogHeader>
@@ -1151,86 +1300,228 @@ const GSTBilling = () => {
           </Dialog>
         )}
 
-        {/* VIEW INVOICE DIALOG */}
+        {/* VIEW INVOICE DIALOG - Print-Preview Style */}
         {viewingInvoice && (
           <Dialog open={showViewDialog} onOpenChange={(o) => { setShowViewDialog(o); if (!o) setViewingInvoice(null); }}>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="view-dialog">
-              <DialogHeader>
-                <DialogTitle>
-                  Invoice {viewingInvoice.invoice_number}
-                  {viewingInvoice.status === 'cancelled' && <Badge className="bg-red-100 text-red-700 ml-2">CANCELLED</Badge>}
-                </DialogTitle>
-              </DialogHeader>
-              <div className="space-y-3 text-sm">
-                <div className="grid grid-cols-2 gap-4 p-3 bg-slate-50 rounded">
-                  <div><span className="text-slate-500">Date:</span> <strong>{viewingInvoice.invoice_date}</strong></div>
-                  <div><span className="text-slate-500">FY:</span> <strong>{viewingInvoice.fy}</strong></div>
-                  <div><span className="text-slate-500">Customer:</span> <strong>{viewingInvoice.customer_name}</strong></div>
-                  <div><span className="text-slate-500">Phone:</span> <strong>{viewingInvoice.customer_phone || '-'}</strong></div>
-                  <div className="col-span-2"><span className="text-slate-500">Address:</span> <strong>{viewingInvoice.customer_address || '-'}</strong></div>
-                  <div><span className="text-slate-500">GSTIN:</span> <strong>{viewingInvoice.customer_gstin || '-'}</strong></div>
-                  <div><span className="text-slate-500">Tax Mode:</span> <strong>{viewingInvoice.tax_mode}</strong></div>
+            <DialogContent className="max-w-5xl w-[95vw] max-h-[92vh] overflow-y-auto p-0 print:max-w-full print:max-h-none print:overflow-visible" data-testid="view-dialog">
+              <div className="sticky top-0 z-10 bg-white border-b px-6 py-3 flex flex-wrap items-center justify-between gap-2 print:hidden">
+                <div>
+                  <DialogTitle className="text-base">
+                    Invoice {viewingInvoice.invoice_number}
+                    {viewingInvoice.status === 'cancelled' && <Badge className="bg-red-100 text-red-700 ml-2">CANCELLED</Badge>}
+                  </DialogTitle>
+                  <DialogDescription className="text-xs">Tax Invoice — Print preview</DialogDescription>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" onClick={() => window.print()} data-testid="view-print-btn">
+                    <FileText className="w-4 h-4 mr-1" /> Print
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => handlePdf(viewingInvoice)} data-testid="view-pdf-btn">
+                    <FileDown className="w-4 h-4 mr-1" /> Download PDF
+                  </Button>
+                  {viewingInvoice.status === 'active' && (
+                    <>
+                      <Button size="sm" variant="outline" onClick={() => { setShowViewDialog(false); openInvoiceDialog(viewingInvoice); }} data-testid="view-edit-btn">
+                        <Edit2 className="w-4 h-4 mr-1" /> Edit
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => { setShowViewDialog(false); setCancelTarget(viewingInvoice); setShowCancelDialog(true); }} data-testid="view-cancel-btn">
+                        <XCircle className="w-4 h-4 mr-1 text-red-600" /> Cancel
+                      </Button>
+                    </>
+                  )}
+                  <Button size="sm" onClick={() => { setShowViewDialog(false); setViewingInvoice(null); }}>Close</Button>
+                </div>
+              </div>
+
+              {/* Print-preview body */}
+              <div className="bg-white px-4 sm:px-8 py-6 print:px-0 print:py-0" id="invoice-print-area">
+                {/* Company header */}
+                <div className="flex flex-col sm:flex-row gap-4 items-start border-b-2 border-blue-700 pb-4">
+                  {config.company_logo_url && (
+                    <img src={config.company_logo_url} alt="logo" className="h-20 w-20 object-contain" onError={(e) => { e.target.style.display = 'none'; }} />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <h2 className="text-2xl font-bold text-blue-800 break-words">{config.company_name || 'K3 GAS SERVICE'}</h2>
+                    {config.company_tagline && <p className="text-xs italic text-slate-600">{config.company_tagline}</p>}
+                    {config.company_address && <p className="text-xs text-slate-700 mt-1 whitespace-pre-line">{config.company_address}</p>}
+                    <div className="text-xs text-slate-700 mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                      {config.company_phone && <span><strong>Phone:</strong> {config.company_phone}</span>}
+                      {config.company_email && <span><strong>Email:</strong> {config.company_email}</span>}
+                    </div>
+                    {config.company_gstin && (
+                      <p className="text-xs text-slate-700 mt-1">
+                        <strong>GSTIN:</strong> {config.company_gstin} &nbsp; <strong>State:</strong> {config.company_state} ({config.company_state_code})
+                      </p>
+                    )}
+                  </div>
                 </div>
 
-                <table className="w-full text-xs border">
-                  <thead className="bg-blue-700 text-white">
-                    <tr>
-                      <th className="p-2 text-left">Item</th>
-                      <th className="p-2 text-left">HSN</th>
-                      <th className="p-2 text-right">Qty</th>
-                      <th className="p-2 text-right">Rate</th>
-                      <th className="p-2 text-right">Taxable</th>
-                      <th className="p-2 text-right">GST%</th>
-                      <th className="p-2 text-right">CGST</th>
-                      <th className="p-2 text-right">SGST</th>
-                      <th className="p-2 text-right">IGST</th>
-                      <th className="p-2 text-right">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(viewingInvoice.line_items || []).map((li, idx) => (
-                      <tr key={idx} className="border-t">
-                        <td className="p-2">{li.item_name}</td>
-                        <td className="p-2 font-mono">{li.hsn}</td>
-                        <td className="p-2 text-right">{li.quantity}</td>
-                        <td className="p-2 text-right">{formatRs(li.rate)}</td>
-                        <td className="p-2 text-right">{formatRs(li.taxable_value)}</td>
-                        <td className="p-2 text-right">{li.gst_rate}%</td>
-                        <td className="p-2 text-right">{formatRs(li.cgst)}</td>
-                        <td className="p-2 text-right">{formatRs(li.sgst)}</td>
-                        <td className="p-2 text-right">{formatRs(li.igst)}</td>
-                        <td className="p-2 text-right font-semibold">{formatRs(li.line_total)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="bg-slate-100">
-                    <tr>
-                      <td colSpan="4" className="p-2 text-right font-semibold">TOTAL</td>
-                      <td className="p-2 text-right">{formatRs(viewingInvoice.sub_total)}</td>
-                      <td></td>
-                      <td className="p-2 text-right">{formatRs(viewingInvoice.total_cgst)}</td>
-                      <td className="p-2 text-right">{formatRs(viewingInvoice.total_sgst)}</td>
-                      <td className="p-2 text-right">{formatRs(viewingInvoice.total_igst)}</td>
-                      <td className="p-2 text-right font-bold text-blue-700">{formatRs(viewingInvoice.grand_total)}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-
-                {viewingInvoice.remarks && (
-                  <div className="text-xs"><strong>Remarks:</strong> {viewingInvoice.remarks}</div>
-                )}
                 {viewingInvoice.status === 'cancelled' && (
-                  <div className="text-xs text-red-600">
-                    <strong>Cancellation:</strong> {viewingInvoice.cancellation_reason || 'No reason given'} ({viewingInvoice.cancelled_at?.slice(0, 10)})
+                  <div className="bg-red-50 border border-red-300 text-red-700 text-center py-2 font-bold text-sm my-3">
+                    ** THIS INVOICE HAS BEEN CANCELLED **
                   </div>
                 )}
+
+                <div className="text-center my-3">
+                  <h3 className="text-lg font-bold text-blue-800 bg-blue-50 inline-block px-6 py-1 border border-blue-200 rounded">
+                    TAX INVOICE
+                  </h3>
+                </div>
+
+                {/* Meta + Customer */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 border border-slate-300 rounded text-xs">
+                  <div className="p-3 border-r border-slate-300">
+                    <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
+                      <strong>Invoice No:</strong><span className="break-all">{viewingInvoice.invoice_number}</span>
+                      <strong>Invoice Date:</strong><span>{viewingInvoice.invoice_date}</span>
+                      <strong>Place of Supply:</strong><span>{viewingInvoice.place_of_supply || config.place_of_supply || '-'}</span>
+                      <strong>Tax Mode:</strong><span>{viewingInvoice.tax_mode === 'intra_state' ? 'Intra-state (CGST+SGST)' : 'Inter-state (IGST)'}</span>
+                      <strong>Payment:</strong><span className="uppercase">{viewingInvoice.payment_mode || '-'}</span>
+                    </div>
+                  </div>
+                  <div className="p-3">
+                    <div className="font-semibold text-slate-500 text-[10px] uppercase mb-1">Bill To</div>
+                    <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
+                      <strong>Name:</strong><span className="break-words">{viewingInvoice.customer_name}</span>
+                      <strong>Address:</strong><span className="break-words">{viewingInvoice.customer_address || '-'}</span>
+                      <strong>Mobile:</strong><span>{viewingInvoice.customer_phone || '-'}</span>
+                      <strong>GSTIN:</strong><span>{viewingInvoice.customer_gstin || '-'}</span>
+                      <strong>Warehouse:</strong><span>{viewingInvoice.warehouse_name || '-'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Items table */}
+                <div className="overflow-x-auto mt-3 border border-slate-300 rounded">
+                  <table className="w-full text-[11px]">
+                    <thead className="bg-blue-700 text-white">
+                      <tr>
+                        <th className="p-2 text-center">#</th>
+                        <th className="p-2 text-left">Item Description</th>
+                        <th className="p-2 text-center">HSN</th>
+                        <th className="p-2 text-center">Unit</th>
+                        <th className="p-2 text-right">Qty</th>
+                        <th className="p-2 text-right">Rate</th>
+                        <th className="p-2 text-right">Taxable</th>
+                        {viewingInvoice.tax_mode === 'intra_state' ? (
+                          <>
+                            <th className="p-2 text-right">CGST</th>
+                            <th className="p-2 text-right">SGST</th>
+                          </>
+                        ) : (
+                          <th className="p-2 text-right">IGST</th>
+                        )}
+                        <th className="p-2 text-right">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(viewingInvoice.line_items || []).map((li, idx) => (
+                        <tr key={idx} className="border-t border-slate-200 align-top">
+                          <td className="p-2 text-center">{idx + 1}</td>
+                          <td className="p-2 break-words max-w-[260px]">{li.item_name}</td>
+                          <td className="p-2 text-center font-mono">{li.hsn}</td>
+                          <td className="p-2 text-center">{li.unit}</td>
+                          <td className="p-2 text-right">{li.quantity}</td>
+                          <td className="p-2 text-right">{Number(li.rate).toFixed(2)}</td>
+                          <td className="p-2 text-right">{Number(li.taxable_value).toFixed(2)}</td>
+                          {viewingInvoice.tax_mode === 'intra_state' ? (
+                            <>
+                              <td className="p-2 text-right">{Number(li.cgst).toFixed(2)} <span className="text-slate-400 text-[9px]">({li.gst_rate / 2}%)</span></td>
+                              <td className="p-2 text-right">{Number(li.sgst).toFixed(2)} <span className="text-slate-400 text-[9px]">({li.gst_rate / 2}%)</span></td>
+                            </>
+                          ) : (
+                            <td className="p-2 text-right">{Number(li.igst).toFixed(2)} <span className="text-slate-400 text-[9px]">({li.gst_rate}%)</span></td>
+                          )}
+                          <td className="p-2 text-right font-semibold">{Number(li.line_total).toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="bg-blue-50 font-semibold">
+                      <tr className="border-t-2 border-blue-300">
+                        <td colSpan={viewingInvoice.tax_mode === 'intra_state' ? 6 : 6} className="p-2 text-right">TOTAL</td>
+                        <td className="p-2 text-right">{Number(viewingInvoice.sub_total).toFixed(2)}</td>
+                        {viewingInvoice.tax_mode === 'intra_state' ? (
+                          <>
+                            <td className="p-2 text-right">{Number(viewingInvoice.total_cgst).toFixed(2)}</td>
+                            <td className="p-2 text-right">{Number(viewingInvoice.total_sgst).toFixed(2)}</td>
+                          </>
+                        ) : (
+                          <td className="p-2 text-right">{Number(viewingInvoice.total_igst).toFixed(2)}</td>
+                        )}
+                        <td className="p-2 text-right text-blue-800">{Number(viewingInvoice.grand_total).toFixed(2)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+
+                {/* Amount in Words + Summary */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+                  <div className="md:col-span-2 border border-slate-300 rounded p-3 text-xs">
+                    <strong>Amount in Words:</strong>{' '}
+                    <span className="italic">{amountInWords(viewingInvoice.grand_total)}</span>
+                  </div>
+                  <div className="border border-slate-300 rounded p-3 text-xs space-y-1">
+                    <div className="flex justify-between"><span>Sub Total:</span><strong>{formatRs(viewingInvoice.sub_total)}</strong></div>
+                    {viewingInvoice.tax_mode === 'intra_state' ? (
+                      <>
+                        <div className="flex justify-between"><span>CGST:</span><strong>{formatRs(viewingInvoice.total_cgst)}</strong></div>
+                        <div className="flex justify-between"><span>SGST:</span><strong>{formatRs(viewingInvoice.total_sgst)}</strong></div>
+                      </>
+                    ) : (
+                      <div className="flex justify-between"><span>IGST:</span><strong>{formatRs(viewingInvoice.total_igst)}</strong></div>
+                    )}
+                    <div className="flex justify-between"><span>Round Off:</span><strong>Rs. 0.00</strong></div>
+                    <div className="flex justify-between bg-blue-50 -mx-3 px-3 py-1 mt-2 font-bold text-blue-800 border-t border-blue-200">
+                      <span>Grand Total:</span><strong>{formatRs(viewingInvoice.grand_total)}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bank + Terms + Signatory */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3 text-xs">
+                  <div className="border border-slate-300 rounded p-3">
+                    <div className="font-bold text-slate-700 mb-1">Bank Details</div>
+                    {config.bank_name ? (
+                      <div className="space-y-0.5">
+                        <div><strong>Bank:</strong> {config.bank_name}</div>
+                        {config.bank_account_holder && <div><strong>A/c Holder:</strong> {config.bank_account_holder}</div>}
+                        {config.bank_account_no && <div><strong>A/c No:</strong> {config.bank_account_no}</div>}
+                        {config.bank_ifsc && <div><strong>IFSC:</strong> {config.bank_ifsc}</div>}
+                        {config.bank_branch && <div><strong>Branch:</strong> {config.bank_branch}</div>}
+                      </div>
+                    ) : <span className="text-slate-400 italic">Not configured (Settings → Bank)</span>}
+                  </div>
+                  <div className="border border-slate-300 rounded p-3">
+                    <div className="font-bold text-slate-700 mb-1">Terms &amp; Conditions</div>
+                    {config.terms_conditions ? (
+                      <div className="space-y-0.5 whitespace-pre-line text-[10px] text-slate-600">{config.terms_conditions}</div>
+                    ) : <span className="text-slate-400 italic">Not configured</span>}
+                    {viewingInvoice.remarks && (
+                      <div className="mt-2 pt-2 border-t border-slate-200">
+                        <strong>Remarks:</strong> {viewingInvoice.remarks}
+                      </div>
+                    )}
+                  </div>
+                  <div className="border border-slate-300 rounded p-3 flex flex-col items-end">
+                    <div className="text-slate-700 text-xs mb-1">For <strong>{config.company_name}</strong></div>
+                    <div className="h-14"></div>
+                    <div className="text-right">
+                      <div className="font-semibold">{config.signatory_name || '__________'}</div>
+                      <div className="italic text-slate-500 text-[10px]">{config.signatory_designation || 'Authorized Signatory'}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {viewingInvoice.status === 'cancelled' && (
+                  <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded p-2 mt-3">
+                    <strong>Cancellation:</strong> {viewingInvoice.cancellation_reason || 'No reason given'} · {viewingInvoice.cancelled_at?.slice(0, 10)} · by {viewingInvoice.cancelled_by_name || '-'}
+                  </div>
+                )}
+
+                <div className="text-center text-[9px] text-slate-400 mt-4 print:mt-2">
+                  Computer-generated invoice. Subject to {config.company_state || 'Arunachal Pradesh'} jurisdiction.
+                </div>
               </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => handlePdf(viewingInvoice)}>
-                  <FileDown className="w-4 h-4 mr-1" /> Download PDF
-                </Button>
-                <Button onClick={() => { setShowViewDialog(false); setViewingInvoice(null); }}>Close</Button>
-              </DialogFooter>
             </DialogContent>
           </Dialog>
         )}
@@ -1238,7 +1529,7 @@ const GSTBilling = () => {
         {/* ITEM DIALOG */}
         {editingItem && (
           <Dialog open={showItemDialog} onOpenChange={(o) => { setShowItemDialog(o); if (!o) setEditingItem(null); }}>
-            <DialogContent className="max-w-md" data-testid="item-dialog">
+            <DialogContent className="max-w-md w-[95vw] max-h-[90vh] overflow-y-auto" data-testid="item-dialog">
               <DialogHeader>
                 <DialogTitle>{editingItem.id ? 'Edit Item' : 'New Item'}</DialogTitle>
               </DialogHeader>
@@ -1277,7 +1568,7 @@ const GSTBilling = () => {
         {/* PLAN DIALOG */}
         {editingPlan && (
           <Dialog open={showPlanDialog} onOpenChange={(o) => { setShowPlanDialog(o); if (!o) setEditingPlan(null); }}>
-            <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto" data-testid="plan-dialog">
+            <DialogContent className="max-w-5xl w-[95vw] max-h-[90vh] overflow-y-auto" data-testid="plan-dialog">
               <DialogHeader>
                 <DialogTitle>{editingPlan.id ? `Edit Plan: ${editingPlan.name}` : 'New Connection Plan'}</DialogTitle>
                 <DialogDescription>Set unit prices for each item. Plans with all rates set will auto-itemize matching new-connection invoices.</DialogDescription>
