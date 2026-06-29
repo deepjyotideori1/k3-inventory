@@ -204,9 +204,10 @@ async def _build_hsn_summary(start_date, end_date):
         for li in inv.get("line_items", []):
             hsn = (li.get("hsn") or "").strip() or "—"
             unit = li.get("unit", "")
-            key = f"{hsn}|{unit}|{li.get('gst_rate', 0)}"
+            gst_rate_norm = float(li.get("gst_rate") or 0)
+            key = f"{hsn}|{unit}|{gst_rate_norm}"
             row = by_hsn.setdefault(key, {
-                "hsn": hsn, "unit": unit, "gst_rate": float(li.get("gst_rate") or 0),
+                "hsn": hsn, "unit": unit, "gst_rate": gst_rate_norm,
                 "quantity": 0, "taxable_value": 0, "cgst": 0, "sgst": 0, "igst": 0, "total_value": 0,
             })
             row["quantity"] += float(li.get("quantity") or 0)

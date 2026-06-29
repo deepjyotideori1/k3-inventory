@@ -1,0 +1,29 @@
+{
+  "summary": "RETEST of Phase B HSN Summary duplicate-row bug fix from iteration 48. Re-ran full pytest suite /app/backend/tests/test_gst_reports_phase_b.py — 38/38 PASSED (previously 37/38). The test_hsn_summary uniqueness assertion (key (hsn, unit, gst_rate) must not repeat) now passes. Live curl verification against /api/gst/reports/hsn_summary as admin confirms: 13 unique rows, 0 duplicates, HSN 271119 + Cylinder + 5% is now a SINGLE merged row with qty=8.0 / taxable_value=10190.48 / total_value=10700.0 (matching main agent's pre-test numbers exactly). All other 9 reports (daily_sales, monthly_sales, gst_report, item_wise, customer_wise, warehouse_wise, cancelled, payment_wise, tax_summary) continue to pass — no regressions. Excel and PDF exports for hsn_summary (and all 10 reports) still return 200 with valid xlsx/PDF magic bytes. Admin-only enforcement intact (jullang gets 401/403 on list/data/excel/pdf). Fix in /app/backend/routes/gst_reports.py line 207-210 verified: gst_rate is normalized via `float(li.get('gst_rate') or 0)` ONCE and reused in both the group key and the seeded row dict, eliminating the int/float key-mismatch.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_gst_reports_phase_b.py",
+    "/app/test_reports/pytest/pytest_gst_reports_phase_b.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Fix is minimal and correct — normalizes gst_rate ONCE to float and reuses for both dict key and seeded row, mirroring the pattern already used in _build_tax_summary. No further changes needed.",
+    "Consider applying the same defensive `float(... or 0)` normalization upstream in invoice line-item creation to avoid mixed int/float storage in MongoDB at the source (not blocking — current fix at read time is sufficient)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (38/38 pytest cases)", "frontend": "skipped (backend-only retest as per request)"},
+  "test_credentials": "admin@k3gas.com / Admin@123 (admin), jullang@k3gas.com / Jullang@123 (non-admin)",
+  "seed_data_creation": "None — reused existing 19 active invoices and gst_config seeded earlier.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase B GST Reports module is now fully green at 38/38. HSN Summary duplicate bug (iter 48) is RESOLVED. Test suite at /app/backend/tests/test_gst_reports_phase_b.py is reusable for future regression. Note: when running pytest directly without env, BASE_URL becomes empty and all tests error with MissingSchema — must export REACT_APP_BACKEND_URL or run via shell that has /app/frontend/.env loaded. Use: `REACT_APP_BACKEND_URL=$(grep REACT_APP_BACKEND_URL /app/frontend/.env | cut -d= -f2) python -m pytest backend/tests/test_gst_reports_phase_b.py`. Optional improvement: harden test by sourcing /app/frontend/.env in a conftest fixture so BASE_URL is auto-loaded.",
+  "rca of the issue": "Original RCA (iter 48): _build_hsn_summary built dict key with raw `li.get('gst_rate', 0)` while seeding row dict with normalized float — mixed int/float DB storage produced distinct keys '271119|Cylinder|5' vs '271119|Cylinder|5.0' that the user saw as duplicates of '5.0'. Fix applied (iter 49 verified): one-line normalization `gst_rate_norm = float(li.get('gst_rate') or 0)` computed before key construction and reused in both the key and the seeded dict. Verified via pytest assertion (no duplicate (hsn,unit,gst_rate) tuples) and live curl (13 unique rows, 271119/Cylinder/5% correctly merged)."
+}
