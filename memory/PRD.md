@@ -53,9 +53,20 @@ Route: `/gst-billing` (Admin only)
 - Default tax mode: intra_state (CGST+SGST) for Arunachal Pradesh
 
 ### Tests
-- Backend: 19/19 pytest cases pass (`/app/backend/tests/test_gst_billing.py`)
+- Backend: 19/19 + 14/14 (Connection Plans) pytest cases pass
 - Frontend: All flows verified by testing_agent_v3_fork
-- Iteration report: `/app/test_reports/iteration_43.json`
+- Iteration reports: `/app/test_reports/iteration_43.json`, `/app/test_reports/iteration_44.json`
+
+### Connection Plans (Added 2026-03-01)
+Imported from K3 Gas Service Excel "new connection plans with items details":
+- **11 default plans seeded**: 4 Domestic (single/double × with/without accessories) + 7 Commercial (1/2/3/4/6/10/15 cylinders)
+- Each plan: name, plan_type, connection_type, cylinder_count, has_accessories, items[{item_name, hsn, unit, quantity, gst_rate, unit_price}]
+- Admin sets `unit_price` per item via GST Billing → Connection Plans tab
+- **Auto-gen with plan**: When a NEW domestic/commercial connection sale is created AND the matching plan has all unit_prices set, the GST invoice is itemized using plan items (per Excel spec). Otherwise falls back to single-line invoice.
+- Plan matching: cylinder_count + has_accessories flag (domestic) / closest cylinder_count (commercial)
+- `has_accessories` checkbox added to Sales Entry form for new domestic connections — picks the right plan variant
+- Refills always single-line (unchanged)
+- Manual invoice dialog has "Load from Connection Plan..." dropdown that pre-fills line_items
 
 ---
 
