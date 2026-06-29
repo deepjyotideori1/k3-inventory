@@ -23,6 +23,42 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 
 ---
 
+
+---
+
+## GST BILLING DASHBOARD (Added 2026-02-29)
+
+Module: `/app/backend/routes/gst_billing.py` + `/app/frontend/src/pages/GSTBilling.jsx`
+Route: `/gst-billing` (Admin only)
+
+### Features
+- [x] Auto-generate GST tax invoice on every NEW LPG sale and accessory sale (sale amount treated as GST-inclusive)
+- [x] Manual "Generate from Sale" for legacy/old sales (no auto-backfill)
+- [x] Invoice format: `<PREFIX>/<FY>/<SEQ:0001>` e.g. `INV/2026-27/0001` - admin-editable prefix/suffix
+- [x] Indian FY sequence (Apr-Mar), auto-reset per FY, atomic via findOneAndUpdate
+- [x] Tax modes: Intra-state (CGST+SGST) for Arunachal Pradesh / Inter-state (IGST)
+- [x] Item Master with HSN codes (~14 default items: LPG, regulators, cookers, etc.)
+- [x] Full CRUD: View, Add, Edit, Cancel (with reason), Delete
+- [x] PDF invoice export (embeds company logo, full tax breakdown)
+- [x] Excel export with filters
+- [x] Search by invoice no/customer/phone, filter by status/bill-type/date range
+- [x] Summary dashboard: total invoices, active/cancelled count, total GST collected
+- [x] Admin-only access (both backend `require_admin` + frontend `adminOnly` route)
+
+### Business Rules (locked)
+- Sale amount is GST-INCLUSIVE: taxable = amount / (1 + gst_rate/100)
+- Cancelled invoices cannot be edited
+- Cancelled invoices stay in records (not deleted)
+- Customer GSTIN is invoice-only (not stored on customer master per user request)
+- Default tax mode: intra_state (CGST+SGST) for Arunachal Pradesh
+
+### Tests
+- Backend: 19/19 pytest cases pass (`/app/backend/tests/test_gst_billing.py`)
+- Frontend: All flows verified by testing_agent_v3_fork
+- Iteration report: `/app/test_reports/iteration_43.json`
+
+---
+
 ## COMPLETED FEATURES
 
 ### Authentication & Users

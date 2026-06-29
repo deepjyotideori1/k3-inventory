@@ -12,6 +12,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
 from io import BytesIO
 import uuid
+import re
 import logging
 
 from database import db
@@ -76,18 +77,24 @@ async def next_invoice_number(when: Optional[datetime] = None) -> str:
     await ensure_seed()
     when = when or datetime.now(timezone.utc)
     fy = fy_string(when)
-    cfg = await db.gst_config.find_one({"key": "gst_config"})
-    prefix = cfg.get("prefix") or "INV"
-    suffix = cfg.get("suffix") or ""
-    if cfg.get("current_fy") != fy:
-        await db.gst_config.update_one(
-            {"key": "gst_config"}, {"$set": {"current_fy": fy, "next_seq": 1}}
+    # Atomic: reset seq if FY changed, else just inc.
+    cfg = await db.gst_config.find_one_and_update(
+        {"key": "gst_config", "current_fy": fy},
+        {"$inc": {"next_seq": 1}},
+        return_document=False,
+    )
+    if not cfg:
+        # FY changed (or first run for this FY) - atomically reset
+        cfg = await db.gst_config.find_one_and_update(
+            {"key": "gst_config"},
+            {"$set": {"current_fy": fy, "next_seq": 2}},
+            return_document=False,
         )
         seq = 1
-        await db.gst_config.update_one({"key": "gst_config"}, {"$inc": {"next_seq": 1}})
     else:
         seq = int(cfg.get("next_seq") or 1)
-        await db.gst_config.update_one({"key": "gst_config"}, {"$inc": {"next_seq": 1}})
+    prefix = (cfg or {}).get("prefix") or "INV"
+    suffix = (cfg or {}).get("suffix") or ""
     suf_part = f"/{suffix}" if suffix else ""
     return f"{prefix}/{fy}/{seq:04d}{suf_part}"
 
@@ -548,7 +555,7 @@ async def _auto_generate_invoice(sale: dict, sale_type: str, user: dict) -> Opti
                     continue
                 # Look up GST rate from gst_items by name match, default 18%
                 gst_item = await db.gst_items.find_one(
-                    {"name": {"$regex": f"^{acc_name}", "$options": "i"}}, {"_id": 0}
+                    {"name": {"$regex": f"^{re.escape(acc_name)}", "$options": "i"}}, {"_id": 0}
                 )
                 gst_rate = float(gst_item.get("gst_rate") if gst_item else 18)
                 hsn = gst_item.get("hsn") if gst_item else "84812000"
