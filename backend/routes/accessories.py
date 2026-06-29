@@ -22,6 +22,8 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 import xlsxwriter
 
+from routes.gst_billing import auto_generate_invoice_from_sale
+
 router = APIRouter()
 
 # ============ LPG ACCESSORIES MANAGEMENT ============
@@ -558,6 +560,10 @@ async def create_accessory_sale(data: AccessorySaleCreate, user: dict = Depends(
     
     # Remove _id if present
     sale.pop('_id', None)
+    
+    # Auto-generate GST invoice (best-effort, non-blocking)
+    await auto_generate_invoice_from_sale(sale, 'accessory_sale', user)
+    
     return sale
 
 @router.get("/accessory-sales")

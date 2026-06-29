@@ -20,6 +20,8 @@ import xlsxwriter
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
+from routes.gst_billing import auto_generate_invoice_from_sale
+
 router = APIRouter()
 
 @router.get("/sales-entries")
@@ -234,6 +236,10 @@ async def create_sales_entry(
         await db.sales_entries.update_one({'id': entry_doc['id']}, {'$set': {'customer_id': new_cust['id']}})
         entry_doc['customer_id'] = new_cust['id']
     
+    # Auto-generate GST invoice (best-effort, non-blocking)
+    entry_doc['warehouse_name'] = warehouse_name
+    await auto_generate_invoice_from_sale(entry_doc, 'sales_entry', user)
+    
     return {
         **entry_doc,
         'warehouse_name': warehouse_name,
@@ -326,6 +332,10 @@ async def create_sales_entry_for_warehouse(
         # Link the sales entry to the new customer
         await db.sales_entries.update_one({'id': entry_doc['id']}, {'$set': {'customer_id': new_cust['id']}})
         entry_doc['customer_id'] = new_cust['id']
+    
+    # Auto-generate GST invoice (best-effort, non-blocking)
+    entry_doc['warehouse_name'] = warehouse['name']
+    await auto_generate_invoice_from_sale(entry_doc, 'sales_entry', user)
     
     return {
         **entry_doc,

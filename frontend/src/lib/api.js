@@ -677,4 +677,48 @@ export const sendBulkMessage = (data) => api.post('/messaging/send', data);
 export const getMessageLogs = (limit = 50) => api.get('/messaging/logs', { params: { limit } });
 export const getMessageLogDetail = (logId) => api.get(`/messaging/logs/${logId}`);
 
+// ============ GST BILLING ============
+
+export const getGstConfig = () => api.get('/gst/config');
+export const updateGstConfig = (data) => api.put('/gst/config', data);
+
+export const getGstItems = () => api.get('/gst/items');
+export const createGstItem = (data) => api.post('/gst/items', data);
+export const updateGstItem = (itemId, data) => api.put(`/gst/items/${itemId}`, data);
+export const deleteGstItem = (itemId) => api.delete(`/gst/items/${itemId}`);
+
+export const getGstInvoices = (params) => api.get('/gst/invoices', { params });
+export const getGstInvoice = (invoiceId) => api.get(`/gst/invoices/${invoiceId}`);
+export const createGstInvoice = (data) => api.post('/gst/invoices', data);
+export const updateGstInvoice = (invoiceId, data) => api.put(`/gst/invoices/${invoiceId}`, data);
+export const cancelGstInvoice = (invoiceId, reason) => api.post(`/gst/invoices/${invoiceId}/cancel`, { reason });
+export const deleteGstInvoice = (invoiceId) => api.delete(`/gst/invoices/${invoiceId}`);
+export const generateGstFromSale = (saleType, saleId) => api.post(`/gst/invoices/generate-from-sale/${saleType}/${saleId}`);
+export const getGstSummary = (params) => api.get('/gst/invoices/summary', { params });
+
+export const downloadGstInvoicePdf = async (invoiceId, invoiceNumber = '') => {
+  const response = await api.get(`/gst/invoices/${invoiceId}/pdf`, { responseType: 'blob' });
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const link = document.createElement('a');
+  link.href = url;
+  const safeNum = (invoiceNumber || invoiceId).replace(/\//g, '_');
+  link.setAttribute('download', `Invoice_${safeNum}.pdf`);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+};
+
+export const exportGstInvoicesExcel = async (params = {}) => {
+  const response = await api.get('/gst/invoices/export/excel', { params, responseType: 'blob' });
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', `GST_Invoices_${new Date().toISOString().split('T')[0]}.xlsx`);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+};
+
 export default api;

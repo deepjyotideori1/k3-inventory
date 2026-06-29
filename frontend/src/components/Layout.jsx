@@ -21,7 +21,8 @@ import {
   TrendingUp,
   ShoppingBag,
   ArrowLeftRight,
-  ScrollText
+  ScrollText,
+  Receipt
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
@@ -62,6 +63,7 @@ const Layout = ({ children }) => {
     { path: '/dealer-reports', label: 'Dealer Reports', icon: UserCheck },
     { path: '/accessory-reports', label: 'LPG Accessories', icon: Boxes },
     { path: '/accessory-sales', label: 'Accessory Sales', icon: ShoppingBag },
+    { path: '/gst-billing', label: 'GST Billing', icon: Receipt },
     { path: '/users', label: 'Users', icon: Users },
     { path: '/audit-logs', label: 'Audit Logs', icon: ScrollText },
     { path: '/settings', label: 'Settings', icon: Settings },
