@@ -1,0 +1,23 @@
+{
+  "summary": "VERIFIED BUG FIX: All 7 GST Billing dialogs now render at correct widths on desktop (1920x1080) — view-dialog=1024px, invoice-dialog=1024px, plan-dialog=1024px, config-dialog=768px, generate-dialog=768px, cancel-dialog=448px, item-dialog=448px. Bug was: Shadcn DialogContent base class `sm:max-w-lg` (512px) at sm: breakpoint was beating unprefixed `max-w-Xxl` overrides at viewports >=640px. Fix in GSTBilling.jsx (prefixing overrides with `sm:`) is working as designed. View Invoice dialog displays full TAX INVOICE preview: company header (TEST K3 GAS SERVICE, address, GSTIN, state Arunachal Pradesh), TAX INVOICE banner, Invoice meta block, BILL TO block, items table, totals row, Amount in Words box, Sub Total/CGST/SGST/Round Off/Grand Total Summary box, Bank Details, Terms & Conditions, Signatory (Test Admin / Director). Header action bar shows Print, Download PDF, Edit, Cancel, Close — all visible. Plan dialog (Single Commercial New Connection Plan) shows full plan items NOT truncated: Commercial LPG, Empty Cylinder Commercial 21 KG, Commercial Regulator, Hose Pipe 1.3 Mtr, Gas Card, Admin Charge — all columns HSN/Unit/Qty/Unit Price/GST%/Line Total visible. Responsive: At 1366x768, view-dialog and plan-dialog both 1024px wide, no horizontal page overflow (docW==winW=1366). At 375x667 mobile, view-dialog ~356px (uses `inset-x-4` base, vw-32 ≈ 343-356px), no page horizontal overflow (docW==winW=375). dialog.jsx base `overflow-x-hidden` correctly clips wide invoice content inside the mobile dialog. No regression to other GST Billing flows: invoice list still renders 19 invoices, Connection Plans tab loads 12 plans, Item Master loads. Login + navigation to /gst-billing as admin@k3gas.com works.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PRE-EXISTING (not caused by this fix) React hydration warning observed in console at /gst-billing: `<span>` cannot be a child of `<tbody>` and `<tr>` cannot be a child of `<span>`. Source: a `<span data-ve-dynamic='true' style={{display:'contents'}}>` wrapper inserted between `<tbody>` and `<tr>` (auto-generated dynamic wrapper). Cosmetic/dev-only warning — does not affect render. Main agent may want to address with a proper Fragment or refactor in a future cleanup pass.",
+    "Width-override fix is minimal and correct: GSTBilling.jsx uses `w-[95vw] sm:max-w-Xxl` pattern across all 7 dialogs. `w-[95vw]` and `sm:max-w-Xxl` interact correctly with Shadcn's `sm:w-full sm:max-w-lg` base — tailwind-merge in `cn()` dedupes the conflicting sm:max-w-* class and our prefix wins."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only task)", "frontend": "100% (7/7 dialog widths correct on desktop, 1366 and 375 viewports verified, no horizontal overflow)"},
+  "test_credentials": "admin@k3gas.com / Admin@123 (Master Admin) - confirmed working",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Width fix verified end-to-end via Playwright bounding-box measurements at viewports 1920/1366/375. Dialog data-testids: view-dialog, plan-dialog, invoice-dialog, config-dialog, generate-dialog, cancel-dialog, item-dialog. Action button order in invoice row (first 5 buttons): [0]=View(eye), [1]=Print, [2]=Edit, [3]=Cancel(XCircle), [4]=Delete. Action buttons in plan/item rows: [0]=Edit, [1]=Delete. Login redirect: admin->/select-dashboard, then navigate to /gst-billing directly.",
+  "rca of the issue": "Original bug RCA was correct: Shadcn's DialogContent base has `sm:w-full sm:max-w-lg` (512px) at the `sm:` breakpoint (>=640px). When override className contained unprefixed `max-w-5xl`, the tailwind-merge utility used by cn() could not detect the conflict (different breakpoint specificity) and both classes were emitted; at viewports >=640px the `sm:max-w-lg` (more specific) won, capping dialog at 512px. Fix: prefix all overrides with `sm:max-w-Xxl` so tailwind-merge correctly detects the same-breakpoint class collision and keeps only the override (since it appears later in the className string). Verified via bounding-box width measurements: all dialogs now render at intended widths."
+}

@@ -890,7 +890,7 @@ const GSTBilling = () => {
 
         {/* SETTINGS DIALOG */}
         <Dialog open={showConfigDialog} onOpenChange={setShowConfigDialog}>
-          <DialogContent className="max-w-3xl w-[95vw] max-h-[90vh] overflow-y-auto" data-testid="config-dialog">
+          <DialogContent className="w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-y-auto" data-testid="config-dialog">
             <DialogHeader>
               <DialogTitle>GST Billing Settings</DialogTitle>
               <DialogDescription>
@@ -1051,7 +1051,7 @@ const GSTBilling = () => {
 
         {/* CANCEL DIALOG */}
         <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
-          <DialogContent className="max-w-md w-[95vw]" data-testid="cancel-dialog">
+          <DialogContent className="w-[95vw] sm:max-w-md" data-testid="cancel-dialog">
             <DialogHeader>
               <DialogTitle>Cancel Invoice {cancelTarget?.invoice_number}</DialogTitle>
               <DialogDescription>
@@ -1073,7 +1073,7 @@ const GSTBilling = () => {
 
         {/* GENERATE FROM SALE DIALOG */}
         <Dialog open={showGenerateDialog} onOpenChange={setShowGenerateDialog}>
-          <DialogContent className="max-w-3xl w-[95vw] max-h-[90vh] overflow-y-auto" data-testid="generate-dialog">
+          <DialogContent className="w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-y-auto" data-testid="generate-dialog">
             <DialogHeader>
               <DialogTitle>Generate Invoice from Existing Sale</DialogTitle>
               <DialogDescription>
@@ -1137,7 +1137,7 @@ const GSTBilling = () => {
         {/* INVOICE CREATE/EDIT DIALOG */}
         {invForm && (
           <Dialog open={showInvoiceDialog} onOpenChange={(o) => { setShowInvoiceDialog(o); if (!o) { setInvForm(null); setEditingInvoice(null); } }}>
-            <DialogContent className="max-w-5xl w-[95vw] max-h-[90vh] overflow-y-auto" data-testid="invoice-dialog">
+            <DialogContent className="w-[95vw] sm:max-w-5xl max-h-[90vh] overflow-y-auto" data-testid="invoice-dialog">
               <DialogHeader>
                 <DialogTitle>{editingInvoice ? `Edit Invoice ${editingInvoice.invoice_number}` : 'New Manual Invoice'}</DialogTitle>
               </DialogHeader>
@@ -1303,7 +1303,7 @@ const GSTBilling = () => {
         {/* VIEW INVOICE DIALOG - Print-Preview Style */}
         {viewingInvoice && (
           <Dialog open={showViewDialog} onOpenChange={(o) => { setShowViewDialog(o); if (!o) setViewingInvoice(null); }}>
-            <DialogContent className="max-w-5xl w-[95vw] max-h-[92vh] overflow-y-auto p-0 print:max-w-full print:max-h-none print:overflow-visible" data-testid="view-dialog">
+            <DialogContent className="w-[95vw] sm:max-w-5xl max-h-[92vh] overflow-y-auto p-0 print:max-w-full print:max-h-none print:overflow-visible" data-testid="view-dialog">
               <div className="sticky top-0 z-10 bg-white border-b px-6 py-3 flex flex-wrap items-center justify-between gap-2 print:hidden">
                 <div>
                   <DialogTitle className="text-base">
@@ -1529,7 +1529,7 @@ const GSTBilling = () => {
         {/* ITEM DIALOG */}
         {editingItem && (
           <Dialog open={showItemDialog} onOpenChange={(o) => { setShowItemDialog(o); if (!o) setEditingItem(null); }}>
-            <DialogContent className="max-w-md w-[95vw] max-h-[90vh] overflow-y-auto" data-testid="item-dialog">
+            <DialogContent className="w-[95vw] sm:max-w-md max-h-[90vh] overflow-y-auto" data-testid="item-dialog">
               <DialogHeader>
                 <DialogTitle>{editingItem.id ? 'Edit Item' : 'New Item'}</DialogTitle>
               </DialogHeader>
@@ -1568,7 +1568,7 @@ const GSTBilling = () => {
         {/* PLAN DIALOG */}
         {editingPlan && (
           <Dialog open={showPlanDialog} onOpenChange={(o) => { setShowPlanDialog(o); if (!o) setEditingPlan(null); }}>
-            <DialogContent className="max-w-5xl w-[95vw] max-h-[90vh] overflow-y-auto" data-testid="plan-dialog">
+            <DialogContent className="w-[95vw] sm:max-w-5xl max-h-[90vh] overflow-y-auto" data-testid="plan-dialog">
               <DialogHeader>
                 <DialogTitle>{editingPlan.id ? `Edit Plan: ${editingPlan.name}` : 'New Connection Plan'}</DialogTitle>
                 <DialogDescription>Set unit prices for each item. Plans with all rates set will auto-itemize matching new-connection invoices.</DialogDescription>
