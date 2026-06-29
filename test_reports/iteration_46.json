@@ -1,0 +1,26 @@
+{
+  "summary": "Login bug-reproduction task: VERIFIED LOGIN WORKS END-TO-END FOR ALL 4 CREDENTIAL TIERS. Backend curl: POST /api/auth/login returns 200 + valid JWT for admin@k3gas.com (role=admin), hr@k3gas.com (role=hr_admin), jullang@k3gas.com (role=warehouse_manager, warehouse=Jullang), hollongi@k3gas.com (role=warehouse_manager, warehouse=Plant Hollongi). Wrong password returns 401 'Invalid credentials'. Non-existent email returns 401 'Invalid credentials' (NOT 500). JWT decoded payload has user_id/email/role/exp. Token accepted by admin-only endpoints: /api/gst/config (200), /api/gst/items (200), /api/gst/plans (200), /api/users (200), /api/warehouses (200). CORS preflight OPTIONS /api/auth/login returns 204 with access-control-allow-origin:* and POST/PUT/DELETE allowed methods. Frontend (https://unified-checkout-8.preview.emergentagent.com/login): page renders correctly, form data-testid=email-input + password input + button[type=submit] all present. Admin login: POST observed in network -> 200 -> redirected to /select-dashboard, k3gas_token + k3gas_user persisted in localStorage. HR login -> redirected to /hrms. Jullang manager -> /manager-dashboard with warehouse=Jullang. Hollongi plant manager -> /manager-dashboard with warehouse=Plant Hollongi. Wrong password -> stays on /login, no token stored, /api/auth/login returns 401. REACT_APP_BACKEND_URL in /app/frontend/.env (https://unified-checkout-8.preview.emergentagent.com) matches the URL frontend is calling. CONCLUSION: No login regression. User-reported 'preview login error' is almost certainly stale browser cache/old preview URL on user side.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "INFORM USER: Login is verified working for all 4 credential tiers (admin/hr/jullang/hollongi). Issue is almost certainly stale browser cache on the user's previous preview URL. Ask user to: (a) hard-refresh (Ctrl+Shift+R / Cmd+Shift+R), (b) clear localStorage for the preview domain, (c) confirm they are using the current URL https://unified-checkout-8.preview.emergentagent.com (not an older preview URL from previous iteration)."
+  ],
+  "critical_code_review_comments": [
+    "Login.jsx uses sonner toast.success/toast.error for feedback - working as expected. The data-testid='login-error' inline error banner only renders when state.error is truthy; on wrong password it appears briefly and clears on next form interaction - this is acceptable UX.",
+    "Token stored under localStorage key 'k3gas_token' (not 'token') and user under 'k3gas_user' - any docs/test helpers must use these exact keys.",
+    "Phase A changes (gst_config, num2words, View Invoice dialog, Settings dialog tabs, print CSS, Receipt icon import) are confirmed isolated - they did NOT touch any auth code path. /api/auth/login flow is intact."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (4/4 valid logins, 2/2 negative tests, 5/5 protected endpoints, CORS OK)", "frontend": "100% (4/4 tier logins redirect correctly, wrong-password rejected)"},
+  "test_credentials": "All 4 verified working: admin@k3gas.com/Admin@123 -> /select-dashboard, hr@k3gas.com/Hr@123 -> /hrms, jullang@k3gas.com/Jullang@123 -> /manager-dashboard, hollongi@k3gas.com/Hollongi@123 -> /manager-dashboard",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Login is fully working on https://unified-checkout-8.preview.emergentagent.com. JWT stored in localStorage under keys 'k3gas_token' and 'k3gas_user' (NOT 'token'/'user'). Sign-in button selector: button[type='submit'] with data-testid email-input. Login redirects: admin->/select-dashboard, hr_admin->/hrms, warehouse_manager->/manager-dashboard. Backend JWT payload: {user_id, email, role, exp}. exp is ~30 days. Any future test should use these keys & redirect targets.",
+  "rca of the issue": "User reported 'unable to preview login .. login error'. RCA: NO server-side or frontend defect reproducible on current build. Tested exhaustively: (a) 4/4 valid credential tiers succeed via curl AND via Playwright UI flow on the current REACT_APP_BACKEND_URL; (b) Wrong password & non-existent email correctly return 401 (not 500); (c) JWT is valid and accepted by protected endpoints; (d) CORS headers correct; (e) Phase A code changes confirmed not to touch auth path. The most likely cause for the user's symptom is stale browser cache or use of an older preview URL. Mitigation: instruct user to hard-refresh, clear localStorage/cookies for the preview domain, and confirm they are using https://unified-checkout-8.preview.emergentagent.com (the current REACT_APP_BACKEND_URL)."
+}
