@@ -422,9 +422,12 @@ async def validate_sale_discrepancy(sale: dict, sale_type: str) -> dict:
         return discrepancy_payload(None, 0.0)
 
     if sale_type == "sales_entry":
-        ct = sale.get("connection_type", "")
+        ct = (sale.get("connection_type") or "").lower()
         is_refill = "refill" in ct
         is_commercial = "commercial" in ct
+        # NOTE: A bare connection_type like 'domestic' (no '_refill' suffix) is
+        # treated as a new-connection sale by design — matches the SalesDashboard
+        # form layout where Refill flows always set 'domestic_refill' / 'commercial_refill'.
         # Plan-based: only for new connections
         plan_id = sale.get("connection_plan_id")
         if plan_id and not is_refill:

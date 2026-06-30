@@ -763,3 +763,40 @@ Per user instruction, TDS is **never calculated by default**. Each employee's pa
 - No regressions found.
 
 *Last Updated: June 30, 2026 — Hydration / Branded Exports / Refactor*
+
+---
+
+## Session — June 30, 2026 — Amount Mismatch & Discrepancy Invoice Detection ✅
+
+**Feature**: System now auto-validates entered sales amounts against the configured rate (Connection Plan → Item Master fallback). Mismatch >₹1 is HARD BLOCKED until the user provides a justification. The invoice is then saved as a "Discrepancy Invoice" pending admin review.
+
+### Backend
+- `/app/backend/routes/gst_billing.py`:
+  - `DISCREPANCY_TOLERANCE = 1.0`, `compute_expected_amount(payload)`, `discrepancy_payload(expected, actual)`, `validate_sale_discrepancy(sale, sale_type)`.
+  - `POST /api/gst/invoices` and `PUT /api/gst/invoices/{id}` now raise HTTP 400 `{code: 'discrepancy_requires_reason', expected_amount, actual_amount, discrepancy_amount}` when amount mismatches and no `discrepancy_reason` is supplied.
+  - `GET  /api/gst/discrepancies` (filter `?status=pending|approved|rejected|corrected|all`) — returns `{rows, summary}` with counts + total net difference.
+  - `POST /api/gst/discrepancies/{id}/review` (action: approve/reject + note) — full audit log.
+  - `POST /api/gst/discrepancies/{id}/correct` — admin edits line_items; status flips to `corrected` if mismatch resolved.
+  - `auto_generate_invoice_from_sale` propagates `sale.discrepancy_reason` to the auto-created invoice.
+- `/app/backend/routes/gst_reports.py`: new `discrepancy_invoices` report type with 11 columns (Invoice #, Date, Customer, Type, Expected, Actual, Difference, Reason, Status, Reviewed By, Review Note) + summary tiles.
+- `/app/backend/routes/sales.py` (both endpoints) + `/app/backend/routes/accessories.py`: call `validate_sale_discrepancy` before insert; same hard-block rule applies; `discrepancy_reason` field added to `SalesEntryCreate` + `AccessorySaleCreate`.
+
+### Frontend
+- `/app/frontend/src/pages/GSTBilling.jsx`:
+  - **New "Discrepancies" tab** (data-testid `tab-discrepancies`) between Invoices and Reports — 5 summary tiles, status filter, refresh, table with Approve/Reject/Correct actions per row.
+  - **Discrepancy-reason dialog** (data-testid `discrepancy-reason-dialog`) auto-opens when invoice save returns the 400. Shows Expected/Entered/Difference + reason textarea; save disabled until reason provided.
+  - **Discrepancy-review dialog** (data-testid `discrepancy-review-dialog`) for approve/reject with optional / required note respectively.
+  - **Discrepancy badge** appears on invoice rows in the Invoices tab.
+- `/app/frontend/src/pages/SalesDashboard.jsx`: mirror dialog (data-testid `sales-discrepancy-dialog`) triggered when add-sale returns the 400.
+- `/app/frontend/src/lib/api.js`: `listGstDiscrepancies`, `reviewGstDiscrepancy`, `correctGstDiscrepancy`.
+
+### Testing — `/app/test_reports/iteration_55.json`
+- Backend pytest: **71/71 GST tests pass** (8 new in `test_discrepancy_invoices.py` + 4 in `test_discrepancy_extras.py` + 59 pre-existing regression).
+- Frontend Playwright: end-to-end discrepancy create → list → approve flow verified; all testids resolved.
+- **No regressions.**
+
+### Pre-Deployment Cleanup (post-test)
+- Hard-deleted 46 test invoices, 16 test sales entries, 73 test items + history. 15 production items + 11 plans remain.
+
+*Last Updated: June 30, 2026 — Discrepancy Detection*
+
