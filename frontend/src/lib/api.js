@@ -687,6 +687,28 @@ export const createGstItem = (data) => api.post('/gst/items', data);
 export const updateGstItem = (itemId, data) => api.put(`/gst/items/${itemId}`, data);
 export const deleteGstItem = (itemId) => api.delete(`/gst/items/${itemId}`);
 export const activateGstItem = (itemId) => api.post(`/gst/items/${itemId}/activate`);
+export const downloadGstItemTemplate = async () => {
+  const response = await api.get('/gst/items/template/excel', { responseType: 'blob' });
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', 'ItemMaster_BulkTemplate.xlsx');
+  document.body.appendChild(link); link.click(); link.remove();
+  window.URL.revokeObjectURL(url);
+};
+export const bulkUploadGstItems = (formData) => api.post('/gst/items/bulk-upload', formData, {
+  headers: { 'Content-Type': 'multipart/form-data' },
+});
+export const getGstItemHistory = (params) => api.get('/gst/items/history', { params });
+export const downloadGstItemHistoryExcel = async (params = {}) => {
+  const response = await api.get('/gst/items/history/excel', { params, responseType: 'blob' });
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', `Item_Rate_History_${new Date().toISOString().split('T')[0]}.xlsx`);
+  document.body.appendChild(link); link.click(); link.remove();
+  window.URL.revokeObjectURL(url);
+};
 
 export const getGstPlans = () => api.get('/gst/plans');
 export const getGstPlan = (planId) => api.get(`/gst/plans/${planId}`);
