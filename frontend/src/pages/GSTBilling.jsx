@@ -17,7 +17,8 @@ import { Textarea } from '../components/ui/textarea';
 import { toast } from 'sonner';
 import {
   Receipt, Search, Plus, FileDown, FileSpreadsheet, Settings as SettingsIcon,
-  Edit2, XCircle, Trash2, Eye, RefreshCw, ChevronLeft, ChevronRight, FileText, AlertCircle
+  Edit2, XCircle, Trash2, Eye, RefreshCw, ChevronLeft, ChevronRight, FileText, AlertCircle,
+  Upload, History
 } from 'lucide-react';
 import {
   getGstInvoices, getGstSummary, getGstConfig, updateGstConfig,
@@ -26,7 +27,9 @@ import {
   listGstReports, getGstReport, exportGstReportExcel, exportGstReportPdf,
   createGstInvoice, updateGstInvoice, cancelGstInvoice, deleteGstInvoice,
   generateGstFromSale, downloadGstInvoicePdf, exportGstInvoicesExcel,
-  getSalesEntries, getAccessorySales
+  getSalesEntries, getAccessorySales,
+  downloadGstItemTemplate, bulkUploadGstItems,
+  getGstItemHistory, downloadGstItemHistoryExcel
 } from '../lib/api';
 
 const formatRs = (n) => {
@@ -105,6 +108,19 @@ const GSTBilling = () => {
   const [editingItem, setEditingItem] = useState(null);
   const [showPlanDialog, setShowPlanDialog] = useState(false);
   const [editingPlan, setEditingPlan] = useState(null);
+
+  // Bulk upload + history
+  const [showBulkUploadDialog, setShowBulkUploadDialog] = useState(false);
+  const [bulkFile, setBulkFile] = useState(null);
+  const [bulkEffectiveFrom, setBulkEffectiveFrom] = useState(todayISO());
+  const [bulkUploading, setBulkUploading] = useState(false);
+  const [bulkResult, setBulkResult] = useState(null);
+  const [showHistoryDialog, setShowHistoryDialog] = useState(false);
+  const [histItemId, setHistItemId] = useState('all');
+  const [histStart, setHistStart] = useState('');
+  const [histEnd, setHistEnd] = useState('');
+  const [historyRows, setHistoryRows] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   // Reports state
   const [reportsList, setReportsList] = useState([]);
@@ -538,6 +554,80 @@ const GSTBilling = () => {
     } catch (e) {
       toast.error('Failed to reactivate');
     }
+  };
+
+  // ---- Bulk Update / Rate History ----
+  const handleDownloadTemplate = async () => {
+    try {
+      await downloadGstItemTemplate();
+      toast.success('Template downloaded');
+    } catch (e) {
+      toast.error('Failed to download template');
+    }
+  };
+
+  const handleBulkUpload = async () => {
+    if (!bulkFile) {
+      toast.error('Pick an Excel or CSV file');
+      return;
+    }
+    setBulkUploading(true);
+    setBulkResult(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', bulkFile);
+      fd.append('effective_from', bulkEffectiveFrom || '');
+      const res = await bulkUploadGstItems(fd);
+      const data = res?.data || res;
+      setBulkResult(data);
+      toast.success(`Bulk done — Created: ${data.created}, Updated: ${data.updated}, Skipped: ${data.skipped}`);
+      loadItems();
+      loadPlans();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Bulk upload failed');
+    } finally {
+      setBulkUploading(false);
+    }
+  };
+
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const params = {};
+      if (histItemId && histItemId !== 'all') params.item_id = histItemId;
+      if (histStart) params.start_date = histStart;
+      if (histEnd) params.end_date = histEnd;
+      const res = await getGstItemHistory(params);
+      const rows = res?.data?.rows || res?.rows || [];
+      setHistoryRows(rows);
+    } catch (e) {
+      toast.error('Failed to load history');
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [histItemId, histStart, histEnd]);
+
+  const handleDownloadHistoryExcel = async () => {
+    try {
+      const params = {};
+      if (histItemId && histItemId !== 'all') params.item_id = histItemId;
+      if (histStart) params.start_date = histStart;
+      if (histEnd) params.end_date = histEnd;
+      await downloadGstItemHistoryExcel(params);
+      toast.success('History downloaded');
+    } catch (e) {
+      toast.error('Failed to download history');
+    }
+  };
+
+  const openHistoryDialog = () => {
+    setShowHistoryDialog(true);
+    setHistItemId('all');
+    setHistStart('');
+    setHistEnd('');
+    setHistoryRows([]);
+    // initial load with no filters
+    setTimeout(() => loadHistory(), 50);
   };
 
   // ---- Connection Plans ----
@@ -1051,11 +1141,22 @@ const GSTBilling = () => {
           {/* ITEM MASTER TAB */}
           <TabsContent value="items">
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
+              <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
                 <CardTitle className="text-base">Item Master (HSN + GST Rates)</CardTitle>
-                <Button size="sm" onClick={() => { setEditingItem({ name: '', hsn: '', unit: 'Nos', gst_rate: 18, default_rate: 0 }); setShowItemDialog(true); }} data-testid="add-item-btn">
-                  <Plus className="w-4 h-4 mr-1" /> Add Item
-                </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button size="sm" variant="outline" onClick={handleDownloadTemplate} data-testid="download-template-btn">
+                    <FileSpreadsheet className="w-4 h-4 mr-1" /> Download Template
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => { setBulkFile(null); setBulkResult(null); setBulkEffectiveFrom(todayISO()); setShowBulkUploadDialog(true); }} data-testid="bulk-upload-btn">
+                    <Upload className="w-4 h-4 mr-1" /> Bulk Upload
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={openHistoryDialog} data-testid="rate-history-btn">
+                    <History className="w-4 h-4 mr-1" /> Rate History
+                  </Button>
+                  <Button size="sm" onClick={() => { setEditingItem({ name: '', hsn: '', unit: 'Nos', gst_rate: 18, default_rate: 0 }); setShowItemDialog(true); }} data-testid="add-item-btn">
+                    <Plus className="w-4 h-4 mr-1" /> Add Item
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="p-0">
                 <table className="w-full text-sm">
@@ -1967,6 +2068,179 @@ const GSTBilling = () => {
             </DialogContent>
           </Dialog>
         )}
+
+        {/* BULK UPLOAD DIALOG */}
+        <Dialog open={showBulkUploadDialog} onOpenChange={setShowBulkUploadDialog}>
+          <DialogContent className="sm:max-w-2xl" data-testid="bulk-upload-dialog">
+            <DialogHeader>
+              <DialogTitle>Bulk Update Item Master</DialogTitle>
+              <DialogDescription>
+                Upload the filled Excel/CSV template. Existing rows (with id) are updated, blank-id rows are created. Rate changes are recorded in history with the effective date below.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="bulk-file">Excel / CSV File</Label>
+                  <Input
+                    id="bulk-file"
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    onChange={(e) => setBulkFile(e.target.files?.[0] || null)}
+                    data-testid="bulk-upload-file"
+                  />
+                  {bulkFile && <p className="text-xs text-slate-500 mt-1">{bulkFile.name} • {(bulkFile.size / 1024).toFixed(1)} KB</p>}
+                </div>
+                <div>
+                  <Label htmlFor="bulk-eff-from">Effective From (default)</Label>
+                  <Input
+                    id="bulk-eff-from"
+                    type="date"
+                    value={bulkEffectiveFrom}
+                    onChange={(e) => setBulkEffectiveFrom(e.target.value)}
+                    data-testid="bulk-upload-effective-from"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">Applied to rows where effective_from column is blank.</p>
+                </div>
+              </div>
+
+              <div className="bg-slate-50 border rounded p-3 text-xs space-y-1">
+                <p className="font-medium text-slate-700">Template columns:</p>
+                <p className="text-slate-600">id (blank = create), name, hsn, unit, gst_rate, default_rate, is_active (active/inactive), effective_from (YYYY-MM-DD, optional)</p>
+                <Button size="sm" variant="link" className="px-0 h-auto" onClick={handleDownloadTemplate} data-testid="bulk-download-template-link">
+                  Download a pre-filled template →
+                </Button>
+              </div>
+
+              {bulkResult && (
+                <div className="border rounded p-3 text-sm" data-testid="bulk-upload-result">
+                  <p className="font-medium mb-2">Result</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
+                    <Badge className="bg-green-100 text-green-700">Created: {bulkResult.created}</Badge>
+                    <Badge className="bg-blue-100 text-blue-700">Updated: {bulkResult.updated}</Badge>
+                    <Badge className="bg-amber-100 text-amber-700">Rate changes: {bulkResult.rate_changes}</Badge>
+                    <Badge variant="outline">Skipped: {bulkResult.skipped}</Badge>
+                  </div>
+                  {bulkResult.errors?.length > 0 && (
+                    <div className="max-h-32 overflow-y-auto text-xs">
+                      <p className="text-red-700 font-medium mb-1">Errors:</p>
+                      <ul className="list-disc list-inside text-red-600 space-y-0.5">
+                        {bulkResult.errors.slice(0, 20).map((er, i) => (
+                          <li key={i}>Row {er.row}: {er.error}</li>
+                        ))}
+                        {bulkResult.errors.length > 20 && <li>... and {bulkResult.errors.length - 20} more</li>}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowBulkUploadDialog(false)} data-testid="bulk-upload-cancel">Close</Button>
+              <Button
+                onClick={handleBulkUpload}
+                disabled={!bulkFile || bulkUploading}
+                className="bg-blue-700 hover:bg-blue-800"
+                data-testid="bulk-upload-submit"
+              >
+                {bulkUploading ? 'Uploading…' : 'Upload & Apply'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* RATE HISTORY DIALOG */}
+        <Dialog open={showHistoryDialog} onOpenChange={setShowHistoryDialog}>
+          <DialogContent className="sm:max-w-5xl" data-testid="rate-history-dialog">
+            <DialogHeader>
+              <DialogTitle>Item Rate History</DialogTitle>
+              <DialogDescription>
+                Read-only audit of rate / status / GST changes. Historical invoices are unaffected by future rate updates.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div>
+                  <Label>Item</Label>
+                  <Select value={histItemId} onValueChange={setHistItemId}>
+                    <SelectTrigger data-testid="history-item-filter"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All items</SelectItem>
+                      {items.map(it => (
+                        <SelectItem key={it.id} value={it.id}>{it.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>From</Label>
+                  <Input type="date" value={histStart} onChange={(e) => setHistStart(e.target.value)} data-testid="history-start-date" />
+                </div>
+                <div>
+                  <Label>To</Label>
+                  <Input type="date" value={histEnd} onChange={(e) => setHistEnd(e.target.value)} data-testid="history-end-date" />
+                </div>
+                <div className="flex items-end gap-2">
+                  <Button variant="outline" onClick={loadHistory} disabled={historyLoading} data-testid="history-apply-filter">
+                    <RefreshCw className="w-4 h-4 mr-1" /> Apply
+                  </Button>
+                  <Button onClick={handleDownloadHistoryExcel} className="bg-emerald-700 hover:bg-emerald-800" data-testid="history-download-excel">
+                    <FileSpreadsheet className="w-4 h-4 mr-1" /> Excel
+                  </Button>
+                </div>
+              </div>
+
+              <div className="border rounded max-h-[55vh] overflow-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50 border-b sticky top-0">
+                    <tr>
+                      <th className="text-left p-2 font-medium">Item</th>
+                      <th className="text-left p-2 font-medium">HSN</th>
+                      <th className="text-right p-2 font-medium">Prev Rate</th>
+                      <th className="text-right p-2 font-medium">New Rate</th>
+                      <th className="text-right p-2 font-medium">GST %</th>
+                      <th className="text-center p-2 font-medium">Status</th>
+                      <th className="text-left p-2 font-medium">Effective From</th>
+                      <th className="text-left p-2 font-medium">Updated By</th>
+                      <th className="text-left p-2 font-medium">Reason</th>
+                      <th className="text-left p-2 font-medium">Updated At</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historyLoading && (
+                      <tr><td colSpan="10" className="text-center p-4 text-slate-500">Loading…</td></tr>
+                    )}
+                    {!historyLoading && historyRows.length === 0 && (
+                      <tr><td colSpan="10" className="text-center p-4 text-slate-500">No history found for the selected filters.</td></tr>
+                    )}
+                    {!historyLoading && historyRows.map((r, i) => (
+                      <tr key={i} className="border-b hover:bg-slate-50" data-testid={`history-row-${i}`}>
+                        <td className="p-2 font-medium">{r.item_name}</td>
+                        <td className="p-2 font-mono">{r.hsn || '-'}</td>
+                        <td className="p-2 text-right">{formatRs(r.prev_rate)}</td>
+                        <td className="p-2 text-right font-semibold">{formatRs(r.new_rate)}</td>
+                        <td className="p-2 text-right">{r.gst_rate}%</td>
+                        <td className="p-2 text-center">
+                          {r.is_active
+                            ? <Badge className="bg-green-100 text-green-700">Active</Badge>
+                            : <Badge variant="outline">Inactive</Badge>}
+                        </td>
+                        <td className="p-2">{r.effective_from}</td>
+                        <td className="p-2">{r.updated_by_name || r.updated_by || '-'}</td>
+                        <td className="p-2 text-slate-600">{r.reason || '-'}</td>
+                        <td className="p-2 text-slate-500">{r.updated_at ? new Date(r.updated_at).toLocaleString() : '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-xs text-slate-500">Showing {historyRows.length} record(s).</p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowHistoryDialog(false)} data-testid="history-close">Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );
