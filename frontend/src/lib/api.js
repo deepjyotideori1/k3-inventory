@@ -686,6 +686,7 @@ export const getGstItems = () => api.get('/gst/items');
 export const createGstItem = (data) => api.post('/gst/items', data);
 export const updateGstItem = (itemId, data) => api.put(`/gst/items/${itemId}`, data);
 export const deleteGstItem = (itemId) => api.delete(`/gst/items/${itemId}`);
+export const activateGstItem = (itemId) => api.post(`/gst/items/${itemId}/activate`);
 
 export const getGstPlans = () => api.get('/gst/plans');
 export const getGstPlan = (planId) => api.get(`/gst/plans/${planId}`);

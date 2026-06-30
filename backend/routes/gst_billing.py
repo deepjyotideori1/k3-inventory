@@ -149,7 +149,8 @@ DEFAULT_PLANS.extend([
 
 
 async def ensure_seed():
-    """Idempotent: seeds default items + plans + config if missing."""
+    """Idempotent: seeds default items + plans + config if missing.
+    Also backfills item_id linkage on plan items for the Auto-Sync feature."""
     if await db.gst_items.count_documents({}) == 0:
         await db.gst_items.insert_many([
             {**it, "id": str(uuid.uuid4()), "is_active": True,
@@ -164,11 +165,29 @@ async def ensure_seed():
                 **{k: v for k, v in p.items() if k != "items"},
                 "id": str(uuid.uuid4()),
                 "is_active": True,
-                "items": [{**it, "unit_price": 0} for it in p["items"]],
+                "items": [{**it, "unit_price": 0, "item_id": None} for it in p["items"]],
                 "created_at": now_iso,
             }
             for p in DEFAULT_PLANS
         ])
+
+    # Backfill item_id on plan items by matching on item_name (idempotent - skips if already set)
+    plans_to_backfill = await db.gst_plans.find({"items.item_id": None}, {"id": 1, "items": 1}).to_list(500)
+    if plans_to_backfill:
+        all_items = await db.gst_items.find({}, {"_id": 0, "id": 1, "name": 1}).to_list(1000)
+        # Map normalized name -> id (case-insensitive, trimmed)
+        name_to_id: Dict[str, str] = {(it["name"] or "").strip().lower(): it["id"] for it in all_items}
+        for plan in plans_to_backfill:
+            changed = False
+            for it in plan.get("items", []):
+                if not it.get("item_id"):
+                    match_id = name_to_id.get((it.get("item_name") or "").strip().lower())
+                    if match_id:
+                        it["item_id"] = match_id
+                        changed = True
+            if changed:
+                await db.gst_plans.update_one({"id": plan["id"]}, {"$set": {"items": plan["items"]}})
+
     existing_cfg = await db.gst_config.find_one({"key": "gst_config"})
     if not existing_cfg:
         await db.gst_config.insert_one({
@@ -379,22 +398,73 @@ async def create_item(data: dict, user: dict = Depends(require_admin)):
 
 @router.put("/gst/items/{item_id}")
 async def update_item(item_id: str, data: dict, user: dict = Depends(require_admin)):
+    """Update an item. If name/hsn/unit/gst_rate changed, cascade those attributes
+    (NOT unit_price) to every active connection plan line linked to this item via item_id.
+    Historical invoices are never touched - they store snapshots."""
     allowed = {"name", "hsn", "unit", "gst_rate", "default_rate", "is_active"}
     updates = {k: v for k, v in data.items() if k in allowed}
     if "gst_rate" in updates:
         updates["gst_rate"] = float(updates["gst_rate"])
     if "default_rate" in updates:
         updates["default_rate"] = float(updates["default_rate"])
-    res = await db.gst_items.update_one({"id": item_id}, {"$set": updates})
-    if res.matched_count == 0:
+    if "name" in updates:
+        updates["name"] = str(updates["name"]).strip()
+    existing = await db.gst_items.find_one({"id": item_id})
+    if not existing:
         raise HTTPException(status_code=404, detail="Item not found")
-    return {"message": "Item updated"}
+    await db.gst_items.update_one({"id": item_id}, {"$set": updates})
+
+    # Cascade to plan items - only attributes that should follow the master
+    cascade_keys = {"name", "hsn", "unit", "gst_rate"}
+    cascade_updates = {k: updates[k] for k in cascade_keys if k in updates}
+    affected_plans = 0
+    if cascade_updates:
+        plans = await db.gst_plans.find({"items.item_id": item_id}).to_list(500)
+        for plan in plans:
+            new_items = []
+            changed = False
+            for it in plan.get("items", []):
+                if it.get("item_id") == item_id:
+                    if "name" in cascade_updates:
+                        it["item_name"] = cascade_updates["name"]
+                    if "hsn" in cascade_updates:
+                        it["hsn"] = cascade_updates["hsn"]
+                    if "unit" in cascade_updates:
+                        it["unit"] = cascade_updates["unit"]
+                    if "gst_rate" in cascade_updates:
+                        it["gst_rate"] = float(cascade_updates["gst_rate"])
+                    changed = True
+                new_items.append(it)
+            if changed:
+                await db.gst_plans.update_one({"id": plan["id"]},
+                                              {"$set": {"items": new_items,
+                                                        "updated_at": datetime.now(timezone.utc).isoformat()}})
+                affected_plans += 1
+
+    await log_audit(user.get("id", ""), user.get("name", ""), "update", "gst_item",
+                    item_id, f"Fields: {','.join(updates.keys())}; cascaded to {affected_plans} plans")
+    return {"message": "Item updated", "affected_plans": affected_plans}
 
 
 @router.delete("/gst/items/{item_id}")
 async def delete_item(item_id: str, user: dict = Depends(require_admin)):
-    await db.gst_items.update_one({"id": item_id}, {"$set": {"is_active": False}})
+    """Soft-delete (deactivate) an item. Existing plan lines and invoices remain unchanged
+    for historical record purposes - they will still display the item name."""
+    res = await db.gst_items.update_one({"id": item_id}, {"$set": {"is_active": False}})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Item not found")
+    await log_audit(user.get("id", ""), user.get("name", ""), "deactivate", "gst_item", item_id, "")
     return {"message": "Item deactivated"}
+
+
+@router.post("/gst/items/{item_id}/activate")
+async def activate_item(item_id: str, user: dict = Depends(require_admin)):
+    """Reactivate a previously-deactivated item so it can be used in new plans/invoices again."""
+    res = await db.gst_items.update_one({"id": item_id}, {"$set": {"is_active": True}})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Item not found")
+    await log_audit(user.get("id", ""), user.get("name", ""), "activate", "gst_item", item_id, "")
+    return {"message": "Item activated"}
 
 
 # ============ CONNECTION PLANS (Item-wise billing templates) ============
@@ -406,6 +476,7 @@ def _validate_plan_items(items: list) -> list:
         if not (it.get("item_name") or "").strip():
             raise HTTPException(status_code=400, detail="item_name required for every line")
         cleaned_items.append({
+            "item_id": (it.get("item_id") or "").strip() or None,
             "item_name": it["item_name"].strip(),
             "hsn": (it.get("hsn") or "").strip(),
             "unit": it.get("unit") or "Nos",

@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import {
   getGstInvoices, getGstSummary, getGstConfig, updateGstConfig,
-  getGstItems, createGstItem, updateGstItem, deleteGstItem,
+  getGstItems, createGstItem, updateGstItem, deleteGstItem, activateGstItem,
   getGstPlans, createGstPlan, updateGstPlan, deleteGstPlan,
   listGstReports, getGstReport, exportGstReportExcel, exportGstReportPdf,
   createGstInvoice, updateGstInvoice, cancelGstInvoice, deleteGstInvoice,
@@ -519,13 +519,24 @@ const GSTBilling = () => {
   };
 
   const handleDeleteItem = async (item) => {
-    if (!window.confirm(`Deactivate ${item.name}?`)) return;
+    if (!window.confirm(`Deactivate "${item.name}"?\n\nIt will be hidden from new plan items and invoice dropdowns, but existing plans and historical invoices that already use it will remain unchanged.`)) return;
     try {
       await deleteGstItem(item.id);
-      toast.success('Item deactivated');
+      toast.success(`"${item.name}" deactivated`);
       loadItems();
+      loadPlans(); // plans may reflect the change visually
     } catch (e) {
       toast.error('Failed to deactivate');
+    }
+  };
+
+  const handleActivateItem = async (item) => {
+    try {
+      await activateGstItem(item.id);
+      toast.success(`"${item.name}" reactivated`);
+      loadItems();
+    } catch (e) {
+      toast.error('Failed to reactivate');
     }
   };
 
@@ -594,10 +605,30 @@ const GSTBilling = () => {
     });
   };
 
+  // Auto-sync from Item Master: when admin picks a master item, fill name/hsn/unit/gst_rate (locked)
+  const selectMasterForPlanItem = (idx, masterId) => {
+    const m = items.find(i => i.id === masterId);
+    if (!m) return;
+    setEditingPlan(prev => {
+      const list = [...prev.items];
+      list[idx] = {
+        ...list[idx],
+        item_id: m.id,
+        item_name: m.name,
+        hsn: m.hsn || '',
+        unit: m.unit || 'Nos',
+        gst_rate: Number(m.gst_rate) || 0,
+        // Keep unit_price as-is (admin sets per plan) but default to master default_rate if blank
+        unit_price: Number(list[idx].unit_price) > 0 ? list[idx].unit_price : (Number(m.default_rate) || 0),
+      };
+      return { ...prev, items: list };
+    });
+  };
+
   const addPlanItem = () => {
     setEditingPlan(prev => ({
       ...prev,
-      items: [...(prev.items || []), { item_name: '', hsn: '', unit: 'Nos', quantity: 1, gst_rate: 18, unit_price: 0 }],
+      items: [...(prev.items || []), { item_id: null, item_name: '', hsn: '', unit: 'Nos', quantity: 1, gst_rate: 18, unit_price: 0 }],
     }));
   };
 
@@ -1053,12 +1084,18 @@ const GSTBilling = () => {
                             : <Badge variant="outline">Inactive</Badge>}
                         </td>
                         <td className="p-3 text-center">
-                          <Button size="icon" variant="ghost" onClick={() => { setEditingItem({ ...it }); setShowItemDialog(true); }}>
+                          <Button size="icon" variant="ghost" onClick={() => { setEditingItem({ ...it }); setShowItemDialog(true); }} title="Edit" data-testid={`edit-item-${it.id}`}>
                             <Edit2 className="w-4 h-4" />
                           </Button>
-                          <Button size="icon" variant="ghost" onClick={() => handleDeleteItem(it)}>
-                            <Trash2 className="w-4 h-4 text-red-600" />
-                          </Button>
+                          {it.is_active ? (
+                            <Button size="icon" variant="ghost" onClick={() => handleDeleteItem(it)} title="Deactivate" data-testid={`deactivate-item-${it.id}`}>
+                              <XCircle className="w-4 h-4 text-red-600" />
+                            </Button>
+                          ) : (
+                            <Button size="sm" variant="outline" className="h-8 ml-1 text-green-700 border-green-300" onClick={() => handleActivateItem(it)} title="Reactivate" data-testid={`activate-item-${it.id}`}>
+                              Activate
+                            </Button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -1829,13 +1866,13 @@ const GSTBilling = () => {
                     <table className="w-full text-xs">
                       <thead className="bg-slate-50">
                         <tr>
-                          <th className="text-left p-2">Item Name *</th>
-                          <th className="text-left p-2 w-24">HSN</th>
-                          <th className="text-left p-2 w-20">Unit</th>
-                          <th className="text-right p-2 w-20">Qty</th>
+                          <th className="text-left p-2 min-w-[200px]">Item (synced from Master)</th>
+                          <th className="text-left p-2 w-20">HSN</th>
+                          <th className="text-left p-2 w-16">Unit</th>
+                          <th className="text-right p-2 w-16">Qty</th>
                           <th className="text-right p-2 w-24">Unit Price *</th>
-                          <th className="text-right p-2 w-20">GST%</th>
-                          <th className="text-right p-2 w-24">Line Total</th>
+                          <th className="text-right p-2 w-16">GST%</th>
+                          <th className="text-right p-2 w-20">Line Total</th>
                           <th className="w-8"></th>
                         </tr>
                       </thead>
@@ -1845,16 +1882,58 @@ const GSTBilling = () => {
                           const r = Number(it.unit_price) || 0;
                           const g = Number(it.gst_rate) || 0;
                           const total = q * r * (1 + g / 100);
+                          // Look up the master entry for this row (if linked)
+                          const linkedMaster = items.find(m => m.id === it.item_id);
+                          const isLinked = !!linkedMaster;
+                          const isInactive = isLinked && linkedMaster.is_active === false;
                           return (
-                            <tr key={idx} className="border-t">
+                            <tr key={idx} className={`border-t ${isInactive ? 'bg-amber-50' : ''}`}>
                               <td className="p-1">
-                                <Input className="h-8" value={it.item_name} onChange={e => updatePlanItem(idx, 'item_name', e.target.value)} data-testid={`plan-line-name-${idx}`} />
+                                <Select value={it.item_id || ''} onValueChange={(v) => selectMasterForPlanItem(idx, v)}>
+                                  <SelectTrigger className="h-8" data-testid={`plan-line-master-${idx}`}>
+                                    <SelectValue placeholder="Pick from Item Master..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {items.filter(m => m.is_active || m.id === it.item_id).map(m => (
+                                      <SelectItem key={m.id} value={m.id}>
+                                        {m.name}{m.is_active === false ? ' (Inactive)' : ''}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                {!isLinked && (
+                                  <Input className="h-7 mt-1 text-[10px]" placeholder="or custom name (not synced)"
+                                         value={it.item_name} onChange={e => updatePlanItem(idx, 'item_name', e.target.value)}
+                                         data-testid={`plan-line-name-${idx}`} />
+                                )}
+                                {isInactive && (
+                                  <p className="text-[10px] text-amber-700 mt-1">⚠ Master item is Inactive – kept for history</p>
+                                )}
                               </td>
-                              <td className="p-1"><Input className="h-8" value={it.hsn || ''} onChange={e => updatePlanItem(idx, 'hsn', e.target.value)} /></td>
-                              <td className="p-1"><Input className="h-8" value={it.unit || ''} onChange={e => updatePlanItem(idx, 'unit', e.target.value)} /></td>
-                              <td className="p-1"><Input className="h-8 text-right" type="number" value={it.quantity} onChange={e => updatePlanItem(idx, 'quantity', e.target.value)} /></td>
-                              <td className="p-1"><Input className="h-8 text-right" type="number" value={it.unit_price || 0} onChange={e => updatePlanItem(idx, 'unit_price', e.target.value)} data-testid={`plan-line-price-${idx}`} /></td>
-                              <td className="p-1"><Input className="h-8 text-right" type="number" value={it.gst_rate} onChange={e => updatePlanItem(idx, 'gst_rate', e.target.value)} /></td>
+                              <td className="p-1">
+                                <Input className="h-8" value={it.hsn || ''}
+                                       onChange={e => updatePlanItem(idx, 'hsn', e.target.value)}
+                                       readOnly={isLinked} title={isLinked ? 'Synced from master' : ''} />
+                              </td>
+                              <td className="p-1">
+                                <Input className="h-8" value={it.unit || ''}
+                                       onChange={e => updatePlanItem(idx, 'unit', e.target.value)}
+                                       readOnly={isLinked} title={isLinked ? 'Synced from master' : ''} />
+                              </td>
+                              <td className="p-1">
+                                <Input className="h-8 text-right" type="number" value={it.quantity}
+                                       onChange={e => updatePlanItem(idx, 'quantity', e.target.value)} />
+                              </td>
+                              <td className="p-1">
+                                <Input className="h-8 text-right" type="number" value={it.unit_price || 0}
+                                       onChange={e => updatePlanItem(idx, 'unit_price', e.target.value)}
+                                       data-testid={`plan-line-price-${idx}`} />
+                              </td>
+                              <td className="p-1">
+                                <Input className="h-8 text-right" type="number" value={it.gst_rate}
+                                       onChange={e => updatePlanItem(idx, 'gst_rate', e.target.value)}
+                                       readOnly={isLinked} title={isLinked ? 'Synced from master' : ''} />
+                              </td>
                               <td className="p-2 text-right">{formatRs(total)}</td>
                               <td className="p-1">
                                 <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => removePlanItem(idx)}>

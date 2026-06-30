@@ -1,0 +1,45 @@
+{
+  "summary": "Verified Auto-Sync Item Master <-> Connection Plans (backend + frontend). Created /app/backend/tests/test_gst_item_master_sync.py with 11 pytest cases - ALL 11 PASSED in 5.4s. Backend coverage: (1) Backfill verified live on /api/gst/plans - at least some plan items linked via item_id; (2) 'Domestic Regulator' linked to at least one plan by name-match; (3) POST /api/gst/plans with items[].item_id - the validated payload preserves item_id (verified in response); (4) PUT /api/gst/items cascades name/hsn/unit/gst_rate to linked plan items, response returns 'affected_plans' count >= 1; (5) unit_price does NOT cascade (remains 250.0 after master changes); (6) default_rate change does NOT touch plan unit_price; (7) DELETE /api/gst/items/{id} sets is_active=false, item still listed; (8) POST /api/gst/items/{id}/activate restores is_active=true; (9) POST /activate on unknown id returns 404; (10) Non-admin (jullang manager) hitting /activate returns 403; (11) Historical invariant - editing master item AFTER invoice exists - GET /api/gst/invoices/{id} still returns the OLD item_name on the existing invoice (snapshots are never cascaded); (12) PUT /api/gst/plans/{id} replacing items preserves item_id on saved items. FRONTEND verified live via Playwright (admin login → /gst-billing): Item Master tab shows 13 deactivate buttons (active items) and 11 activate buttons (inactive items, accumulated from prior test runs). Deactivate→Activate round-trip toggles the buttons correctly. Connection Plans tab: clicked Edit on 'Single Commercial New Connection Plan' - 6 plan-line-master selects rendered, 6 plan-line-price inputs rendered. Master dropdown opens with 13 active items (matches Item Master count). For LINKED rows (Commercial LPG, Empty Cylinder Commercial 21 KG, Commercial Regulator), the Select trigger shows the master name and the custom-name input is hidden. For UNLINKED rows (Hose Pipe 1.3 Mtr, Gas Card, Admin Charge - in this plan the backfill did not match), Select shows 'Pick from Item Master...' placeholder and the 'or custom name (not synced)' input is visible. No 'Master item is Inactive' warning observed because the plan does not contain any inactive-linked items currently.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "GST Billing tabs", "issues": ["React hydration console warning: '<tr> cannot be a child of <span>' / '<span> cannot be a child of <tbody>' — visible in browser console when GST Billing page loads. Not a functional regression but worth fixing in TabsList/Table markup."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_gst_item_master_sync.py",
+    "/app/test_reports/pytest/pytest_gst_item_master_sync.xml"
+  ],
+  "action_items": [
+    "Optional: Investigate the React hydration warning ('<tr> cannot be a child of <span>') flagged in browser console while on GST Billing page — likely a Tabs/Table nesting issue independent of this feature.",
+    "Optional cleanup: ~11 TEST_* items now accumulated in gst_items (deactivated) plus a handful of TEST_Plan_* / TEST_PutPlan_* in gst_plans from this run + iteration_51 run. Soft-deleted only, can stay as test history."
+  ],
+  "critical_code_review_comments": [
+    "ensure_seed() backfill logic in /app/backend/routes/gst_billing.py (lines 174-189) correctly uses case-insensitive, trimmed name match and only writes when item_id was null — idempotent and safe to re-run.",
+    "update_item() cascade (lines 417-446) correctly excludes unit_price and default_rate from the cascade dict (cascade_keys = {'name', 'hsn', 'unit', 'gst_rate'}) — matches the spec exactly. The 'affected_plans' return value is helpful for the frontend toast.",
+    "delete_item() is a soft-delete (is_active=false) so existing plan lines / invoices remain intact — historical invariant preserved at the DB level.",
+    "_validate_plan_items() (line 478) now normalizes item_id with `.strip() or None` — clean: empty strings become None so the model is consistent.",
+    "activate_item() returns 404 for unknown id and uses require_admin dependency — non-admin gets 403 (verified live with jullang manager).",
+    "Auto-gen invoice flow (_auto_generate_invoice) does NOT carry item_id onto invoice line_items — confirming invoices are pure snapshots and cascade can never touch them. Good separation.",
+    "Frontend GSTBilling.jsx renders plan-line-master Select with placeholder 'Pick from Item Master...' and 'or custom name (not synced)' Input only when the row has no item_id — matches spec. The Select options include active items + currently-linked-inactive items (with '(Inactive)' suffix), and Inactive linked rows get amber background + '⚠ Master item is Inactive – kept for history' note (code verified at line 1910).",
+    "data-testids match the agreed contract: edit-item-{id}, deactivate-item-{id}, activate-item-{id}, plan-line-master-{idx}, plan-line-name-{idx}, plan-line-price-{idx} — all working in Playwright probes."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_gst_item_master_sync.py (NEW)"
+  ],
+  "success_rate": {
+    "backend": "100% (11/11 pytest cases)",
+    "frontend": "100% on tested flows (Item Master toggle, Connection Plan editor master dropdown, linked/unlinked row rendering)"
+  },
+  "test_credentials": "admin@k3gas.com / Admin@123 (admin), jullang@k3gas.com / Jullang@123 (non-admin 403 check)",
+  "seed_data_creation": "Tests create and soft-delete several TEST_ItemMaster_*, TEST_Toggle_*, TEST_HistItem_*, TEST_Put_* items and TEST_Plan_*, TEST_PutPlan_* plans plus one TEST_HistCust invoice during the run. Items are soft-deleted (is_active=false), plans are soft-deleted, invoice is hard-deleted in teardown.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Auto-Sync Item Master <-> Connection Plans feature is complete and verified. Reusable regression suite at /app/backend/tests/test_gst_item_master_sync.py (11 cases, ~5s). Run with: REACT_APP_BACKEND_URL=$(grep REACT_APP_BACKEND_URL /app/frontend/.env | cut -d= -f2) python -m pytest backend/tests/test_gst_item_master_sync.py -v. Frontend data-testids confirmed: edit-item-{id}, deactivate-item-{id}, activate-item-{id}, plan-line-master-{idx}, plan-line-name-{idx}, plan-line-price-{idx}, line-name-{idx} (for invoice line items). The only outstanding cosmetic item is a React hydration <tr>/<span>/<tbody> warning on the GST Billing page — unrelated to this feature.",
+  "rca of the issue": "N/A — no bugs found. Backend cascade, soft-delete/reactivate, 403 for non-admin, 404 for unknown id, and historical-invoice invariant all behave per spec. Frontend Item Master action column correctly shows Deactivate vs Activate based on is_active. Plan editor's Master dropdown correctly populates from active items, shows linked-item label when item_id is set, and shows 'or custom name (not synced)' input only on unlinked rows."
+}
