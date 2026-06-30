@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from typing import List, Optional, Dict, Any
 
 
@@ -331,7 +331,7 @@ class AccessorySaleCreate(BaseModel):
     is_new_customer: bool = False
     date: str
     memo_no: str = ""
-    items: List[AccessorySaleItemCreate]
+    items: List[AccessorySaleItemCreate] = Field(..., min_length=1, description="At least one item is required")
     payment_mode: str = "cash"
     remarks: str = ""
     warehouse_id: str = ""
