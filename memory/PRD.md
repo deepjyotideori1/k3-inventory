@@ -728,3 +728,38 @@ Per user instruction, TDS is **never calculated by default**. Each employee's pa
 
 *Last Updated: June 30, 2026 — Item Master Bulk Update + Rate History*
 
+
+
+---
+
+## Session — June 30, 2026 — Polish Triple Pack ✅
+
+### 1. Hydration Warning (P3, GSTBilling.jsx)
+- Investigated React `<tr> cannot be a child of <span>` warning.
+- **Root cause confirmed via support_agent**: platform dev-overlay script `https://assets.emergent.sh/scripts/emergent-main.js` injects a `<span data-ve-dynamic="true" style="display:contents">` around dynamic `.map()` output for inspection. Runtime span violates DOM nesting rules even though invisible at CSS level.
+- **No app-side fix is possible**; production builds do not include the overlay → no warning in production.
+- Still cleaned up the JSX to keep `.map()` direct children of `<tbody>` and moved loading/empty states outside the table — better readability and accessibility.
+
+### 2. Branded Excel Header (P2, Customer / Sales / Plant exports)
+- New module `/app/backend/export_helpers.py` with `embed_logo_openpyxl`, `embed_logo_xlsxwriter`, `get_company_info_for_export`, `cleanup_logo_tempfile`. Handles both openpyxl & xlsxwriter, gracefully skips when no logo is set, cleans up temp files safely.
+- Added branded header (rows 1-3: logo + company name + tagline/address/helpline + title/period/timestamp, row 4 spacer, row 5 headers) to **6 endpoints**:
+  - `/api/export/sales-excel`
+  - `/api/export/sales-summary-excel`
+  - `/api/export/customer-refill-excel`
+  - `/api/export/customers-excel` (xlsxwriter)
+  - `/api/export/excel?report_type=daily` (xlsxwriter)
+  - `/api/export/excel?report_type=plant` (xlsxwriter — main + Warehouse Breakdown sheets)
+- Also retro-fitted `/api/gst/items/history/excel` to use the shared helper for full consistency.
+
+### 3. Refactor (P3, gst_billing.py)
+- Extracted Item Master CRUD + Rate History + Bulk Update endpoints (424 lines) from `gst_billing.py` into a new `/app/backend/routes/gst_items.py` module with its own `APIRouter`, registered in `server.py` (`gst_items_router` at `/api`).
+- `gst_billing.py`: **1810 → 1386 lines** (-23%). Now focuses on config / connection plans / invoices only.
+- `_record_rate_history`, `_parse_bool`, `_apply_bulk_rows` helpers also moved.
+- `ensure_seed` imported lazily inside `list_items()` to avoid circular import. Backend cold-starts cleanly. **Same URLs preserved** — no client-side changes.
+
+### Testing — `/app/test_reports/iteration_54.json`
+- Backend pytest: **41/41 pass** across 3 files (`test_excel_branded_exports.py` (NEW), `test_gst_item_bulk_history.py`, `test_gst_item_master_sync.py`).
+- Frontend Playwright: 100% on all flows tested (login → GST Billing → Item Master / Plans / Invoices / Reports tabs all working; Rate History dialog with 13 rows rendered).
+- No regressions found.
+
+*Last Updated: June 30, 2026 — Hydration / Branded Exports / Refactor*

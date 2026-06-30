@@ -189,7 +189,6 @@ async def export_item_history_excel(item_id: Optional[str] = None, start_date: O
         if end_date:
             q["effective_from"]["$lte"] = end_date
     rows = await db.gst_item_history.find(q, {"_id": 0}).sort("updated_at", -1).to_list(50000)
-    cfg = await db.gst_config.find_one({"key": "gst_config"}, {"_id": 0}) or {}
 
     wb = Workbook()
     ws = wb.active
@@ -199,14 +198,20 @@ async def export_item_history_excel(item_id: Optional[str] = None, start_date: O
     headers = ["Item Name", "Item Code", "Unit", "HSN Code", "GST Rate %",
                "Previous Rate", "Updated Rate", "Effective From",
                "Updated By", "Updated Date & Time", "Status"]
-    ws["A1"] = cfg.get("company_name", "K3 GAS SERVICE")
-    ws["A1"].font = Font(bold=True, size=14, color="1E5A8C")
-    ws.merge_cells(f"A1:{get_column_letter(len(headers))}1")
-    ws["A2"] = f"Item Rate History  |  Period: {start_date or 'All'} to {end_date or 'All'}  |  Generated: {datetime.now(timezone.utc).strftime('%d-%m-%Y %H:%M')} by {user.get('name', '')}"
-    ws["A2"].font = Font(italic=True, size=9, color="666666")
-    ws.merge_cells(f"A2:{get_column_letter(len(headers))}2")
 
-    HEADER_ROW = 4
+    # Use shared branded-header helper for consistency with other exports
+    from export_helpers import get_company_info_for_export, embed_logo_openpyxl, cleanup_logo_tempfile
+    company = await get_company_info_for_export()
+    period_str = f"{start_date or 'All'} to {end_date or 'All'}"
+    logo_path = embed_logo_openpyxl(
+        ws, company,
+        title=f"Item Rate History (by {user.get('name', '')})",
+        period=period_str,
+        last_col_letter=get_column_letter(len(headers)),
+    )
+    ws.append([])  # row 4 spacer
+
+    HEADER_ROW = 5
     for c_idx, h in enumerate(headers, 1):
         cell = ws.cell(row=HEADER_ROW, column=c_idx, value=h)
         cell.font = Font(bold=True, color="FFFFFF")
@@ -264,6 +269,7 @@ async def export_item_history_excel(item_id: Optional[str] = None, start_date: O
     buf = BytesIO()
     wb.save(buf)
     buf.seek(0)
+    cleanup_logo_tempfile(logo_path)
     fname = f"Item_Rate_History_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M')}.xlsx"
     return StreamingResponse(iter([buf.read()]),
                              media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
