@@ -57,8 +57,7 @@ Route: `/gst-billing` (Admin only)
 - Frontend: All flows verified by testing_agent_v3_fork (iter 43, 44, 45, 47, 48, 49)
 - Iteration reports: `/app/test_reports/iteration_43...49.json`
 
-### Phase B: GST Reports Module (Added 2026-03-02)
-New **Reports tab** in GST Billing dashboard with **10 reports**, each supporting date range filter + Excel export (frozen header, autofilter, autowidth, wrapped text, bold totals, right-aligned amounts, landscape for >6 columns) + PDF export (company header, repeating header, page footer with name/label/page-number, landscape for wide reports).
+### Phase B: GST Reports Module (Added 2026-03-02)New **Reports tab** in GST Billing dashboard with **10 reports**, each supporting date range filter + Excel export (frozen header, autofilter, autowidth, wrapped text, bold totals, right-aligned amounts, landscape for >6 columns) + PDF export (company header, repeating header, page footer with name/label/page-number, landscape for wide reports).
 
 **Reports:**
 1. **Daily Sales** — group by date, totals per day
