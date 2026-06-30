@@ -301,13 +301,23 @@ def compute_totals(line_items: List[dict], tax_mode: str) -> dict:
         total_cgst += cgst
         total_sgst += sgst
         total_igst += igst
-    grand_total = round(sub_total + total_cgst + total_sgst + total_igst, 2)
+    sub_total = round(sub_total, 2)
+    total_cgst = round(total_cgst, 2)
+    total_sgst = round(total_sgst, 2)
+    total_igst = round(total_igst, 2)
+    total_gst = round(total_cgst + total_sgst + total_igst, 2)
+    # Total before round-off, then round grand total to nearest rupee.
+    total_before_roundoff = round(sub_total + total_gst, 2)
+    grand_total = float(round(total_before_roundoff))
+    round_off = round(grand_total - total_before_roundoff, 2)
     return {
-        "sub_total": round(sub_total, 2),
-        "total_cgst": round(total_cgst, 2),
-        "total_sgst": round(total_sgst, 2),
-        "total_igst": round(total_igst, 2),
-        "total_gst": round(total_cgst + total_sgst + total_igst, 2),
+        "sub_total": sub_total,
+        "total_cgst": total_cgst,
+        "total_sgst": total_sgst,
+        "total_igst": total_igst,
+        "total_gst": total_gst,
+        "total_before_roundoff": total_before_roundoff,
+        "round_off": round_off,
         "grand_total": grand_total,
     }
 
@@ -673,7 +683,7 @@ async def export_invoices_excel(
                 igst,
                 cgst + sgst + igst,
                 0,  # discount
-                0,  # round off
+                float(inv.get("round_off") or 0) if is_first else "",  # round off
                 float(inv.get("grand_total") or 0) if is_first else "",
                 inv.get("payment_mode", "") if is_first else "",
                 inv.get("warehouse_name", "") if is_first else "",
@@ -1296,6 +1306,8 @@ async def export_invoice_pdf(invoice_id: str, user: dict = Depends(require_admin
 
     # ---- TOTALS SUMMARY + AMOUNT IN WORDS ----
     grand = float(inv["grand_total"])
+    round_off = float(inv.get("round_off") or 0)
+    total_before_ro = float(inv.get("total_before_roundoff") or (grand - round_off))
     summary_data = [
         ["Sub Total:", f"Rs. {format_inr(inv['sub_total'], use_symbol=False)}"],
     ]
@@ -1304,7 +1316,11 @@ async def export_invoice_pdf(invoice_id: str, user: dict = Depends(require_admin
         summary_data.append(["Total SGST:", f"Rs. {format_inr(inv['total_sgst'], use_symbol=False)}"])
     else:
         summary_data.append(["Total IGST:", f"Rs. {format_inr(inv['total_igst'], use_symbol=False)}"])
-    summary_data.append(["Round Off:", "0.00"])
+    # Show Total before Round Off + Round Off rows only when round_off field exists on the invoice
+    if "round_off" in inv:
+        summary_data.append(["Total Before Round Off:", f"Rs. {format_inr(total_before_ro, use_symbol=False)}"])
+        ro_sign = "+" if round_off >= 0 else "−"
+        summary_data.append(["Round Off:", f"{ro_sign} Rs. {format_inr(abs(round_off), use_symbol=False)}"])
     summary_data.append([Paragraph("<b>Grand Total:</b>", style_label),
                          Paragraph(f"<b>Rs. {format_inr(grand, use_symbol=False)}</b>", style_label)])
 

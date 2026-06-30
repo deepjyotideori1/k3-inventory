@@ -363,7 +363,7 @@ const GSTBilling = () => {
   };
 
   const computePreview = () => {
-    if (!invForm) return { sub_total: 0, total_cgst: 0, total_sgst: 0, total_igst: 0, total_gst: 0, grand_total: 0 };
+    if (!invForm) return { sub_total: 0, total_cgst: 0, total_sgst: 0, total_igst: 0, total_gst: 0, total_before_roundoff: 0, round_off: 0, grand_total: 0 };
     let sub = 0, cgst = 0, sgst = 0, igst = 0;
     invForm.line_items.forEach(li => {
       const qty = Number(li.quantity) || 0;
@@ -378,13 +378,19 @@ const GSTBilling = () => {
         sgst += tax * gst / 200;
       }
     });
+    const totalGst = cgst + sgst + igst;
+    const totalBefore = Math.round((sub + totalGst) * 100) / 100;
+    const grandTotal = Math.round(totalBefore);
+    const roundOff = Math.round((grandTotal - totalBefore) * 100) / 100;
     return {
       sub_total: sub,
       total_cgst: cgst,
       total_sgst: sgst,
       total_igst: igst,
-      total_gst: cgst + sgst + igst,
-      grand_total: sub + cgst + sgst + igst,
+      total_gst: totalGst,
+      total_before_roundoff: totalBefore,
+      round_off: roundOff,
+      grand_total: grandTotal,
     };
   };
 
@@ -1451,11 +1457,17 @@ const GSTBilling = () => {
                 </div>
 
                 {/* Preview totals */}
-                <div className="bg-slate-50 p-3 rounded grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
+                <div className="bg-slate-50 p-3 rounded grid grid-cols-2 md:grid-cols-6 gap-2 text-sm">
                   <div><span className="text-slate-500">Sub Total:</span> <strong>{formatRs(preview.sub_total)}</strong></div>
                   <div><span className="text-slate-500">CGST:</span> <strong>{formatRs(preview.total_cgst)}</strong></div>
                   <div><span className="text-slate-500">SGST:</span> <strong>{formatRs(preview.total_sgst)}</strong></div>
                   <div><span className="text-slate-500">IGST:</span> <strong>{formatRs(preview.total_igst)}</strong></div>
+                  <div>
+                    <span className="text-slate-500">Round Off:</span>{' '}
+                    <strong className={preview.round_off >= 0 ? 'text-green-700' : 'text-amber-700'}>
+                      {preview.round_off >= 0 ? '+ ' : '− '}{formatRs(Math.abs(preview.round_off))}
+                    </strong>
+                  </div>
                   <div className="text-blue-700"><span className="text-slate-500">Grand Total:</span> <strong>{formatRs(preview.grand_total)}</strong></div>
                 </div>
 
@@ -1645,7 +1657,20 @@ const GSTBilling = () => {
                     ) : (
                       <div className="flex justify-between"><span>IGST:</span><strong>{formatRs(viewingInvoice.total_igst)}</strong></div>
                     )}
-                    <div className="flex justify-between"><span>Round Off:</span><strong>Rs. 0.00</strong></div>
+                    {viewingInvoice.round_off != null && (
+                      <>
+                        <div className="flex justify-between border-t border-slate-200 pt-1 mt-1">
+                          <span>Total Before Round Off:</span>
+                          <strong>{formatRs(viewingInvoice.total_before_roundoff ?? (Number(viewingInvoice.grand_total) - Number(viewingInvoice.round_off || 0)))}</strong>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Round Off:</span>
+                          <strong className={Number(viewingInvoice.round_off) >= 0 ? 'text-green-700' : 'text-amber-700'}>
+                            {Number(viewingInvoice.round_off) >= 0 ? '+ ' : '− '}{formatRs(Math.abs(Number(viewingInvoice.round_off)))}
+                          </strong>
+                        </div>
+                      </>
+                    )}
                     <div className="flex justify-between bg-blue-50 -mx-3 px-3 py-1 mt-2 font-bold text-blue-800 border-t border-blue-200">
                       <span>Grand Total:</span><strong>{formatRs(viewingInvoice.grand_total)}</strong>
                     </div>

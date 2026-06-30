@@ -165,6 +165,7 @@ async def _build_gst_report(start_date, end_date):
             "sgst": _round(inv.get("total_sgst")),
             "igst": _round(inv.get("total_igst")),
             "total_gst": _round(inv.get("total_gst")),
+            "round_off": _round(inv.get("round_off")),
             "grand_total": _round(inv.get("grand_total")),
         })
     rows.sort(key=lambda r: (r["type"], r["invoice_date"]))
@@ -176,6 +177,7 @@ async def _build_gst_report(start_date, end_date):
         "sgst": _round(sum(r["sgst"] for r in rows)),
         "igst": _round(sum(r["igst"] for r in rows)),
         "total_gst": _round(sum(r["total_gst"] for r in rows)),
+        "round_off": _round(sum(r["round_off"] for r in rows)),
         "grand_total": _round(sum(r["grand_total"] for r in rows)),
     }
     columns = [
@@ -191,6 +193,7 @@ async def _build_gst_report(start_date, end_date):
         ("SGST", "sgst", "amount"),
         ("IGST", "igst", "amount"),
         ("Total GST", "total_gst", "amount"),
+        ("Round Off", "round_off", "amount"),
         ("Grand Total", "grand_total", "amount"),
     ]
     return rows, summary, columns
