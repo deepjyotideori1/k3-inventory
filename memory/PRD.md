@@ -701,3 +701,30 @@ Per user instruction, TDS is **never calculated by default**. Each employee's pa
 - **Backend**: `compute_employee_payroll()` returns `tds=0` unless `emp.tds_applicable == True`; `hrms_employees.update` accepts `tds_applicable` + `tax_regime`; the payslip stamp still includes `tds_config_version` so audit stays intact.
 - **Frontend**: added a "Deduct TDS for this employee" checkbox in the Employee edit dialog (Salary section). Toggling it reveals a small Regime (New/Old) selector. Visibly off by default — HR has to explicitly turn it on per employee.
 - **Verified (curl)**: on 17-employee Aug 2026 payroll run with zero flags, every employee showed `tds=0`. Flagging a single employee resulted in exactly one `tds_applicable=true` record (math confirmed against v2 slabs).
+
+---
+
+## Session — June 30, 2026 — GST Item Master Bulk Update + Rate History (P0 COMPLETE)
+
+**Feature**: Admin can now manage GST Item Master in bulk and audit historical rate changes.
+
+**Frontend** (`/app/frontend/src/pages/GSTBilling.jsx`):
+- Three new buttons on **Item Master** tab header: **Download Template**, **Bulk Upload**, **Rate History** (+ existing Add Item).
+- Bulk Upload dialog: file picker (.xlsx / .xls / .csv) + `effective_from` default-date input + result panel showing Created / Updated / Rate-changes / Skipped + per-row error list.
+- Rate History dialog: filters by Item / From / To dates with Excel download. Read-only table shows Item, HSN, Prev Rate, New Rate, GST %, Status, Effective From, Updated By, Reason, Updated At.
+- Wired through existing `api.js` helpers: `downloadGstItemTemplate`, `bulkUploadGstItems`, `getGstItemHistory`, `downloadGstItemHistoryExcel`.
+
+**Backend** (no changes this iteration — already complete from previous fork):
+- `GET /api/gst/items/template/excel` — pre-filled Excel template of all items.
+- `POST /api/gst/items/bulk-upload` (multipart) and `/bulk-update` (JSON) — create/update items, write `gst_item_history` rows, and cascade name/hsn/unit/gst_rate changes to `gst_plans.items` (rate snapshots in plans/invoices untouched).
+- `GET /api/gst/items/history` + `/history/excel` — filterable history.
+- All five endpoints admin-only (`require_admin`).
+
+**Historical invariant**: Bulk rate updates only mutate `gst_items` + attribute fields on `gst_plans.items`. `gst_invoices.line_items` and `gst_plans.items.unit_price` remain pure snapshots — historical invoices/plans never recalculate.
+
+**Testing** (`/app/test_reports/iteration_53.json`):
+- Backend pytest: **15/15 pass** (`/app/backend/tests/test_gst_item_bulk_history.py`, ~3s).
+- Frontend Playwright: all 3 buttons, dialogs, file upload, history filter+excel verified end-to-end. Regression on Invoices / Reports / Plans / Item Master tabs intact.
+
+*Last Updated: June 30, 2026 — Item Master Bulk Update + Rate History*
+
