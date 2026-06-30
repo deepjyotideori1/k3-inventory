@@ -800,3 +800,40 @@ Per user instruction, TDS is **never calculated by default**. Each employee's pa
 
 *Last Updated: June 30, 2026 — Discrepancy Detection*
 
+
+
+---
+
+## Session — June 30, 2026 — Memo No. + Payment Status + Party Ledger + Latest-First Sort ✅
+
+### Backend (`gst_billing.py`, `gst_reports.py`, `sales.py`, `accessories.py`)
+- New helper `compute_payment_fields(grand_total, cash, online, payment_mode)` → returns `cash_received / online_received / pending_amount / payment_status` (Paid/Partial/Pending). ±₹1 tolerance for Paid.
+- Invoice schema extended with: `memo_no`, `cash_received`, `online_received`, `pending_amount`, `payment_status`.
+- `POST /api/gst/invoices` + `PUT /api/gst/invoices/{id}` accept `memo_no` (fallback = invoice_number) + `cash_received` + `online_received`. Editing payment fields recomputes status without re-running discrepancy validation.
+- `auto_generate_invoice_from_sale` now propagates `sale.memo_no`, `sale.cash_amount`, `sale.online_amount` into the invoice. For accessory sales (single payment_mode field), splits the grand_total into cash/online/pending derived from `payment_mode`.
+- **New endpoints**:
+  - `GET /api/gst/party-ledger/customers` — distinct customers with last_invoice_date + invoice_count (latest first).
+  - `GET /api/gst/party-ledger?customer_phone=…|customer_name=…|customer_id=…&period=all|today|this_month|this_year|custom&start_date=&end_date=` — `{rows, totals, customer}` with 13 ledger fields per row and 8 aggregated totals.
+  - `POST /api/gst/invoices/backfill-payments` — admin maintenance; backfills memo + cash/online/payment_status on historical invoices using linked sales entries / accessory sales. Idempotent.
+- **Latest-first sort applied globally**: `gst_invoices.find().sort([('invoice_date', -1), ('created_at', -1)])` (both list + export), `sales_entries.find().sort([('date', -1), ('created_at', -1)])`, `accessory_sales.find().sort([('date', -1), ('created_at', -1)])`, and report builders (daily / monthly / item-wise / customer-wise) all reversed.
+- **PDF + Excel exports** updated: PDF now shows `Memo No`, `Cash Received`, `Online Received`, `Pending Amount`, `Payment Status` block. Excel adds 6 new tail columns: Memo No. / Cash Received / Online Received / Total Paid / Pending Amount / Payment Status.
+
+### Frontend (`GSTBilling.jsx`, `api.js`)
+- **New 'Party Ledger' tab** between Discrepancies and Reports — customer picker (with search by name/phone), period selector (All / Today / This Month / This Year / Custom range), 5 summary tiles (Invoices, Invoice Value, Cash+Online, Pending, GST Collected), 13-column ledger table with status badges.
+- **Invoice table** has 2 new columns: 'Memo No.' (data-testid `memo-{id}`) and 'Payment' (data-testid `payment-status-{id}`) with colour-coded badges.
+- **New Invoice dialog** has 3 new inputs: `inv-memo-no`, `inv-cash-received`, `inv-online-received`.
+- **View Invoice dialog** shows payment block (`view-payment-block`) with Cash/Online/Pending/Status when populated.
+- New api.js helpers: `getPartyLedgerCustomers`, `getPartyLedger`, `backfillGstPayments`.
+
+### One-time backfill executed
+- Pre-feature historical invoices: backfilled 16 invoices with memo + cash/online/payment_status from linked sales entries.
+
+### Testing — `/app/test_reports/iteration_56.json`
+- Backend pytest: **103/103 pass** (87 GST regression + 16 new in `test_invoice_memo_payment_ledger.py`).
+- Frontend Playwright: 100% — memo column, payment badges, party ledger tab + customer picker + totals + ledger rows + period switch all verified.
+- **No regressions, no bugs found.**
+
+### Cleanup
+- Removed 62 TEST_*/DISC_* invoices created by the testing agent. 16 production invoices preserved.
+
+*Last Updated: June 30, 2026 — Memo / Payment / Party Ledger / Latest-First*
