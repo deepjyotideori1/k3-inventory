@@ -335,6 +335,7 @@ class AccessorySaleCreate(BaseModel):
     payment_mode: str = "cash"
     remarks: str = ""
     warehouse_id: str = ""
+    discrepancy_reason: Optional[str] = ""
 
 class AccessorySaleItemResponse(BaseModel):
     accessory_id: str
@@ -455,6 +456,7 @@ class SalesEntryCreate(BaseModel):
     remarks: str = ""
     connection_plan_id: Optional[str] = None
     has_accessories: bool = False
+    discrepancy_reason: Optional[str] = ""
 
 class SalesEntryUpdate(BaseModel):
     date: Optional[str] = None

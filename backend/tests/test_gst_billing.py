@@ -117,7 +117,9 @@ class TestInvoiceCRUD:
             "tax_mode": "intra_state",
             "payment_mode": "cash",
             "line_items": [
-                {"item_name": "Domestic LPG Refill", "hsn": "271119", "unit": "Cylinder",
+                # Use an ad-hoc item name (NOT in Item Master) so the discrepancy
+                # validator can't compute an expected amount and skips the check.
+                {"item_name": "TEST_ManualAdHocItem", "hsn": "271119", "unit": "Cylinder",
                  "gst_rate": 5, "quantity": 1, "rate": 1000},
             ],
         }
@@ -156,7 +158,7 @@ class TestInvoiceCRUD:
 
     def test_update_invoice(self, manual_invoice, admin_headers):
         iid = manual_invoice["id"]
-        new_items = [{"item_name": "Domestic LPG Refill", "gst_rate": 5, "quantity": 2, "rate": 1000}]
+        new_items = [{"item_name": "TEST_ManualAdHocItem", "gst_rate": 5, "quantity": 2, "rate": 1000}]
         r = requests.put(f"{API}/gst/invoices/{iid}", json={"line_items": new_items}, headers=admin_headers, timeout=30)
         assert r.status_code == 200
         upd = r.json()

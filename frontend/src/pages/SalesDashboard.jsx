@@ -24,9 +24,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { Textarea } from '../components/ui/textarea';
 import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from '../components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import SearchBar from '../components/SearchBar';
 import SearchableSelect from '../components/SearchableSelect';
@@ -79,6 +80,11 @@ const SalesDashboard = () => {
   });
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+
+  // Discrepancy-reason dialog (triggered when backend returns 400 with mismatch)
+  const [discPrompt, setDiscPrompt] = useState(null);  // {expected, actual, diff, retry}
+  const [discReason, setDiscReason] = useState('');
+  const [discSubmitting, setDiscSubmitting] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState(null);
@@ -334,8 +340,9 @@ const SalesDashboard = () => {
     }
 
     setSubmitting(true);
+    let data;
     try {
-      const data = {
+      data = {
         ...formData,
         amount: parseFloat(formData.amount) || 0,
         no_of_refills: parseInt(formData.no_of_refills) || 0,
@@ -380,10 +387,52 @@ const SalesDashboard = () => {
       });
       fetchData();
     } catch (error) {
-      console.error('Failed to add entry:', error);
-      toast.error(error.response?.data?.detail || 'Failed to add entry');
+      const detail = error.response?.data?.detail;
+      if (detail && typeof detail === 'object' && detail.code === 'discrepancy_requires_reason') {
+        // Open mandatory-reason dialog
+        const submitFn = isAdmin ? createSalesEntryForWarehouse : null;
+        const payload = data;  // captured from closure
+        setDiscPrompt({
+          expected: detail.expected_amount,
+          actual: detail.actual_amount,
+          diff: detail.discrepancy_amount,
+          retry: async (reason) => {
+            const retried = { ...payload, discrepancy_reason: reason };
+            if (isAdmin) {
+              await submitFn(formData.warehouse_id, retried);
+            } else {
+              await createSalesEntry(retried);
+            }
+            toast.success('Sales entry saved as Discrepancy (pending review)');
+            setAddDialogOpen(false);
+            fetchData();
+          },
+        });
+        setDiscReason('');
+      } else {
+        console.error('Failed to add entry:', error);
+        toast.error(typeof detail === 'string' ? detail : detail?.message || 'Failed to add entry');
+      }
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleSubmitDiscrepancyReason = async () => {
+    if (!discReason.trim()) {
+      toast.error('Reason is required to save a discrepancy sale');
+      return;
+    }
+    if (!discPrompt?.retry) return;
+    setDiscSubmitting(true);
+    try {
+      await discPrompt.retry(discReason.trim());
+      setDiscPrompt(null);
+      setDiscReason('');
+    } catch (e) {
+      toast.error(e.response?.data?.detail?.message || e.response?.data?.detail || 'Failed to save with reason');
+    } finally {
+      setDiscSubmitting(false);
     }
   };
 
@@ -2245,6 +2294,64 @@ const SalesDashboard = () => {
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Update Entry'}
               </Button>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* DISCREPANCY REASON DIALOG */}
+        <Dialog open={!!discPrompt} onOpenChange={(o) => { if (!o) { setDiscPrompt(null); setDiscReason(''); } }}>
+          <DialogContent className="w-[95vw] sm:max-w-xl" data-testid="sales-discrepancy-dialog">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-amber-700">
+                <span>⚠️ Amount Mismatch Detected</span>
+              </DialogTitle>
+              <DialogDescription>
+                The entered amount does not match the configured rate. Provide a justification to save this entry as a <strong>Discrepancy</strong> (admin will review).
+              </DialogDescription>
+            </DialogHeader>
+            {discPrompt && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-2 bg-amber-50 border border-amber-200 rounded p-3">
+                  <div className="text-center">
+                    <p className="text-[10px] text-amber-700 uppercase">Expected</p>
+                    <p className="text-base font-bold" data-testid="sales-disc-expected">₹{Number(discPrompt.expected || 0).toFixed(2)}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] text-amber-700 uppercase">Entered</p>
+                    <p className="text-base font-bold" data-testid="sales-disc-actual">₹{Number(discPrompt.actual || 0).toFixed(2)}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] text-amber-700 uppercase">Difference</p>
+                    <p className={`text-base font-bold ${Number(discPrompt.diff) >= 0 ? 'text-blue-700' : 'text-red-700'}`} data-testid="sales-disc-diff">
+                      {Number(discPrompt.diff) >= 0 ? '+' : ''}₹{Number(discPrompt.diff || 0).toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="sales-disc-reason">Justification / Reason *</Label>
+                  <Textarea
+                    id="sales-disc-reason"
+                    rows={3}
+                    value={discReason}
+                    onChange={(e) => setDiscReason(e.target.value)}
+                    placeholder="e.g., Negotiated discount, promo discount, partial payment received..."
+                    data-testid="sales-disc-reason"
+                  />
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setDiscPrompt(null); setDiscReason(''); }} data-testid="sales-disc-cancel">
+                Go back & edit amount
+              </Button>
+              <Button
+                onClick={handleSubmitDiscrepancyReason}
+                disabled={!discReason.trim() || discSubmitting}
+                className="bg-amber-600 hover:bg-amber-700"
+                data-testid="sales-disc-confirm"
+              >
+                {discSubmitting ? 'Saving…' : 'Save as Discrepancy'}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>

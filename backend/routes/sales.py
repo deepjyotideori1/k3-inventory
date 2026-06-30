@@ -20,7 +20,7 @@ import xlsxwriter
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
-from routes.gst_billing import auto_generate_invoice_from_sale
+from routes.gst_billing import auto_generate_invoice_from_sale, validate_sale_discrepancy
 from export_helpers import (
     get_company_info_for_export, embed_logo_openpyxl, embed_logo_xlsxwriter,
     cleanup_logo_tempfile,
@@ -209,6 +209,23 @@ async def create_sales_entry(
         elif entry.payment_mode == 'pending':
             entry_doc['credit_amount'] = entry.amount
     
+    # ---- Discrepancy validation (mandatory-reason rule) ----
+    _disc_reason = (entry.discrepancy_reason or "").strip()
+    _disc = await validate_sale_discrepancy(entry_doc, "sales_entry")
+    if _disc["is_discrepancy"] and not _disc_reason:
+        raise HTTPException(status_code=400, detail={
+            "code": "discrepancy_requires_reason",
+            "message": "Amount mismatch detected vs configured rate — justification required to save.",
+            "expected_amount": _disc["expected_amount"],
+            "actual_amount": _disc["actual_amount"],
+            "discrepancy_amount": _disc["discrepancy_amount"],
+        })
+    if _disc["is_discrepancy"]:
+        entry_doc['discrepancy_reason'] = _disc_reason
+        entry_doc['is_discrepancy'] = True
+        entry_doc['expected_amount'] = _disc["expected_amount"]
+        entry_doc['discrepancy_amount'] = _disc["discrepancy_amount"]
+
     await db.sales_entries.insert_one(entry_doc)
     
     # Remove MongoDB's _id before returning (insert_one mutates the dict)
@@ -308,6 +325,23 @@ async def create_sales_entry_for_warehouse(
         elif entry.payment_mode == 'pending':
             entry_doc['credit_amount'] = entry.amount
     
+    # ---- Discrepancy validation (mandatory-reason rule) ----
+    _disc_reason = (entry.discrepancy_reason or "").strip()
+    _disc = await validate_sale_discrepancy(entry_doc, "sales_entry")
+    if _disc["is_discrepancy"] and not _disc_reason:
+        raise HTTPException(status_code=400, detail={
+            "code": "discrepancy_requires_reason",
+            "message": "Amount mismatch detected vs configured rate — justification required to save.",
+            "expected_amount": _disc["expected_amount"],
+            "actual_amount": _disc["actual_amount"],
+            "discrepancy_amount": _disc["discrepancy_amount"],
+        })
+    if _disc["is_discrepancy"]:
+        entry_doc['discrepancy_reason'] = _disc_reason
+        entry_doc['is_discrepancy'] = True
+        entry_doc['expected_amount'] = _disc["expected_amount"]
+        entry_doc['discrepancy_amount'] = _disc["discrepancy_amount"]
+
     await db.sales_entries.insert_one(entry_doc)
     
     # Remove MongoDB's _id before returning (insert_one mutates the dict)

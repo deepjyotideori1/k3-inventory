@@ -35,7 +35,7 @@ router = APIRouter()
 REPORT_TYPES = {
     "daily_sales", "monthly_sales", "gst_report", "hsn_summary",
     "item_wise", "customer_wise", "warehouse_wise", "cancelled",
-    "payment_wise", "tax_summary",
+    "payment_wise", "tax_summary", "discrepancy_invoices",
 }
 
 
@@ -448,6 +448,68 @@ async def _build_tax_summary(start_date, end_date):
     return rows, summary, columns
 
 
+async def _build_discrepancy_invoices(start_date, end_date):
+    q: Dict[str, Any] = {"is_discrepancy": True}
+    if start_date or end_date:
+        q["invoice_date"] = {}
+        if start_date:
+            q["invoice_date"]["$gte"] = start_date
+        if end_date:
+            q["invoice_date"]["$lte"] = end_date
+    docs = await db.gst_invoices.find(q, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    rows = []
+    total_expected = 0.0
+    total_actual = 0.0
+    total_diff = 0.0
+    status_counts: Dict[str, int] = defaultdict(int)
+    for inv in docs:
+        exp = _round(inv.get("expected_amount"))
+        act = _round(inv.get("actual_amount") or inv.get("grand_total"))
+        diff = _round(inv.get("discrepancy_amount"))
+        total_expected += exp
+        total_actual += act
+        total_diff += diff
+        st = inv.get("discrepancy_status") or "pending"
+        status_counts[st] += 1
+        rows.append({
+            "date": _fmt_dmy(inv.get("invoice_date")),
+            "invoice_number": inv.get("invoice_number"),
+            "customer_name": inv.get("customer_name"),
+            "bill_type": (inv.get("bill_type") or "").replace("_", " "),
+            "expected": exp,
+            "actual": act,
+            "difference": diff,
+            "reason": (inv.get("discrepancy_reason") or "")[:200],
+            "status": st,
+            "reviewed_by": inv.get("discrepancy_reviewed_by_name") or "",
+            "review_note": (inv.get("discrepancy_review_note") or "")[:200],
+        })
+    summary = {
+        "total_discrepancies": len(rows),
+        "total_expected": _round(total_expected),
+        "total_actual": _round(total_actual),
+        "total_difference": _round(total_diff),
+        "pending": status_counts.get("pending", 0),
+        "approved": status_counts.get("approved", 0),
+        "rejected": status_counts.get("rejected", 0),
+        "corrected": status_counts.get("corrected", 0),
+    }
+    columns = [
+        ("Invoice Date", "date", "center"),
+        ("Invoice No.", "invoice_number", "left"),
+        ("Customer", "customer_name", "left"),
+        ("Type", "bill_type", "left"),
+        ("Expected (₹)", "expected", "amount"),
+        ("Actual (₹)", "actual", "amount"),
+        ("Difference (₹)", "difference", "amount"),
+        ("Reason", "reason", "left"),
+        ("Status", "status", "center"),
+        ("Reviewed By", "reviewed_by", "left"),
+        ("Review Note", "review_note", "left"),
+    ]
+    return rows, summary, columns
+
+
 # ---------------- Report dispatcher ----------------
 async def _build_report(report_type: str, start_date: Optional[str], end_date: Optional[str]):
     builders = {
@@ -461,6 +523,7 @@ async def _build_report(report_type: str, start_date: Optional[str], end_date: O
         "cancelled": _build_cancelled,
         "payment_wise": _build_payment_wise,
         "tax_summary": _build_tax_summary,
+        "discrepancy_invoices": _build_discrepancy_invoices,
     }
     fn = builders.get(report_type)
     if not fn:
@@ -479,6 +542,7 @@ REPORT_LABELS = {
     "cancelled": "Cancelled Invoice Report",
     "payment_wise": "Payment-wise Sales Report",
     "tax_summary": "Tax Summary Report",
+    "discrepancy_invoices": "Discrepancy Invoices Report",
 }
 
 

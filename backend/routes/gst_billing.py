@@ -341,6 +341,145 @@ def compute_totals(line_items: List[dict], tax_mode: str) -> dict:
     }
 
 
+# ============ DISCREPANCY DETECTION ============
+DISCREPANCY_TOLERANCE = 1.0  # ±₹1 rounding allowance
+
+
+async def compute_expected_amount(payload: dict) -> Optional[float]:
+    """Returns the expected grand_total for an invoice payload based on:
+       1. The linked Connection Plan (if connection_plan_id is set and all plan items have rates)
+       2. The Item Master default_rate × quantity × (1 + gst_rate/100) sum (when items map to gst_items)
+    Returns None when no expected amount can be computed (e.g., manual ad-hoc items)."""
+    tax_mode = (payload.get("tax_mode") or "intra_state").lower()
+
+    # 1) Plan-based expected amount
+    plan_id = payload.get("connection_plan_id")
+    if plan_id:
+        plan = await db.gst_plans.find_one({"id": plan_id, "is_active": True}, {"_id": 0})
+        if plan and plan.get("items"):
+            if all(float(it.get("unit_price") or 0) > 0 for it in plan["items"]):
+                synth = [{
+                    "quantity": float(it.get("quantity") or 0),
+                    "rate": float(it.get("unit_price") or 0),
+                    "gst_rate": float(it.get("gst_rate") or 0),
+                } for it in plan["items"]]
+                return compute_totals(synth, tax_mode)["grand_total"]
+
+    # 2) Item-master expected amount: every line_item must resolve to a gst_items row with default_rate>0
+    line_items = payload.get("line_items") or []
+    if not line_items:
+        return None
+    synth: List[dict] = []
+    all_resolved = True
+    for li in line_items:
+        item_id = li.get("item_id")
+        item: Optional[dict] = None
+        if item_id:
+            item = await db.gst_items.find_one({"id": item_id}, {"_id": 0})
+        if not item:
+            # try name match
+            name = (li.get("item_name") or "").strip()
+            if name:
+                item = await db.gst_items.find_one({"name": name}, {"_id": 0})
+        if not item or float(item.get("default_rate") or 0) <= 0:
+            all_resolved = False
+            break
+        qty = float(li.get("quantity") or 0)
+        gst_rate = float(item.get("gst_rate") or 0)
+        # default_rate is inclusive (matches plan unit_price). Convert to taxable per unit.
+        taxable_per_unit = round(float(item["default_rate"]) * 100.0 / (100.0 + gst_rate), 2)
+        synth.append({"quantity": qty, "rate": taxable_per_unit, "gst_rate": gst_rate})
+    if not all_resolved or not synth:
+        return None
+    return compute_totals(synth, tax_mode)["grand_total"]
+
+
+def discrepancy_payload(expected: Optional[float], actual: float) -> dict:
+    """Compute discrepancy fields. Returns {is_discrepancy, expected, actual, diff}."""
+    if expected is None:
+        return {"is_discrepancy": False, "expected_amount": None,
+                "actual_amount": round(actual, 2), "discrepancy_amount": 0.0}
+    diff = round(actual - expected, 2)
+    is_mismatch = abs(diff) > DISCREPANCY_TOLERANCE
+    return {
+        "is_discrepancy": is_mismatch,
+        "expected_amount": round(expected, 2),
+        "actual_amount": round(actual, 2),
+        "discrepancy_amount": diff,
+    }
+
+
+async def validate_sale_discrepancy(sale: dict, sale_type: str) -> dict:
+    """Compute expected vs actual for a sale BEFORE it is persisted. Used by
+    routes/sales.py and routes/accessories.py to enforce the mandatory-reason rule
+    on sales entries.
+
+    Returns the discrepancy_payload(...) dict. When expected_amount cannot be
+    determined (no plan, no matching item master), returns is_discrepancy=False
+    so the sale is saved silently — same behaviour as before this feature."""
+    actual = float(sale.get("amount") or 0)
+    if actual <= 0:
+        return discrepancy_payload(None, 0.0)
+
+    if sale_type == "sales_entry":
+        ct = sale.get("connection_type", "")
+        is_refill = "refill" in ct
+        is_commercial = "commercial" in ct
+        # Plan-based: only for new connections
+        plan_id = sale.get("connection_plan_id")
+        if plan_id and not is_refill:
+            plan = await db.gst_plans.find_one({"id": plan_id, "is_active": True}, {"_id": 0})
+            if plan and plan.get("items") and all(float(it.get("unit_price") or 0) > 0 for it in plan["items"]):
+                synth = [{
+                    "quantity": float(it.get("quantity") or 0),
+                    "rate": round(float(it.get("unit_price") or 0) * 100.0 / (100.0 + float(it.get("gst_rate") or 0)), 2),
+                    "gst_rate": float(it.get("gst_rate") or 0),
+                } for it in plan["items"]]
+                expected = compute_totals(synth, "intra_state")["grand_total"]
+                return discrepancy_payload(expected, actual)
+
+        # Item-master based: refill or new connection without plan
+        if is_refill:
+            item_name = "Commercial LPG Refill" if is_commercial else "Domestic LPG Refill"
+            qty = int(sale.get("no_of_refills", 0) or 0) or 1
+        else:
+            item_name = "Commercial New Connection" if is_commercial else "Domestic New Connection"
+            cyl = str(sale.get("cylinder_nos", "")).strip()
+            try:
+                qty = int(cyl) if cyl else 1
+            except ValueError:
+                qty = max(1, len([p for p in cyl.split(",") if p.strip()]))
+        gst_item = await db.gst_items.find_one({"name": item_name}, {"_id": 0})
+        if gst_item and float(gst_item.get("default_rate") or 0) > 0:
+            expected = float(gst_item["default_rate"]) * qty
+            return discrepancy_payload(expected, actual)
+
+    elif sale_type == "accessory_sale":
+        items = sale.get("items") or []
+        if not items:
+            return discrepancy_payload(None, actual)
+        total_expected = 0.0
+        all_resolved = True
+        for it in items:
+            qty = float(it.get("quantity") or 0)
+            name = (it.get("accessory_name") or "").strip()
+            if not name or qty <= 0:
+                all_resolved = False
+                break
+            gst_item = await db.gst_items.find_one(
+                {"name": {"$regex": f"^{re.escape(name)}", "$options": "i"}}, {"_id": 0}
+            )
+            if not gst_item or float(gst_item.get("default_rate") or 0) <= 0:
+                all_resolved = False
+                break
+            total_expected += float(gst_item["default_rate"]) * qty
+        if all_resolved and total_expected > 0:
+            return discrepancy_payload(total_expected, actual)
+
+    return discrepancy_payload(None, actual)
+
+
+
 # ============ CONFIG ============
 @router.get("/gst/config")
 async def get_gst_config(user: dict = Depends(require_admin)):
@@ -799,7 +938,9 @@ async def list_invoices(
 # ============ INVOICES - SINGLE (these must come AFTER list/summary/export) ============
 @router.post("/gst/invoices")
 async def create_invoice(data: dict, user: dict = Depends(require_admin)):
-    """Manual invoice creation."""
+    """Manual invoice creation. Validates against expected amount (from connection plan
+    or item master). If a mismatch >₹1 is detected and no `discrepancy_reason` is given,
+    returns HTTP 400 with the expected/actual/diff so the client can prompt for a reason."""
     await ensure_seed()
     cfg = await db.gst_config.find_one({"key": "gst_config"}) or {}
     tax_mode = (data.get("tax_mode") or cfg.get("default_tax_mode") or "intra_state").lower()
@@ -807,6 +948,20 @@ async def create_invoice(data: dict, user: dict = Depends(require_admin)):
     if not line_items:
         raise HTTPException(status_code=400, detail="At least one line item is required")
     totals = compute_totals(line_items, tax_mode)
+
+    # ---- Discrepancy detection ----
+    expected = await compute_expected_amount({**data, "tax_mode": tax_mode})
+    disc = discrepancy_payload(expected, totals["grand_total"])
+    reason = (data.get("discrepancy_reason") or "").strip()
+    if disc["is_discrepancy"] and not reason:
+        raise HTTPException(status_code=400, detail={
+            "code": "discrepancy_requires_reason",
+            "message": "Amount mismatch detected — justification required to save.",
+            "expected_amount": disc["expected_amount"],
+            "actual_amount": disc["actual_amount"],
+            "discrepancy_amount": disc["discrepancy_amount"],
+        })
+
     now = datetime.now(timezone.utc)
     invoice = {
         "id": str(uuid.uuid4()),
@@ -828,16 +983,28 @@ async def create_invoice(data: dict, user: dict = Depends(require_admin)):
         "status": "active",
         "sale_id": data.get("sale_id") or "",
         "sale_type": data.get("sale_type") or "",
+        "connection_plan_id": data.get("connection_plan_id") or "",
         "warehouse_id": data.get("warehouse_id") or "",
         "warehouse_name": data.get("warehouse_name") or "",
         "created_by_id": user.get("id", ""),
         "created_by_name": user.get("name", ""),
         "created_at": now.isoformat(),
+        # Discrepancy fields
+        "is_discrepancy": disc["is_discrepancy"],
+        "expected_amount": disc["expected_amount"],
+        "actual_amount": disc["actual_amount"],
+        "discrepancy_amount": disc["discrepancy_amount"],
+        "discrepancy_reason": reason if disc["is_discrepancy"] else "",
+        "discrepancy_status": "pending" if disc["is_discrepancy"] else "",
     }
     await db.gst_invoices.insert_one(invoice.copy())
     invoice.pop("_id", None)
-    await log_audit(user.get("id", ""), user.get("name", ""), "create", "gst_invoice",
-                    invoice["id"], f"Invoice {invoice['invoice_number']} for {invoice['customer_name']}")
+    audit_detail = f"Invoice {invoice['invoice_number']} for {invoice['customer_name']}"
+    if disc["is_discrepancy"]:
+        audit_detail += f" | DISCREPANCY: expected ₹{disc['expected_amount']} actual ₹{disc['actual_amount']} diff ₹{disc['discrepancy_amount']} reason: {reason}"
+    await log_audit(user.get("id", ""), user.get("name", ""),
+                    "create_discrepancy" if disc["is_discrepancy"] else "create",
+                    "gst_invoice", invoice["id"], audit_detail)
     return invoice
 
 
@@ -859,7 +1026,7 @@ async def update_invoice(invoice_id: str, data: dict, user: dict = Depends(requi
     editable = {
         "invoice_date", "customer_name", "customer_phone", "customer_address",
         "customer_gstin", "place_of_supply", "tax_mode", "payment_mode",
-        "remarks", "line_items", "bill_type",
+        "remarks", "line_items", "bill_type", "connection_plan_id",
     }
     updates = {k: v for k, v in data.items() if k in editable}
     if "line_items" in updates or "tax_mode" in updates:
@@ -868,11 +1035,141 @@ async def update_invoice(invoice_id: str, data: dict, user: dict = Depends(requi
         totals = compute_totals(line_items, tax_mode)
         updates["line_items"] = line_items
         updates.update(totals)
+
+        # Re-validate discrepancy on edit
+        expected = await compute_expected_amount({
+            **{k: existing.get(k) for k in ("connection_plan_id",)},
+            **{k: updates.get(k, existing.get(k)) for k in ("tax_mode", "line_items")},
+        })
+        disc = discrepancy_payload(expected, totals["grand_total"])
+        reason = (data.get("discrepancy_reason") or existing.get("discrepancy_reason") or "").strip()
+        if disc["is_discrepancy"] and not reason:
+            raise HTTPException(status_code=400, detail={
+                "code": "discrepancy_requires_reason",
+                "message": "Amount mismatch detected — justification required to save.",
+                "expected_amount": disc["expected_amount"],
+                "actual_amount": disc["actual_amount"],
+                "discrepancy_amount": disc["discrepancy_amount"],
+            })
+        updates["is_discrepancy"] = disc["is_discrepancy"]
+        updates["expected_amount"] = disc["expected_amount"]
+        updates["actual_amount"] = disc["actual_amount"]
+        updates["discrepancy_amount"] = disc["discrepancy_amount"]
+        if disc["is_discrepancy"]:
+            updates["discrepancy_reason"] = reason
+            # Edit by admin re-opens for review unless review status already set in this call
+            if not existing.get("discrepancy_status"):
+                updates["discrepancy_status"] = "pending"
+        else:
+            # Edit fixed the mismatch - clear discrepancy fields
+            updates["discrepancy_reason"] = ""
+            updates["discrepancy_status"] = ""
     updates["updated_at"] = datetime.now(timezone.utc).isoformat()
     updates["updated_by_name"] = user.get("name", "")
     await db.gst_invoices.update_one({"id": invoice_id}, {"$set": updates})
     await log_audit(user.get("id", ""), user.get("name", ""), "update", "gst_invoice", invoice_id,
                     f"Fields: {','.join(updates.keys())}")
+    return await db.gst_invoices.find_one({"id": invoice_id}, {"_id": 0})
+
+
+# ============ DISCREPANCY REVIEW ENDPOINTS ============
+@router.get("/gst/discrepancies")
+async def list_discrepancies(status: Optional[str] = None, start_date: Optional[str] = None,
+                              end_date: Optional[str] = None, user: dict = Depends(require_admin)):
+    """List all invoices flagged as discrepancy. Filter by status (pending/approved/rejected/corrected)
+    and optional invoice_date range."""
+    q: Dict[str, Any] = {"is_discrepancy": True}
+    if status and status != "all":
+        q["discrepancy_status"] = status
+    if start_date or end_date:
+        q["invoice_date"] = {}
+        if start_date:
+            q["invoice_date"]["$gte"] = start_date
+        if end_date:
+            q["invoice_date"]["$lte"] = end_date
+    rows = await db.gst_invoices.find(q, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    # Summary stats
+    summary = {
+        "total": len(rows),
+        "pending": sum(1 for r in rows if r.get("discrepancy_status") == "pending"),
+        "approved": sum(1 for r in rows if r.get("discrepancy_status") == "approved"),
+        "rejected": sum(1 for r in rows if r.get("discrepancy_status") == "rejected"),
+        "corrected": sum(1 for r in rows if r.get("discrepancy_status") == "corrected"),
+        "total_difference": round(sum(float(r.get("discrepancy_amount") or 0) for r in rows), 2),
+    }
+    return {"rows": rows, "summary": summary}
+
+
+@router.post("/gst/discrepancies/{invoice_id}/review")
+async def review_discrepancy(invoice_id: str, data: dict, user: dict = Depends(require_admin)):
+    """Approve or reject a discrepancy. Body: {action: 'approve'|'reject', note: str}"""
+    action = (data.get("action") or "").lower()
+    if action not in ("approve", "reject"):
+        raise HTTPException(status_code=400, detail="action must be 'approve' or 'reject'")
+    note = (data.get("note") or "").strip()
+    inv = await db.gst_invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    if not inv.get("is_discrepancy"):
+        raise HTTPException(status_code=400, detail="Invoice is not flagged as a discrepancy")
+    now = datetime.now(timezone.utc).isoformat()
+    new_status = "approved" if action == "approve" else "rejected"
+    await db.gst_invoices.update_one({"id": invoice_id}, {"$set": {
+        "discrepancy_status": new_status,
+        "discrepancy_reviewed_by": user.get("id", ""),
+        "discrepancy_reviewed_by_name": user.get("name", ""),
+        "discrepancy_reviewed_at": now,
+        "discrepancy_review_note": note,
+    }})
+    await log_audit(user.get("id", ""), user.get("name", ""),
+                    f"discrepancy_{action}", "gst_invoice", invoice_id,
+                    f"{inv.get('invoice_number')} | expected ₹{inv.get('expected_amount')} actual ₹{inv.get('actual_amount')} diff ₹{inv.get('discrepancy_amount')} | note: {note}")
+    return await db.gst_invoices.find_one({"id": invoice_id}, {"_id": 0})
+
+
+@router.post("/gst/discrepancies/{invoice_id}/correct")
+async def correct_discrepancy(invoice_id: str, data: dict, user: dict = Depends(require_admin)):
+    """Admin corrects the invoice by updating line_items so the grand_total matches the
+    expected amount. After correction, the invoice is marked as corrected and discrepancy
+    flags are cleared. Body: {line_items: [...], note: str}."""
+    line_items = data.get("line_items") or []
+    if not line_items:
+        raise HTTPException(status_code=400, detail="line_items required to correct invoice")
+    note = (data.get("note") or "").strip()
+    existing = await db.gst_invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    if not existing.get("is_discrepancy"):
+        raise HTTPException(status_code=400, detail="Invoice is not flagged as a discrepancy")
+    tax_mode = existing.get("tax_mode") or "intra_state"
+    totals = compute_totals(line_items, tax_mode)
+    expected = await compute_expected_amount({
+        "connection_plan_id": existing.get("connection_plan_id"),
+        "tax_mode": tax_mode,
+        "line_items": line_items,
+    })
+    disc = discrepancy_payload(expected, totals["grand_total"])
+    now = datetime.now(timezone.utc).isoformat()
+    updates = {
+        "line_items": line_items,
+        **totals,
+        "is_discrepancy": disc["is_discrepancy"],
+        "expected_amount": disc["expected_amount"],
+        "actual_amount": disc["actual_amount"],
+        "discrepancy_amount": disc["discrepancy_amount"],
+        "discrepancy_status": "pending" if disc["is_discrepancy"] else "corrected",
+        "discrepancy_reviewed_by": user.get("id", ""),
+        "discrepancy_reviewed_by_name": user.get("name", ""),
+        "discrepancy_reviewed_at": now,
+        "discrepancy_review_note": note,
+        "updated_at": now,
+        "updated_by_name": user.get("name", ""),
+    }
+    if not disc["is_discrepancy"]:
+        updates["discrepancy_reason"] = ""  # cleared since mismatch resolved
+    await db.gst_invoices.update_one({"id": invoice_id}, {"$set": updates})
+    await log_audit(user.get("id", ""), user.get("name", ""), "discrepancy_correct", "gst_invoice",
+                    invoice_id, f"{existing.get('invoice_number')} | corrected to ₹{totals['grand_total']} | new diff ₹{disc['discrepancy_amount']} | note: {note}")
     return await db.gst_invoices.find_one({"id": invoice_id}, {"_id": 0})
 
 
@@ -1059,8 +1356,11 @@ async def _auto_generate_invoice(sale: dict, sale_type: str, user: dict) -> Opti
             "payment_mode": payment_mode,
             "invoice_date": invoice_date,
             "line_items": line_items,
+            "connection_plan_id": sale.get("connection_plan_id") or "",
             "warehouse_id": sale.get("warehouse_id", ""),
             "warehouse_name": sale.get("warehouse_name", ""),
+            # Propagate discrepancy reason from the source sale (validated at sale-entry layer)
+            "discrepancy_reason": sale.get("discrepancy_reason") or "",
         }
         return await create_invoice(payload, user)
     except Exception as e:

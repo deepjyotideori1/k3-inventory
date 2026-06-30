@@ -716,6 +716,13 @@ export const createGstPlan = (data) => api.post('/gst/plans', data);
 export const updateGstPlan = (planId, data) => api.put(`/gst/plans/${planId}`, data);
 export const deleteGstPlan = (planId) => api.delete(`/gst/plans/${planId}`);
 
+// GST Discrepancies
+export const listGstDiscrepancies = (params = {}) => api.get('/gst/discrepancies', { params });
+export const reviewGstDiscrepancy = (invoiceId, action, note = '') =>
+  api.post(`/gst/discrepancies/${invoiceId}/review`, { action, note });
+export const correctGstDiscrepancy = (invoiceId, line_items, note = '') =>
+  api.post(`/gst/discrepancies/${invoiceId}/correct`, { line_items, note });
+
 // GST Reports
 export const listGstReports = () => api.get('/gst/reports/list');
 export const getGstReport = (reportType, params) => api.get(`/gst/reports/${reportType}`, { params });

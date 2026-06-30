@@ -191,8 +191,8 @@ class TestHistory:
         assert len(r.content) > 500
         wb = load_workbook(io.BytesIO(r.content), data_only=True)
         ws = wb.active
-        # Header row is row 4 in the layout
-        hdr = [str(c.value or "").strip() for c in ws[4]]
+        # Header row is row 5 in the layout (rows 1-3 = company branding, row 4 = spacer)
+        hdr = [str(c.value or "").strip() for c in ws[5]]
         assert "Item Name" in hdr and "Previous Rate" in hdr and "Updated Rate" in hdr
 
     def test_history_requires_admin(self):

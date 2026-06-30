@@ -18,7 +18,7 @@ import { toast } from 'sonner';
 import {
   Receipt, Search, Plus, FileDown, FileSpreadsheet, Settings as SettingsIcon,
   Edit2, XCircle, Trash2, Eye, RefreshCw, ChevronLeft, ChevronRight, FileText, AlertCircle,
-  Upload, History
+  Upload, History, AlertTriangle, CheckCircle2, Ban
 } from 'lucide-react';
 import {
   getGstInvoices, getGstSummary, getGstConfig, updateGstConfig,
@@ -29,7 +29,8 @@ import {
   generateGstFromSale, downloadGstInvoicePdf, exportGstInvoicesExcel,
   getSalesEntries, getAccessorySales,
   downloadGstItemTemplate, bulkUploadGstItems,
-  getGstItemHistory, downloadGstItemHistoryExcel
+  getGstItemHistory, downloadGstItemHistoryExcel,
+  listGstDiscrepancies, reviewGstDiscrepancy
 } from '../lib/api';
 
 const formatRs = (n) => {
@@ -121,6 +122,22 @@ const GSTBilling = () => {
   const [histEnd, setHistEnd] = useState('');
   const [historyRows, setHistoryRows] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+
+  // Discrepancies
+  const [discrepancyRows, setDiscrepancyRows] = useState([]);
+  const [discrepancySummary, setDiscrepancySummary] = useState({ total: 0, pending: 0, approved: 0, rejected: 0, corrected: 0, total_difference: 0 });
+  const [discStatusFilter, setDiscStatusFilter] = useState('all');
+  const [discLoading, setDiscLoading] = useState(false);
+  const [showReviewDialog, setShowReviewDialog] = useState(false);
+  const [reviewTarget, setReviewTarget] = useState(null);
+  const [reviewAction, setReviewAction] = useState('approve');
+  const [reviewNote, setReviewNote] = useState('');
+  const [reviewing, setReviewing] = useState(false);
+  // Discrepancy-reason dialog (triggered when create/update invoice returns 400)
+  const [showDiscReasonDialog, setShowDiscReasonDialog] = useState(false);
+  const [discReasonInfo, setDiscReasonInfo] = useState(null);   // { expected, actual, diff, payloadFn }
+  const [discReasonInput, setDiscReasonInput] = useState('');
+  const [discReasonSaving, setDiscReasonSaving] = useState(false);
 
   // Reports state
   const [reportsList, setReportsList] = useState([]);
@@ -242,6 +259,23 @@ const GSTBilling = () => {
     loadSummary();
   }, [loadInvoices, loadSummary]);
 
+  // Discrepancy loader (defined early so the useEffect below can reference it)
+  const loadDiscrepancies = useCallback(async () => {
+    setDiscLoading(true);
+    try {
+      const params = {};
+      if (discStatusFilter && discStatusFilter !== 'all') params.status = discStatusFilter;
+      const res = await listGstDiscrepancies(params);
+      const data = res?.data || res;
+      setDiscrepancyRows(data.rows || []);
+      setDiscrepancySummary(data.summary || { total: 0, pending: 0, approved: 0, rejected: 0, corrected: 0, total_difference: 0 });
+    } catch (e) {
+      toast.error('Failed to load discrepancies');
+    } finally {
+      setDiscLoading(false);
+    }
+  }, [discStatusFilter]);
+
   useEffect(() => {
     loadConfig();
     loadItems();
@@ -255,6 +289,13 @@ const GSTBilling = () => {
       runReport();
     }
   }, [activeTab, runReport]);
+
+  // Auto-load discrepancies when user opens the Discrepancies tab or changes filter
+  useEffect(() => {
+    if (activeTab === 'discrepancies') {
+      loadDiscrepancies();
+    }
+  }, [activeTab, loadDiscrepancies]);
 
   // ----- HANDLERS -----
   const handleCancel = async () => {
@@ -410,6 +451,21 @@ const GSTBilling = () => {
     };
   };
 
+  const _saveInvoicePayload = async (payload) => {
+    if (editingInvoice) {
+      await updateGstInvoice(editingInvoice.id, payload);
+      toast.success('Invoice updated');
+    } else {
+      await createGstInvoice(payload);
+      toast.success(payload.discrepancy_reason ? 'Invoice saved as Discrepancy (pending review)' : 'Invoice created');
+    }
+    setShowInvoiceDialog(false);
+    setInvForm(null);
+    setEditingInvoice(null);
+    loadInvoices();
+    loadSummary();
+  };
+
   const handleSaveInvoice = async () => {
     if (!invForm) return;
     if (!invForm.customer_name?.trim()) {
@@ -421,20 +477,41 @@ const GSTBilling = () => {
       return;
     }
     try {
-      if (editingInvoice) {
-        await updateGstInvoice(editingInvoice.id, invForm);
-        toast.success('Invoice updated');
-      } else {
-        await createGstInvoice(invForm);
-        toast.success('Invoice created');
-      }
-      setShowInvoiceDialog(false);
-      setInvForm(null);
-      setEditingInvoice(null);
-      loadInvoices();
-      loadSummary();
+      await _saveInvoicePayload(invForm);
     } catch (e) {
-      toast.error(e?.response?.data?.detail || 'Failed to save invoice');
+      const detail = e?.response?.data?.detail;
+      // Backend returned discrepancy 400 — open reason dialog
+      if (detail && typeof detail === 'object' && detail.code === 'discrepancy_requires_reason') {
+        setDiscReasonInfo({
+          expected: detail.expected_amount,
+          actual: detail.actual_amount,
+          diff: detail.discrepancy_amount,
+          retry: (reason) => _saveInvoicePayload({ ...invForm, discrepancy_reason: reason }),
+        });
+        setDiscReasonInput('');
+        setShowDiscReasonDialog(true);
+        return;
+      }
+      toast.error(typeof detail === 'string' ? detail : 'Failed to save invoice');
+    }
+  };
+
+  const handleConfirmDiscrepancyReason = async () => {
+    if (!discReasonInput.trim()) {
+      toast.error('Reason is required to save a discrepancy invoice');
+      return;
+    }
+    if (!discReasonInfo?.retry) return;
+    setDiscReasonSaving(true);
+    try {
+      await discReasonInfo.retry(discReasonInput.trim());
+      setShowDiscReasonDialog(false);
+      setDiscReasonInfo(null);
+      setDiscReasonInput('');
+    } catch (e) {
+      toast.error(e?.response?.data?.detail?.message || e?.response?.data?.detail || 'Failed to save with reason');
+    } finally {
+      setDiscReasonSaving(false);
     }
   };
 
@@ -630,6 +707,37 @@ const GSTBilling = () => {
     setTimeout(() => loadHistory(), 50);
   };
 
+  // ---- Discrepancy review ----
+
+  const openReviewDialog = (row, action) => {
+    setReviewTarget(row);
+    setReviewAction(action);
+    setReviewNote('');
+    setShowReviewDialog(true);
+  };
+
+  const handleSubmitReview = async () => {
+    if (!reviewTarget) return;
+    if (reviewAction === 'reject' && !reviewNote.trim()) {
+      toast.error('A note is required when rejecting');
+      return;
+    }
+    setReviewing(true);
+    try {
+      await reviewGstDiscrepancy(reviewTarget.id, reviewAction, reviewNote.trim());
+      toast.success(`Discrepancy ${reviewAction === 'approve' ? 'approved' : 'rejected'}`);
+      setShowReviewDialog(false);
+      setReviewTarget(null);
+      setReviewNote('');
+      loadDiscrepancies();
+      loadInvoices();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Failed to submit review');
+    } finally {
+      setReviewing(false);
+    }
+  };
+
   // ---- Connection Plans ----
   const handleSavePlan = async () => {
     if (!editingPlan?.name) {
@@ -807,6 +915,7 @@ const GSTBilling = () => {
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="invoices" data-testid="tab-invoices">Invoices</TabsTrigger>
+            <TabsTrigger value="discrepancies" data-testid="tab-discrepancies">Discrepancies</TabsTrigger>
             <TabsTrigger value="reports" data-testid="tab-reports">Reports</TabsTrigger>
             <TabsTrigger value="plans" data-testid="tab-plans">Connection Plans</TabsTrigger>
             <TabsTrigger value="items" data-testid="tab-items">Item Master</TabsTrigger>
@@ -885,7 +994,23 @@ const GSTBilling = () => {
                             <div className="text-xs text-slate-500">{inv.customer_phone}</div>
                           </td>
                           <td className="p-3">
-                            <Badge variant="outline">{(inv.bill_type || '-').replace('_', ' ')}</Badge>
+                            <div className="flex items-center gap-1 flex-wrap">
+                              <Badge variant="outline">{(inv.bill_type || '-').replace('_', ' ')}</Badge>
+                              {inv.is_discrepancy && (
+                                <Badge
+                                  className={
+                                    inv.discrepancy_status === 'approved' ? 'bg-green-100 text-green-700' :
+                                    inv.discrepancy_status === 'rejected' ? 'bg-red-100 text-red-700' :
+                                    inv.discrepancy_status === 'corrected' ? 'bg-blue-100 text-blue-700' :
+                                    'bg-amber-100 text-amber-700'
+                                  }
+                                  title={`Discrepancy: ${inv.discrepancy_reason || ''} | Diff: ${inv.discrepancy_amount}`}
+                                  data-testid={`disc-badge-${inv.id}`}
+                                >
+                                  <AlertTriangle className="w-3 h-3 mr-0.5" /> Discrepancy
+                                </Badge>
+                              )}
+                            </div>
                           </td>
                           <td className="p-3 text-right">{formatRs(inv.sub_total)}</td>
                           <td className="p-3 text-right text-blue-700">{formatRs(inv.total_gst)}</td>
@@ -942,6 +1067,140 @@ const GSTBilling = () => {
                       Next <ChevronRight className="w-4 h-4" />
                     </Button>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* DISCREPANCIES TAB */}
+          <TabsContent value="discrepancies" className="space-y-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-amber-600" />
+                  <CardTitle className="text-base">Discrepancy Invoices</CardTitle>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Select value={discStatusFilter} onValueChange={setDiscStatusFilter}>
+                    <SelectTrigger className="w-40" data-testid="disc-status-filter">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All ({discrepancySummary.total || 0})</SelectItem>
+                      <SelectItem value="pending">Pending ({discrepancySummary.pending || 0})</SelectItem>
+                      <SelectItem value="approved">Approved ({discrepancySummary.approved || 0})</SelectItem>
+                      <SelectItem value="rejected">Rejected ({discrepancySummary.rejected || 0})</SelectItem>
+                      <SelectItem value="corrected">Corrected ({discrepancySummary.corrected || 0})</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button size="sm" variant="outline" onClick={loadDiscrepancies} data-testid="disc-refresh-btn">
+                    <RefreshCw className="w-4 h-4 mr-1" /> Refresh
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                {/* Summary tiles */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2 px-4 pb-3 pt-1">
+                  <div className="bg-slate-50 rounded p-2 text-center" data-testid="disc-tile-total">
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wide">Total</p>
+                    <p className="text-lg font-bold text-slate-800">{discrepancySummary.total || 0}</p>
+                  </div>
+                  <div className="bg-amber-50 rounded p-2 text-center" data-testid="disc-tile-pending">
+                    <p className="text-[10px] text-amber-700 uppercase tracking-wide">Pending</p>
+                    <p className="text-lg font-bold text-amber-700">{discrepancySummary.pending || 0}</p>
+                  </div>
+                  <div className="bg-green-50 rounded p-2 text-center" data-testid="disc-tile-approved">
+                    <p className="text-[10px] text-green-700 uppercase tracking-wide">Approved</p>
+                    <p className="text-lg font-bold text-green-700">{discrepancySummary.approved || 0}</p>
+                  </div>
+                  <div className="bg-red-50 rounded p-2 text-center" data-testid="disc-tile-rejected">
+                    <p className="text-[10px] text-red-700 uppercase tracking-wide">Rejected</p>
+                    <p className="text-lg font-bold text-red-700">{discrepancySummary.rejected || 0}</p>
+                  </div>
+                  <div className="bg-blue-50 rounded p-2 text-center" data-testid="disc-tile-diff">
+                    <p className="text-[10px] text-blue-700 uppercase tracking-wide">Net Difference</p>
+                    <p className={`text-lg font-bold ${(discrepancySummary.total_difference || 0) >= 0 ? 'text-blue-700' : 'text-red-700'}`}>
+                      {formatRs(discrepancySummary.total_difference || 0)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto border-t">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 border-b">
+                      <tr>
+                        <th className="p-3 text-left font-medium">Invoice No.</th>
+                        <th className="p-3 text-left font-medium">Date</th>
+                        <th className="p-3 text-left font-medium">Customer</th>
+                        <th className="p-3 text-right font-medium">Expected (₹)</th>
+                        <th className="p-3 text-right font-medium">Actual (₹)</th>
+                        <th className="p-3 text-right font-medium">Difference</th>
+                        <th className="p-3 text-left font-medium">Reason</th>
+                        <th className="p-3 text-center font-medium">Status</th>
+                        <th className="p-3 text-center font-medium">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {!discLoading && discrepancyRows.length > 0 && discrepancyRows.map(d => (
+                        <tr key={d.id} className="border-b hover:bg-slate-50" data-testid={`disc-row-${d.id}`}>
+                          <td className="p-3 font-mono text-xs">{d.invoice_number}</td>
+                          <td className="p-3">{d.invoice_date}</td>
+                          <td className="p-3">
+                            <div className="font-medium">{d.customer_name}</div>
+                            <div className="text-xs text-slate-500">{(d.bill_type || '').replace('_', ' ')}</div>
+                          </td>
+                          <td className="p-3 text-right">{formatRs(d.expected_amount)}</td>
+                          <td className="p-3 text-right">{formatRs(d.actual_amount)}</td>
+                          <td className={`p-3 text-right font-semibold ${Number(d.discrepancy_amount) >= 0 ? 'text-blue-700' : 'text-red-700'}`}>
+                            {Number(d.discrepancy_amount) >= 0 ? '+' : ''}{formatRs(d.discrepancy_amount)}
+                          </td>
+                          <td className="p-3 max-w-[260px] text-xs text-slate-600">
+                            <div className="line-clamp-2" title={d.discrepancy_reason}>{d.discrepancy_reason || '-'}</div>
+                            {d.discrepancy_review_note && (
+                              <div className="text-[11px] text-slate-400 mt-1 italic" title={d.discrepancy_review_note}>
+                                Review: {d.discrepancy_review_note}
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-3 text-center">
+                            {d.discrepancy_status === 'pending' && <Badge className="bg-amber-100 text-amber-700">Pending</Badge>}
+                            {d.discrepancy_status === 'approved' && <Badge className="bg-green-100 text-green-700">Approved</Badge>}
+                            {d.discrepancy_status === 'rejected' && <Badge className="bg-red-100 text-red-700">Rejected</Badge>}
+                            {d.discrepancy_status === 'corrected' && <Badge className="bg-blue-100 text-blue-700">Corrected</Badge>}
+                            {!d.discrepancy_status && <Badge variant="outline">-</Badge>}
+                          </td>
+                          <td className="p-3 text-center">
+                            <div className="flex gap-1 justify-center">
+                              <Button size="icon" variant="ghost" title="View" onClick={() => { setViewingInvoice(d); setShowViewDialog(true); }} data-testid={`disc-view-${d.id}`}>
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                              {d.discrepancy_status === 'pending' && (
+                                <>
+                                  <Button size="icon" variant="ghost" title="Approve" onClick={() => openReviewDialog(d, 'approve')} data-testid={`disc-approve-${d.id}`}>
+                                    <CheckCircle2 className="w-4 h-4 text-green-700" />
+                                  </Button>
+                                  <Button size="icon" variant="ghost" title="Reject" onClick={() => openReviewDialog(d, 'reject')} data-testid={`disc-reject-${d.id}`}>
+                                    <Ban className="w-4 h-4 text-red-700" />
+                                  </Button>
+                                  <Button size="icon" variant="ghost" title="Correct (edit invoice)" onClick={() => openInvoiceDialog(d)} data-testid={`disc-correct-${d.id}`}>
+                                    <Edit2 className="w-4 h-4 text-blue-700" />
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {discLoading && (
+                    <div className="p-8 text-center text-slate-500" data-testid="disc-loading">Loading discrepancies…</div>
+                  )}
+                  {!discLoading && discrepancyRows.length === 0 && (
+                    <div className="p-8 text-center text-slate-500" data-testid="disc-empty">
+                      No discrepancy invoices {discStatusFilter !== 'all' ? `in status "${discStatusFilter}"` : 'yet'}. All amounts match the configured rates 🎉
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -1367,6 +1626,114 @@ const GSTBilling = () => {
             <DialogFooter className="mt-4">
               <Button variant="outline" onClick={() => setShowConfigDialog(false)}>Cancel</Button>
               <Button onClick={handleSaveConfig} className="bg-blue-700 hover:bg-blue-800" data-testid="save-config-btn">Save Settings</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* DISCREPANCY REASON DIALOG (triggered when create/edit invoice fails amount validation) */}
+        <Dialog open={showDiscReasonDialog} onOpenChange={(o) => { if (!o) { setShowDiscReasonDialog(false); setDiscReasonInfo(null); setDiscReasonInput(''); } }}>
+          <DialogContent className="w-[95vw] sm:max-w-xl" data-testid="discrepancy-reason-dialog">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-amber-600" />
+                Amount Mismatch Detected
+              </DialogTitle>
+              <DialogDescription>
+                The entered total does not match the configured rate. A justification is mandatory to save this as a <strong>Discrepancy Invoice</strong> for admin review.
+              </DialogDescription>
+            </DialogHeader>
+            {discReasonInfo && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-2 bg-amber-50 border border-amber-200 rounded p-3">
+                  <div className="text-center">
+                    <p className="text-[10px] text-amber-700 uppercase">Expected</p>
+                    <p className="text-base font-bold text-slate-800" data-testid="disc-reason-expected">{formatRs(discReasonInfo.expected)}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] text-amber-700 uppercase">Entered</p>
+                    <p className="text-base font-bold text-slate-800" data-testid="disc-reason-actual">{formatRs(discReasonInfo.actual)}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] text-amber-700 uppercase">Difference</p>
+                    <p className={`text-base font-bold ${Number(discReasonInfo.diff) >= 0 ? 'text-blue-700' : 'text-red-700'}`} data-testid="disc-reason-diff">
+                      {Number(discReasonInfo.diff) >= 0 ? '+' : ''}{formatRs(discReasonInfo.diff)}
+                    </p>
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="disc-reason-input">Justification / Reason *</Label>
+                  <Textarea
+                    id="disc-reason-input"
+                    rows={4}
+                    value={discReasonInput}
+                    onChange={(e) => setDiscReasonInput(e.target.value)}
+                    placeholder="e.g., Customer overpaid for early adopter bonus, agreed-upon discount, delivery surcharge..."
+                    data-testid="disc-reason-input"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">This will be saved with the invoice and reviewed by an admin in the Discrepancies tab.</p>
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setShowDiscReasonDialog(false); setDiscReasonInfo(null); setDiscReasonInput(''); }} data-testid="disc-reason-cancel">
+                Go back & edit
+              </Button>
+              <Button
+                onClick={handleConfirmDiscrepancyReason}
+                disabled={!discReasonInput.trim() || discReasonSaving}
+                className="bg-amber-600 hover:bg-amber-700"
+                data-testid="disc-reason-confirm"
+              >
+                {discReasonSaving ? 'Saving…' : 'Save as Discrepancy'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* DISCREPANCY REVIEW DIALOG (Approve / Reject) */}
+        <Dialog open={showReviewDialog} onOpenChange={(o) => { setShowReviewDialog(o); if (!o) { setReviewTarget(null); setReviewNote(''); } }}>
+          <DialogContent className="w-[95vw] sm:max-w-lg" data-testid="discrepancy-review-dialog">
+            <DialogHeader>
+              <DialogTitle>
+                {reviewAction === 'approve' ? 'Approve' : 'Reject'} Discrepancy — {reviewTarget?.invoice_number}
+              </DialogTitle>
+              <DialogDescription>
+                {reviewAction === 'approve'
+                  ? 'Approving accepts the recorded reason and closes the discrepancy for audit.'
+                  : 'Rejecting flags this discrepancy as invalid. The invoice stays as-is — you may also choose to correct it instead.'}
+              </DialogDescription>
+            </DialogHeader>
+            {reviewTarget && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-2 text-xs bg-slate-50 rounded p-2">
+                  <div><span className="text-slate-500">Customer:</span> <span className="font-medium">{reviewTarget.customer_name}</span></div>
+                  <div><span className="text-slate-500">Expected:</span> <span className="font-medium">{formatRs(reviewTarget.expected_amount)}</span></div>
+                  <div><span className="text-slate-500">Actual:</span> <span className="font-medium">{formatRs(reviewTarget.actual_amount)}</span></div>
+                  <div className="col-span-3"><span className="text-slate-500">Stated reason:</span> <span className="italic">{reviewTarget.discrepancy_reason || '-'}</span></div>
+                </div>
+                <div>
+                  <Label htmlFor="review-note">Review Note {reviewAction === 'reject' ? '*' : '(optional)'}</Label>
+                  <Textarea
+                    id="review-note"
+                    rows={3}
+                    value={reviewNote}
+                    onChange={(e) => setReviewNote(e.target.value)}
+                    placeholder={reviewAction === 'approve' ? 'Optional: add any context for the audit log.' : 'Required: explain why this reason is rejected.'}
+                    data-testid="disc-review-note"
+                  />
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowReviewDialog(false)} data-testid="disc-review-cancel">Cancel</Button>
+              <Button
+                onClick={handleSubmitReview}
+                disabled={reviewing || (reviewAction === 'reject' && !reviewNote.trim())}
+                className={reviewAction === 'approve' ? 'bg-green-700 hover:bg-green-800' : 'bg-red-700 hover:bg-red-800'}
+                data-testid="disc-review-submit"
+              >
+                {reviewing ? 'Submitting…' : (reviewAction === 'approve' ? 'Approve' : 'Reject')}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
