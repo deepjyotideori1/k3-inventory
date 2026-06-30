@@ -1,0 +1,36 @@
+{
+  "summary": "Verified BUG-FIX for AccessorySales 'Failed to record sale' end-to-end. (1) Backend curl reproduction confirmed: POST /api/accessory-sales for 'Domestic Regulator' qty=1 unit_price=500 (the exact regex-collision case from iteration_55) now returns HTTP 200 with the persisted sale (gt=500.0). Multi-line sale (2x Domestic Regulator @350.5 + 1x Commercial Regulator @1200) returns 200 with gt=1901.0. (2) validate_sale_discrepancy('accessory_sale') in /app/backend/routes/gst_billing.py L498-503 now early-returns discrepancy_payload(None, actual) — confirmed via code inspection. (3) /app/backend/routes/accessories.py L536-539 no longer calls validate_sale_discrepancy before insert — confirmed. (4) AccessorySales.jsx handleSubmit catch block now extracts detail (string | {message} | pydantic-array[0].msg) — confirmed at L233-242. (5) Backend regression: ran test_invoice_memo_payment_ledger.py + test_discrepancy_invoices.py + test_discrepancy_extras.py + test_gst_billing.py = 46 passed, 1 skipped, 0 failed (no regression to sales_entry discrepancy or manual GST-invoice discrepancy flows). (6) Frontend: admin login → /accessory-sales page loads, summary cards render (Total Sales 3 / Total Amount ₹1,120 / Items Sold 3 / Pending ₹0), New Sale Entry dialog opens with all fields (data-testid=add-sale-btn), customer mode toggle works, accessory dropdown shows 4 active accessories, unit_price input accepts dealer-set price, client-side validation toast 'Please select accessories and enter valid quantities' surfaces correctly when item fields incomplete. Listed sales include the previously-created BUG_FIX_VERIFY entry (Domestic Regulator x1 ₹500 cash) proving the API-created sale renders. (7) Backend curl with empty items array currently returns 200 (no backend min-items validator); frontend already guards this client-side so user never hits it.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/accessory-sales", "issue": "Accepts items=[] and persists a sale with grand_total=0 (no min-length validator on AccessorySaleCreate.items). Frontend blocks this case, so no user impact. Consider adding a pydantic Field(min_length=1) on items for defense-in-depth."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/accessory-sales table", "issues": ["Pre-existing hydration warnings (<span> wrapping <tr>/<th>/<td> from VE devtools instrumentation, not application code) — already documented in iteration_56 context as cosmetic-only."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/pytest/iter57_regression.xml"
+  ],
+  "action_items": [
+    "(optional/defensive) Add pydantic min_length=1 on AccessorySaleCreate.items to reject empty-items POSTs at the API layer."
+  ],
+  "critical_code_review_comments": [
+    "validate_sale_discrepancy('accessory_sale') correctly disabled — comment explains rationale (no fixed master rate). Good fix.",
+    "AccessorySales.jsx catch block now handles all three FastAPI detail shapes (str, dict-with-message, pydantic ValidationError array). Defensive fallback to 'Failed to record sale' preserved.",
+    "accessories.py still calls auto_generate_invoice_from_sale(sale, 'accessory_sale', user) post-insert (best-effort) — auto-invoice path for accessory sales remains intact and is unaffected by the discrepancy-validator removal because that helper performs its own item-master lookup.",
+    "Unrelated 2 pre-existing failures in test_sales_accessory_integration.py (test_cylinder_sales_entries_endpoint expects list but endpoint now returns paginated dict; test_sales_summary_endpoint expects 'refills' sub-key) — these are stale API-shape assertions, NOT caused by this fix. Recommend updating those tests separately."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (46/46 targeted regression tests pass; 3/3 accessory-sale curl scenarios return 200)", "frontend": "100% (page loads, dialog + form + client validation all functional; new error-detail extraction code path verified by code review)"},
+  "test_credentials": "admin@k3gas.com / Admin@123 (Master Admin)",
+  "seed_data_creation": "Created TEST_AccessorySaleBugFix and TEST_AccMulti accessory_sales via API (memos TESTACC001/002/003). Safe to leave; they won't affect future runs.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "BUG IS FIXED. The original reproduction (Domestic Regulator @ dealer price ≠ unrelated gst_items 'Regulator' default_rate 247.69) no longer triggers a 400. Connection-sale discrepancy flow (sales_entry) untouched — 46 GST/discrepancy regression tests still pass. Note: test_sales_accessory_integration.py has 2 stale assertions (paginated dict vs list, missing refills sub-key) unrelated to this fix; main agent may want to refresh those.",
+  "rca of the issue": "ROOT CAUSE (iteration_55 regression): validate_sale_discrepancy() did a name-prefix regex on db.gst_items for accessory_sale, matching accessories like 'Domestic Regulator' against an unrelated gst_items master row 'Regulator' (default_rate ₹247.69). Dealer-set sale price ₹500 differed from that ₹247.69 → server returned 400 {code:'discrepancy_requires_reason', expected_amount:247.69}. AccessorySales.jsx caught the error but discarded the detail and showed a generic toast. FIX: (a) gst_billing.validate_sale_discrepancy early-returns is_discrepancy=False for sale_type='accessory_sale' since accessories have no fixed master rate; (b) accessories.py removed the pre-insert discrepancy gate; (c) AccessorySales.jsx error toast now extracts detail.message / detail string / pydantic ValidationError[0].msg. VERIFICATION: (i) Direct curl POST /api/accessory-sales for the exact failing payload now returns 200. (ii) 46-test GST+discrepancy regression suite green. (iii) UI page loads, dialog form & validation work. MITIGATION (if recurs): ensure validate_sale_discrepancy's accessory_sale branch never re-introduces gst_items lookups; accessories must always pass through without discrepancy gating."
+}

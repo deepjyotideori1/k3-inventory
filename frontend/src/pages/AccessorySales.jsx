@@ -232,7 +232,11 @@ const AccessorySales = () => {
       fetchData();
     } catch (error) {
       console.error('Failed to create sale:', error);
-      toast.error('Failed to record sale');
+      const detail = error?.response?.data?.detail;
+      const msg = typeof detail === 'string'
+        ? detail
+        : (detail?.message || (Array.isArray(detail) && detail[0]?.msg) || 'Failed to record sale');
+      toast.error(msg);
     } finally {
       setSubmitting(false);
     }

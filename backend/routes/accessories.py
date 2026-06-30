@@ -533,22 +533,8 @@ async def create_accessory_sale(data: AccessorySaleCreate, user: dict = Depends(
         'created_at': datetime.now(timezone.utc).isoformat()
     }
 
-    # ---- Discrepancy validation (mandatory-reason rule) ----
-    _disc_reason = (data.discrepancy_reason or "").strip()
-    _disc = await validate_sale_discrepancy(sale, "accessory_sale")
-    if _disc["is_discrepancy"] and not _disc_reason:
-        raise HTTPException(status_code=400, detail={
-            "code": "discrepancy_requires_reason",
-            "message": "Amount mismatch detected vs configured rate — justification required to save.",
-            "expected_amount": _disc["expected_amount"],
-            "actual_amount": _disc["actual_amount"],
-            "discrepancy_amount": _disc["discrepancy_amount"],
-        })
-    if _disc["is_discrepancy"]:
-        sale['discrepancy_reason'] = _disc_reason
-        sale['is_discrepancy'] = True
-        sale['expected_amount'] = _disc["expected_amount"]
-        sale['discrepancy_amount'] = _disc["discrepancy_amount"]
+    # Note: Discrepancy validation is intentionally NOT applied to accessory sales
+    # because accessories are sold at dealer-set variable prices (no fixed master rate).
 
     await db.accessory_sales.insert_one(sale)
     

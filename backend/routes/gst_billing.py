@@ -496,26 +496,11 @@ async def validate_sale_discrepancy(sale: dict, sale_type: str) -> dict:
             return discrepancy_payload(expected, actual)
 
     elif sale_type == "accessory_sale":
-        items = sale.get("items") or []
-        if not items:
-            return discrepancy_payload(None, actual)
-        total_expected = 0.0
-        all_resolved = True
-        for it in items:
-            qty = float(it.get("quantity") or 0)
-            name = (it.get("accessory_name") or "").strip()
-            if not name or qty <= 0:
-                all_resolved = False
-                break
-            gst_item = await db.gst_items.find_one(
-                {"name": {"$regex": f"^{re.escape(name)}", "$options": "i"}}, {"_id": 0}
-            )
-            if not gst_item or float(gst_item.get("default_rate") or 0) <= 0:
-                all_resolved = False
-                break
-            total_expected += float(gst_item["default_rate"]) * qty
-        if all_resolved and total_expected > 0:
-            return discrepancy_payload(total_expected, actual)
+        # Accessories are sold at dealer-set variable prices and do NOT have a
+        # "configured rate" in Item Master or Connection Plans. The discrepancy
+        # rule (which compares to a fixed expected amount) does not apply here.
+        # Return early with no discrepancy so the sale is saved as-is.
+        return discrepancy_payload(None, actual)
 
     return discrepancy_payload(None, actual)
 
