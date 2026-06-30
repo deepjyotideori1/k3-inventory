@@ -723,6 +723,11 @@ export const reviewGstDiscrepancy = (invoiceId, action, note = '') =>
 export const correctGstDiscrepancy = (invoiceId, line_items, note = '') =>
   api.post(`/gst/discrepancies/${invoiceId}/correct`, { line_items, note });
 
+// GST Party Ledger
+export const getPartyLedgerCustomers = () => api.get('/gst/party-ledger/customers');
+export const getPartyLedger = (params) => api.get('/gst/party-ledger', { params });
+export const backfillGstPayments = () => api.post('/gst/invoices/backfill-payments');
+
 // GST Reports
 export const listGstReports = () => api.get('/gst/reports/list');
 export const getGstReport = (reportType, params) => api.get(`/gst/reports/${reportType}`, { params });

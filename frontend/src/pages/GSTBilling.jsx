@@ -18,7 +18,7 @@ import { toast } from 'sonner';
 import {
   Receipt, Search, Plus, FileDown, FileSpreadsheet, Settings as SettingsIcon,
   Edit2, XCircle, Trash2, Eye, RefreshCw, ChevronLeft, ChevronRight, FileText, AlertCircle,
-  Upload, History, AlertTriangle, CheckCircle2, Ban
+  Upload, History, AlertTriangle, CheckCircle2, Ban, Users
 } from 'lucide-react';
 import {
   getGstInvoices, getGstSummary, getGstConfig, updateGstConfig,
@@ -30,7 +30,8 @@ import {
   getSalesEntries, getAccessorySales,
   downloadGstItemTemplate, bulkUploadGstItems,
   getGstItemHistory, downloadGstItemHistoryExcel,
-  listGstDiscrepancies, reviewGstDiscrepancy
+  listGstDiscrepancies, reviewGstDiscrepancy,
+  getPartyLedgerCustomers, getPartyLedger
 } from '../lib/api';
 
 const formatRs = (n) => {
@@ -138,6 +139,17 @@ const GSTBilling = () => {
   const [discReasonInfo, setDiscReasonInfo] = useState(null);   // { expected, actual, diff, payloadFn }
   const [discReasonInput, setDiscReasonInput] = useState('');
   const [discReasonSaving, setDiscReasonSaving] = useState(false);
+
+  // Party Ledger
+  const [ledgerCustomers, setLedgerCustomers] = useState([]);
+  const [ledgerSearch, setLedgerSearch] = useState('');
+  const [ledgerSelected, setLedgerSelected] = useState(null);  // {customer_name, customer_phone}
+  const [ledgerPeriod, setLedgerPeriod] = useState('all');
+  const [ledgerStartDate, setLedgerStartDate] = useState('');
+  const [ledgerEndDate, setLedgerEndDate] = useState('');
+  const [ledgerRows, setLedgerRows] = useState([]);
+  const [ledgerTotals, setLedgerTotals] = useState({});
+  const [ledgerLoading, setLedgerLoading] = useState(false);
 
   // Reports state
   const [reportsList, setReportsList] = useState([]);
@@ -276,6 +288,41 @@ const GSTBilling = () => {
     }
   }, [discStatusFilter]);
 
+  const loadLedgerCustomers = useCallback(async () => {
+    try {
+      const res = await getPartyLedgerCustomers();
+      setLedgerCustomers(res?.data || res || []);
+    } catch (e) {
+      toast.error('Failed to load customers');
+    }
+  }, []);
+
+  const loadLedger = useCallback(async () => {
+    if (!ledgerSelected) {
+      setLedgerRows([]);
+      setLedgerTotals({});
+      return;
+    }
+    setLedgerLoading(true);
+    try {
+      const params = { period: ledgerPeriod };
+      if (ledgerSelected.customer_phone) params.customer_phone = ledgerSelected.customer_phone;
+      else params.customer_name = ledgerSelected.customer_name;
+      if (ledgerPeriod === 'custom') {
+        if (ledgerStartDate) params.start_date = ledgerStartDate;
+        if (ledgerEndDate) params.end_date = ledgerEndDate;
+      }
+      const res = await getPartyLedger(params);
+      const data = res?.data || res;
+      setLedgerRows(data.rows || []);
+      setLedgerTotals(data.totals || {});
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Failed to load ledger');
+    } finally {
+      setLedgerLoading(false);
+    }
+  }, [ledgerSelected, ledgerPeriod, ledgerStartDate, ledgerEndDate]);
+
   useEffect(() => {
     loadConfig();
     loadItems();
@@ -296,6 +343,19 @@ const GSTBilling = () => {
       loadDiscrepancies();
     }
   }, [activeTab, loadDiscrepancies]);
+
+  // Auto-load ledger customers + ledger rows when the Party Ledger tab is active
+  useEffect(() => {
+    if (activeTab === 'ledger') {
+      loadLedgerCustomers();
+    }
+  }, [activeTab, loadLedgerCustomers]);
+
+  useEffect(() => {
+    if (activeTab === 'ledger' && ledgerSelected) {
+      loadLedger();
+    }
+  }, [activeTab, ledgerSelected, ledgerPeriod, ledgerStartDate, ledgerEndDate, loadLedger]);
 
   // ----- HANDLERS -----
   const handleCancel = async () => {
@@ -358,6 +418,7 @@ const GSTBilling = () => {
       setEditingInvoice(null);
       setInvForm({
         invoice_date: todayISO(),
+        memo_no: '',
         customer_name: '',
         customer_phone: '',
         customer_address: '',
@@ -367,6 +428,8 @@ const GSTBilling = () => {
         bill_type: 'manual',
         place_of_supply: config.place_of_supply || '',
         remarks: '',
+        cash_received: 0,
+        online_received: 0,
         line_items: [emptyLineItem()],
       });
     }
@@ -916,6 +979,7 @@ const GSTBilling = () => {
           <TabsList>
             <TabsTrigger value="invoices" data-testid="tab-invoices">Invoices</TabsTrigger>
             <TabsTrigger value="discrepancies" data-testid="tab-discrepancies">Discrepancies</TabsTrigger>
+            <TabsTrigger value="ledger" data-testid="tab-ledger">Party Ledger</TabsTrigger>
             <TabsTrigger value="reports" data-testid="tab-reports">Reports</TabsTrigger>
             <TabsTrigger value="plans" data-testid="tab-plans">Connection Plans</TabsTrigger>
             <TabsTrigger value="items" data-testid="tab-items">Item Master</TabsTrigger>
@@ -974,12 +1038,14 @@ const GSTBilling = () => {
                     <thead className="bg-slate-50 border-b">
                       <tr>
                         <th className="text-left p-3 font-medium">Invoice No.</th>
+                        <th className="text-left p-3 font-medium">Memo No.</th>
                         <th className="text-left p-3 font-medium">Date</th>
                         <th className="text-left p-3 font-medium">Customer</th>
                         <th className="text-left p-3 font-medium">Type</th>
                         <th className="text-right p-3 font-medium">Sub Total</th>
                         <th className="text-right p-3 font-medium">GST</th>
                         <th className="text-right p-3 font-medium">Total</th>
+                        <th className="text-center p-3 font-medium">Payment</th>
                         <th className="text-center p-3 font-medium">Status</th>
                         <th className="text-center p-3 font-medium">Actions</th>
                       </tr>
@@ -988,6 +1054,7 @@ const GSTBilling = () => {
                       {!loading && invoices.length > 0 && invoices.map(inv => (
                         <tr key={inv.id} className={`border-b hover:bg-slate-50 ${inv.status === 'cancelled' ? 'opacity-60' : ''}`} data-testid={`invoice-row-${inv.id}`}>
                           <td className="p-3 font-mono text-xs">{inv.invoice_number}</td>
+                          <td className="p-3 font-mono text-xs text-slate-600" data-testid={`memo-${inv.id}`}>{inv.memo_no || inv.invoice_number}</td>
                           <td className="p-3">{inv.invoice_date}</td>
                           <td className="p-3">
                             <div className="font-medium">{inv.customer_name}</div>
@@ -1015,6 +1082,16 @@ const GSTBilling = () => {
                           <td className="p-3 text-right">{formatRs(inv.sub_total)}</td>
                           <td className="p-3 text-right text-blue-700">{formatRs(inv.total_gst)}</td>
                           <td className="p-3 text-right font-semibold">{formatRs(inv.grand_total)}</td>
+                          <td className="p-3 text-center" data-testid={`payment-status-${inv.id}`}>
+                            {inv.payment_status === 'Paid' && <Badge className="bg-green-100 text-green-700">Paid</Badge>}
+                            {inv.payment_status === 'Partial' && (
+                              <Badge className="bg-amber-100 text-amber-700" title={`Pending ₹${Number(inv.pending_amount || 0).toFixed(2)}`}>Partial</Badge>
+                            )}
+                            {inv.payment_status === 'Pending' && (
+                              <Badge className="bg-red-100 text-red-700" title={`Pending ₹${Number(inv.pending_amount || 0).toFixed(2)}`}>Pending</Badge>
+                            )}
+                            {!inv.payment_status && <Badge variant="outline">—</Badge>}
+                          </td>
                           <td className="p-3 text-center">
                             {inv.status === 'cancelled'
                               ? <Badge className="bg-red-100 text-red-700">Cancelled</Badge>
@@ -1199,6 +1276,187 @@ const GSTBilling = () => {
                   {!discLoading && discrepancyRows.length === 0 && (
                     <div className="p-8 text-center text-slate-500" data-testid="disc-empty">
                       No discrepancy invoices {discStatusFilter !== 'all' ? `in status "${discStatusFilter}"` : 'yet'}. All amounts match the configured rates 🎉
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* PARTY LEDGER TAB */}
+          <TabsContent value="ledger" className="space-y-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-2">
+                  <Users className="w-5 h-5 text-blue-700" />
+                  <CardTitle className="text-base">Party Ledger</CardTitle>
+                  {ledgerSelected && (
+                    <Badge variant="outline" className="ml-2" data-testid="ledger-current-customer">
+                      {ledgerSelected.customer_name}{ledgerSelected.customer_phone ? ` · ${ledgerSelected.customer_phone}` : ''}
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {ledgerSelected && (
+                    <Button size="sm" variant="outline" onClick={loadLedger} disabled={ledgerLoading} data-testid="ledger-refresh-btn">
+                      <RefreshCw className="w-4 h-4 mr-1" /> Refresh
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Customer picker + filters */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                  <div className="md:col-span-5">
+                    <Label>Customer</Label>
+                    <Input
+                      placeholder="Search by name or phone..."
+                      value={ledgerSearch}
+                      onChange={(e) => setLedgerSearch(e.target.value)}
+                      data-testid="ledger-customer-search"
+                    />
+                    <div className="border rounded mt-1 max-h-40 overflow-y-auto bg-white">
+                      {ledgerCustomers
+                        .filter(c => {
+                          const s = ledgerSearch.trim().toLowerCase();
+                          if (!s) return true;
+                          return (c.customer_name || '').toLowerCase().includes(s)
+                              || (c.customer_phone || '').toLowerCase().includes(s);
+                        })
+                        .slice(0, 20)
+                        .map((c, i) => (
+                          <button
+                            key={`${c.customer_name}-${c.customer_phone}-${i}`}
+                            onClick={() => setLedgerSelected(c)}
+                            className={`w-full text-left px-2 py-1 text-sm hover:bg-blue-50 ${ledgerSelected && ledgerSelected.customer_name === c.customer_name && ledgerSelected.customer_phone === c.customer_phone ? 'bg-blue-100' : ''}`}
+                            data-testid={`ledger-customer-${i}`}
+                          >
+                            <div className="font-medium">{c.customer_name || '(no name)'}</div>
+                            <div className="text-xs text-slate-500">
+                              {c.customer_phone || '—'} · {c.invoice_count} invoice(s) · last {c.last_invoice_date || '-'}
+                            </div>
+                          </button>
+                        ))}
+                      {ledgerCustomers.length === 0 && (
+                        <div className="px-2 py-2 text-xs text-slate-500">No customers with invoices yet.</div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="md:col-span-3">
+                    <Label>Period</Label>
+                    <Select value={ledgerPeriod} onValueChange={setLedgerPeriod}>
+                      <SelectTrigger data-testid="ledger-period"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All records</SelectItem>
+                        <SelectItem value="today">Today</SelectItem>
+                        <SelectItem value="this_month">This Month</SelectItem>
+                        <SelectItem value="this_year">This Year</SelectItem>
+                        <SelectItem value="custom">Custom range</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {ledgerPeriod === 'custom' && (
+                    <>
+                      <div className="md:col-span-2">
+                        <Label>From</Label>
+                        <Input type="date" value={ledgerStartDate} onChange={(e) => setLedgerStartDate(e.target.value)} data-testid="ledger-start-date" />
+                      </div>
+                      <div className="md:col-span-2">
+                        <Label>To</Label>
+                        <Input type="date" value={ledgerEndDate} onChange={(e) => setLedgerEndDate(e.target.value)} data-testid="ledger-end-date" />
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Totals card */}
+                {ledgerSelected && (
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-2" data-testid="ledger-totals">
+                    <div className="bg-slate-50 rounded p-2 text-center">
+                      <p className="text-[10px] text-slate-500 uppercase">Invoices</p>
+                      <p className="text-lg font-bold text-slate-800">{ledgerTotals.count || 0}</p>
+                    </div>
+                    <div className="bg-blue-50 rounded p-2 text-center">
+                      <p className="text-[10px] text-blue-700 uppercase">Invoice Value</p>
+                      <p className="text-base font-bold text-blue-700">{formatRs(ledgerTotals.total_invoice_value || 0)}</p>
+                    </div>
+                    <div className="bg-emerald-50 rounded p-2 text-center">
+                      <p className="text-[10px] text-emerald-700 uppercase">Cash + Online</p>
+                      <p className="text-base font-bold text-emerald-700">{formatRs(ledgerTotals.total_paid || 0)}</p>
+                      <p className="text-[10px] text-slate-500">
+                        ₹{Number(ledgerTotals.total_cash_received || 0).toFixed(0)} cash + ₹{Number(ledgerTotals.total_online_received || 0).toFixed(0)} online
+                      </p>
+                    </div>
+                    <div className="bg-amber-50 rounded p-2 text-center">
+                      <p className="text-[10px] text-amber-700 uppercase">Pending</p>
+                      <p className="text-base font-bold text-amber-700">{formatRs(ledgerTotals.total_pending_balance || 0)}</p>
+                    </div>
+                    <div className="bg-purple-50 rounded p-2 text-center">
+                      <p className="text-[10px] text-purple-700 uppercase">GST Collected</p>
+                      <p className="text-base font-bold text-purple-700">{formatRs(ledgerTotals.total_gst || 0)}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Ledger table */}
+                <div className="overflow-x-auto border rounded">
+                  <table className="w-full text-xs">
+                    <thead className="bg-slate-50 border-b">
+                      <tr>
+                        <th className="p-2 text-left font-medium">Memo No.</th>
+                        <th className="p-2 text-left font-medium">Invoice No.</th>
+                        <th className="p-2 text-left font-medium">Date / Time</th>
+                        <th className="p-2 text-left font-medium">Type</th>
+                        <th className="p-2 text-right font-medium">Taxable</th>
+                        <th className="p-2 text-right font-medium">GST</th>
+                        <th className="p-2 text-right font-medium">Invoice Total</th>
+                        <th className="p-2 text-right font-medium">Cash</th>
+                        <th className="p-2 text-right font-medium">Online</th>
+                        <th className="p-2 text-right font-medium">Paid</th>
+                        <th className="p-2 text-right font-medium">Pending</th>
+                        <th className="p-2 text-center font-medium">Status</th>
+                        <th className="p-2 text-left font-medium">Created By</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {!ledgerLoading && ledgerSelected && ledgerRows.length > 0 && ledgerRows.map(r => (
+                        <tr key={r.id} className="border-b hover:bg-slate-50" data-testid={`ledger-row-${r.id}`}>
+                          <td className="p-2 font-mono">{r.memo_no}</td>
+                          <td className="p-2 font-mono text-blue-700">{r.invoice_number}</td>
+                          <td className="p-2">
+                            {r.invoice_date}
+                            <div className="text-[10px] text-slate-400">{r.created_at ? new Date(r.created_at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : ''}</div>
+                          </td>
+                          <td className="p-2 capitalize">{r.invoice_type}</td>
+                          <td className="p-2 text-right">{formatRs(r.taxable_amount)}</td>
+                          <td className="p-2 text-right">{formatRs(r.gst_amount)}</td>
+                          <td className="p-2 text-right font-semibold">{formatRs(r.total_invoice_amount)}</td>
+                          <td className="p-2 text-right">{formatRs(r.cash_received)}</td>
+                          <td className="p-2 text-right">{formatRs(r.online_received)}</td>
+                          <td className="p-2 text-right text-emerald-700">{formatRs(r.total_paid)}</td>
+                          <td className="p-2 text-right text-amber-700 font-semibold">{formatRs(r.pending_balance)}</td>
+                          <td className="p-2 text-center">
+                            {r.payment_status === 'Paid' && <Badge className="bg-green-100 text-green-700">Paid</Badge>}
+                            {r.payment_status === 'Partial' && <Badge className="bg-amber-100 text-amber-700">Partial</Badge>}
+                            {r.payment_status === 'Pending' && <Badge className="bg-red-100 text-red-700">Pending</Badge>}
+                            {!r.payment_status && <Badge variant="outline">—</Badge>}
+                          </td>
+                          <td className="p-2 text-slate-600">{r.created_by || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {ledgerLoading && (
+                    <div className="p-6 text-center text-slate-500" data-testid="ledger-loading">Loading ledger…</div>
+                  )}
+                  {!ledgerLoading && !ledgerSelected && (
+                    <div className="p-8 text-center text-slate-500" data-testid="ledger-no-selection">
+                      Pick a customer on the left to view their ledger.
+                    </div>
+                  )}
+                  {!ledgerLoading && ledgerSelected && ledgerRows.length === 0 && (
+                    <div className="p-8 text-center text-slate-500" data-testid="ledger-empty">
+                      No invoices found for {ledgerSelected.customer_name} in the selected period.
                     </div>
                   )}
                 </div>
@@ -1838,6 +2096,15 @@ const GSTBilling = () => {
                     <Label>Invoice Date *</Label>
                     <Input type="date" value={invForm.invoice_date} onChange={e => setInvForm({ ...invForm, invoice_date: e.target.value })} data-testid="inv-date" />
                   </div>
+                  <div>
+                    <Label>Memo No.</Label>
+                    <Input
+                      value={invForm.memo_no || ''}
+                      placeholder="(optional — defaults to invoice no)"
+                      onChange={e => setInvForm({ ...invForm, memo_no: e.target.value })}
+                      data-testid="inv-memo-no"
+                    />
+                  </div>
                   <div className="md:col-span-2">
                     <Label>Customer Name *</Label>
                     <Input value={invForm.customer_name} onChange={e => setInvForm({ ...invForm, customer_name: e.target.value })} data-testid="inv-customer-name" />
@@ -1865,6 +2132,24 @@ const GSTBilling = () => {
                         <SelectItem value="split">Split</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div>
+                    <Label>Cash Received</Label>
+                    <Input
+                      type="number" min="0" step="0.01"
+                      value={invForm.cash_received ?? 0}
+                      onChange={e => setInvForm({ ...invForm, cash_received: parseFloat(e.target.value) || 0 })}
+                      data-testid="inv-cash-received"
+                    />
+                  </div>
+                  <div>
+                    <Label>Online Received</Label>
+                    <Input
+                      type="number" min="0" step="0.01"
+                      value={invForm.online_received ?? 0}
+                      onChange={e => setInvForm({ ...invForm, online_received: parseFloat(e.target.value) || 0 })}
+                      data-testid="inv-online-received"
+                    />
                   </div>
                   <div>
                     <Label>Tax Mode</Label>
@@ -2182,6 +2467,20 @@ const GSTBilling = () => {
                     <div className="flex justify-between bg-blue-50 -mx-3 px-3 py-1 mt-2 font-bold text-blue-800 border-t border-blue-200">
                       <span>Grand Total:</span><strong>{formatRs(viewingInvoice.grand_total)}</strong>
                     </div>
+                    {(viewingInvoice.payment_status || Number(viewingInvoice.cash_received || 0) > 0 || Number(viewingInvoice.online_received || 0) > 0 || Number(viewingInvoice.pending_amount || 0) > 0) && (
+                      <div className="mt-2 pt-2 border-t border-slate-200 space-y-1" data-testid="view-payment-block">
+                        <div className="flex justify-between"><span>Cash Received:</span><span>{formatRs(viewingInvoice.cash_received || 0)}</span></div>
+                        <div className="flex justify-between"><span>Online Received:</span><span>{formatRs(viewingInvoice.online_received || 0)}</span></div>
+                        <div className="flex justify-between"><span>Pending Amount:</span><strong className="text-amber-700">{formatRs(viewingInvoice.pending_amount || 0)}</strong></div>
+                        <div className="flex justify-between items-center pt-1">
+                          <span>Payment Status:</span>
+                          {viewingInvoice.payment_status === 'Paid' && <Badge className="bg-green-100 text-green-700">Paid</Badge>}
+                          {viewingInvoice.payment_status === 'Partial' && <Badge className="bg-amber-100 text-amber-700">Partial</Badge>}
+                          {viewingInvoice.payment_status === 'Pending' && <Badge className="bg-red-100 text-red-700">Pending</Badge>}
+                          {!viewingInvoice.payment_status && <Badge variant="outline">—</Badge>}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 

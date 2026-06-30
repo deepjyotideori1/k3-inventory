@@ -1,0 +1,26 @@
+{
+  "summary": "End-to-end backend + frontend verification of Memo No., Payment Status, Party Ledger and Latest-First Invoice features. Backend: ran the full GST regression suite (test_gst_billing + test_gst_item_bulk_history + test_gst_item_master_sync + test_excel_branded_exports + test_discrepancy_invoices + test_discrepancy_extras + new test_invoice_memo_payment_ledger) = 87 passed, 1 skipped, 0 failed. New test file covers: compute_payment_fields for Paid/Partial/Pending with ±₹1 tolerance, memo_no fallback to invoice_number, GET /gst/invoices includes new fields and is sorted latest-first, PUT recomputes payment_status, POST /backfill-payments idempotent (second call updated=0), GET /party-ledger/customers distinct & sorted DESC, GET /party-ledger by phone/name/period/custom-date returns rows+totals+customer with totals.count consistent, Excel export contains 6 new tail cols ['Memo No.','Cash Received','Online Received','Total Paid','Pending Amount','Payment Status'], PDF endpoint returns application/pdf bytes. Frontend (admin login → /gst-billing): verified Memo No. column (50 memo-{id} cells) + Payment column (50 payment-status-{id} colour-coded badges Paid/Partial/Pending), default sort latest-first, New Invoice dialog has inv-memo-no / inv-cash-received / inv-online-received, View Invoice dialog shows view-payment-block with Cash/Online/Pending/Status rows, Party Ledger tab between Discrepancies and Reports with ledger-customer-search, ledger-period, ledger-no-selection, customer picker (16 buttons after TEST_LEDGER prefix search), selecting customer renders ledger-totals tile (Invoices/Invoice Value/Cash+Online/Pending/GST Collected) + 2 ledger-row-{id} rows latest first, Custom range period switch shows ledger-start-date & ledger-end-date.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_invoice_memo_payment_ledger.py",
+    "/app/test_reports/pytest/invoice_memo_payment_ledger.xml",
+    "/app/test_reports/pytest/gst_full_iter56.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "backfill-payments query uses $or on payment_status/memo_no empty — since final fallback always sets memo_no = invoice_number, second run yields updated=0. Idempotency depends on this invariant; if the schema ever supports nullable memo_no without fallback, idempotency would break. Consider an explicit `_backfilled_at` marker for clarity.",
+    "compute_payment_fields treats grand_total <= 0 as blank status. This is fine for cancelled-line invoices but list-row consumers should defensively handle empty payment_status (UI already shows '—').",
+    "Party-ledger name-prefix uses case-insensitive regex with re.escape — safe from injection; no concerns."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_invoice_memo_payment_ledger.py (new, 16 tests)"
+  ],
+  "success_rate": {"backend": "100% (87/87 GST tests, 1 pre-existing skip; 16/16 new tests)", "frontend": "100% (all testids resolved & integration flows verified)"},
+  "test_credentials": "admin@k3gas.com / Admin@123 (Master Admin)",
+  "seed_data_creation": "Created TEST_CUST_* / TEST_LEDGER_* invoices during automated runs. These remain in the gst_invoices collection (manual cleanup possible via /gst-billing). Safe to leave for next iteration's regression — they participate in latest-first sort and ledger tests.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backfill is verified idempotent: production data was already backfilled (run #1 in this iter reported some updates of newly-created Paid/Partial/Pending invoices that had no sale_id but still matched on empty payment_status; second call returns updated=0). The known cosmetic hydration warning about <span> in <tbody> and <th>/<td> from radix Tabs/Dialog is per spec — do NOT flag. Excel export header is on row 5+ (rows 1-4 hold brand banner & metadata); the new 6 columns are always the last 6 in the header row.",
+  "rca of the issue": "No bug. All requested features pass backend + frontend verification end-to-end."
+}

@@ -409,6 +409,44 @@ def discrepancy_payload(expected: Optional[float], actual: float) -> dict:
     }
 
 
+def compute_payment_fields(grand_total: float, cash_received: float = 0,
+                            online_received: float = 0,
+                            payment_mode: Optional[str] = None) -> dict:
+    """Computes payment-status helpers for invoices.
+
+    Returns:
+      cash_received, online_received, pending_amount, payment_status
+
+    Status rules:
+      - Paid       : grand_total - (cash + online) <= ₹1 (rounding tolerance)
+      - Partial    : 0 < paid < grand_total
+      - Pending    : nothing paid yet
+      - blank      : grand_total <= 0 (no expectation)
+    """
+    grand = round(float(grand_total or 0), 2)
+    cash = round(float(cash_received or 0), 2)
+    online = round(float(online_received or 0), 2)
+    paid = round(cash + online, 2)
+    if grand <= 0:
+        return {"cash_received": cash, "online_received": online,
+                "pending_amount": 0.0, "payment_status": ""}
+    pending = round(grand - paid, 2)
+    if pending <= 1.0 and paid > 0:
+        status = "Paid"
+    elif paid <= 0:
+        status = "Pending"
+    elif paid < grand:
+        status = "Partial"
+    else:
+        status = "Paid"
+    return {
+        "cash_received": cash,
+        "online_received": online,
+        "pending_amount": max(0.0, pending),
+        "payment_status": status,
+    }
+
+
 async def validate_sale_discrepancy(sale: dict, sale_type: str) -> dict:
     """Compute expected vs actual for a sale BEFORE it is persisted. Used by
     routes/sales.py and routes/accessories.py to enforce the mandatory-reason rule
@@ -707,7 +745,7 @@ async def export_invoices_excel(
         q["$or"] = [{"invoice_number": {"$regex": search, "$options": "i"}},
                     {"customer_name": {"$regex": search, "$options": "i"}}]
 
-    invoices = await db.gst_invoices.find(q, {"_id": 0}).sort("invoice_date", -1).to_list(50000)
+    invoices = await db.gst_invoices.find(q, {"_id": 0}).sort([("invoice_date", -1), ("created_at", -1)]).to_list(50000)
     cfg = await db.gst_config.find_one({"key": "gst_config"}, {"_id": 0}) or {}
 
     wb = Workbook()
@@ -732,6 +770,8 @@ async def export_invoices_excel(
         "IGST %", "IGST Amount", "Total GST", "Discount", "Round Off", "Grand Total",
         "Payment Mode", "Warehouse", "Sales Executive", "Created By", "Created Date",
         "Cancelled By", "Cancelled Date", "Cancellation Reason",
+        # New columns (appended to keep existing index math intact)
+        "Memo No.", "Cash Received", "Online Received", "Total Paid", "Pending Amount", "Payment Status",
     ]
     header_row = 5
     thin = Side(style="thin", color="BBBBBB")
@@ -744,8 +784,8 @@ async def export_invoices_excel(
         c.border = border
 
     # Right-aligned amount columns (col indices 1-based)
-    amount_cols = {12, 13, 16, 18, 20, 21, 22, 23, 24}
-    center_cols = {1, 3, 9, 14, 15, 17, 19, 29, 31}
+    amount_cols = {12, 13, 16, 18, 20, 21, 22, 23, 24, 34, 35, 36, 37}
+    center_cols = {1, 3, 9, 14, 15, 17, 19, 29, 31, 33, 38}
 
     def _fmt_date(s):
         if not s:
@@ -813,6 +853,13 @@ async def export_invoices_excel(
                 inv.get("cancelled_by_name", "") if is_first else "",
                 _fmt_date((inv.get("cancelled_at") or "")[:10]) if is_first else "",
                 inv.get("cancellation_reason", "") if is_first else "",
+                # New columns (per-invoice — only on first line of a multi-line invoice)
+                (inv.get("memo_no") or inv.get("invoice_number")) if is_first else "",
+                (float(inv.get("cash_received") or 0)) if is_first else "",
+                (float(inv.get("online_received") or 0)) if is_first else "",
+                (float(inv.get("cash_received") or 0) + float(inv.get("online_received") or 0)) if is_first else "",
+                (float(inv.get("pending_amount") or 0)) if is_first else "",
+                (inv.get("payment_status") or "") if is_first else "",
             ]
             for c_idx, v in enumerate(vals, 1):
                 cell = ws.cell(row=row, column=c_idx, value=v)
@@ -934,7 +981,7 @@ async def list_invoices(
         ]
     skip = (page - 1) * limit
     total = await db.gst_invoices.count_documents(q)
-    invoices = await db.gst_invoices.find(q, {"_id": 0}).sort("invoice_date", -1).skip(skip).limit(limit).to_list(limit)
+    invoices = await db.gst_invoices.find(q, {"_id": 0}).sort([("invoice_date", -1), ("created_at", -1)]).skip(skip).limit(limit).to_list(limit)
     return {"invoices": invoices, "total": total, "page": page, "pages": (total + limit - 1) // limit}
 
 
@@ -966,9 +1013,19 @@ async def create_invoice(data: dict, user: dict = Depends(require_admin)):
         })
 
     now = datetime.now(timezone.utc)
+    invoice_number = data.get("invoice_number") or await next_invoice_number(now)
+    # Memo No fallback: use invoice number when not supplied
+    memo_no = (data.get("memo_no") or "").strip() or invoice_number
+    pay = compute_payment_fields(
+        totals["grand_total"],
+        data.get("cash_received"),
+        data.get("online_received"),
+        data.get("payment_mode"),
+    )
     invoice = {
         "id": str(uuid.uuid4()),
-        "invoice_number": data.get("invoice_number") or await next_invoice_number(now),
+        "invoice_number": invoice_number,
+        "memo_no": memo_no,
         "invoice_date": data.get("invoice_date") or now.strftime("%Y-%m-%d"),
         "fy": fy_string(now),
         "customer_id": data.get("customer_id") or "",
@@ -983,6 +1040,7 @@ async def create_invoice(data: dict, user: dict = Depends(require_admin)):
         "remarks": data.get("remarks") or "",
         "line_items": line_items,
         **totals,
+        **pay,
         "status": "active",
         "sale_id": data.get("sale_id") or "",
         "sale_type": data.get("sale_type") or "",
@@ -1030,8 +1088,11 @@ async def update_invoice(invoice_id: str, data: dict, user: dict = Depends(requi
         "invoice_date", "customer_name", "customer_phone", "customer_address",
         "customer_gstin", "place_of_supply", "tax_mode", "payment_mode",
         "remarks", "line_items", "bill_type", "connection_plan_id",
+        "memo_no", "cash_received", "online_received",
     }
     updates = {k: v for k, v in data.items() if k in editable}
+    if "memo_no" in updates:
+        updates["memo_no"] = (updates["memo_no"] or "").strip() or existing.get("invoice_number")
     if "line_items" in updates or "tax_mode" in updates:
         tax_mode = updates.get("tax_mode") or existing.get("tax_mode")
         line_items = updates.get("line_items") or existing.get("line_items") or []
@@ -1069,6 +1130,16 @@ async def update_invoice(invoice_id: str, data: dict, user: dict = Depends(requi
             updates["discrepancy_status"] = ""
     updates["updated_at"] = datetime.now(timezone.utc).isoformat()
     updates["updated_by_name"] = user.get("name", "")
+    # Recompute payment status if grand_total or cash_received / online_received changed
+    if any(k in updates for k in ("line_items", "tax_mode", "cash_received", "online_received", "payment_mode")):
+        grand_total_new = updates.get("grand_total", existing.get("grand_total", 0))
+        pay = compute_payment_fields(
+            grand_total_new,
+            updates.get("cash_received", existing.get("cash_received", 0)),
+            updates.get("online_received", existing.get("online_received", 0)),
+            updates.get("payment_mode", existing.get("payment_mode")),
+        )
+        updates.update(pay)
     await db.gst_invoices.update_one({"id": invoice_id}, {"$set": updates})
     await log_audit(user.get("id", ""), user.get("name", ""), "update", "gst_invoice", invoice_id,
                     f"Fields: {','.join(updates.keys())}")
@@ -1174,6 +1245,206 @@ async def correct_discrepancy(invoice_id: str, data: dict, user: dict = Depends(
     await log_audit(user.get("id", ""), user.get("name", ""), "discrepancy_correct", "gst_invoice",
                     invoice_id, f"{existing.get('invoice_number')} | corrected to ₹{totals['grand_total']} | new diff ₹{disc['discrepancy_amount']} | note: {note}")
     return await db.gst_invoices.find_one({"id": invoice_id}, {"_id": 0})
+
+
+# ============ PARTY LEDGER ============
+@router.get("/gst/party-ledger")
+async def party_ledger(
+    customer_id: Optional[str] = None,
+    customer_phone: Optional[str] = None,
+    customer_name: Optional[str] = None,
+    period: Optional[str] = None,        # all | today | this_month | this_year | custom
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    user: dict = Depends(require_admin),
+):
+    """Per-customer ledger of all GST invoices with payment breakdown + totals.
+
+    Resolution rules (one of these must be provided):
+    - customer_id   : exact match on invoice.customer_id
+    - customer_phone: exact match on invoice.customer_phone
+    - customer_name : case-insensitive prefix match on invoice.customer_name
+
+    Response: {rows, totals, customer} — rows are sorted latest-first.
+    """
+    if not (customer_id or customer_phone or customer_name):
+        raise HTTPException(status_code=400, detail="One of customer_id / customer_phone / customer_name is required")
+
+    q: Dict[str, Any] = {"status": {"$ne": "cancelled"}}
+    if customer_id:
+        q["customer_id"] = customer_id
+    elif customer_phone:
+        q["customer_phone"] = customer_phone.strip()
+    else:
+        q["customer_name"] = {"$regex": f"^{re.escape(customer_name.strip())}", "$options": "i"}
+
+    # Period filters
+    today = datetime.now(timezone.utc).date()
+    period_lc = (period or "").lower()
+    if period_lc == "today":
+        q["invoice_date"] = {"$gte": today.isoformat(), "$lte": today.isoformat()}
+    elif period_lc == "this_month":
+        from calendar import monthrange
+        _, last = monthrange(today.year, today.month)
+        q["invoice_date"] = {"$gte": f"{today.year}-{today.month:02d}-01",
+                             "$lte": f"{today.year}-{today.month:02d}-{last:02d}"}
+    elif period_lc == "this_year":
+        q["invoice_date"] = {"$gte": f"{today.year}-01-01",
+                             "$lte": f"{today.year}-12-31"}
+    elif start_date or end_date:
+        q["invoice_date"] = {}
+        if start_date:
+            q["invoice_date"]["$gte"] = start_date
+        if end_date:
+            q["invoice_date"]["$lte"] = end_date
+    # period == 'all' or empty → no date filter
+
+    invs = await db.gst_invoices.find(q, {"_id": 0}).sort([("invoice_date", -1), ("created_at", -1)]).to_list(20000)
+
+    rows: List[dict] = []
+    t_inv_total = 0.0
+    t_taxable = 0.0
+    t_gst = 0.0
+    t_cash = 0.0
+    t_online = 0.0
+    t_paid = 0.0
+    t_pending = 0.0
+    for inv in invs:
+        sub = float(inv.get("sub_total") or 0)
+        gst = float(inv.get("total_gst") or 0)
+        grand = float(inv.get("grand_total") or 0)
+        cash = float(inv.get("cash_received") or 0)
+        online = float(inv.get("online_received") or 0)
+        paid = round(cash + online, 2)
+        pending = float(inv.get("pending_amount") if inv.get("pending_amount") is not None
+                         else max(0.0, grand - paid))
+        rows.append({
+            "id": inv.get("id"),
+            "memo_no": inv.get("memo_no") or inv.get("invoice_number"),
+            "invoice_number": inv.get("invoice_number"),
+            "invoice_date": inv.get("invoice_date"),
+            "created_at": inv.get("created_at"),
+            "invoice_type": (inv.get("bill_type") or "manual").replace("_", " "),
+            "taxable_amount": round(sub, 2),
+            "gst_amount": round(gst, 2),
+            "total_invoice_amount": round(grand, 2),
+            "cash_received": round(cash, 2),
+            "online_received": round(online, 2),
+            "total_paid": paid,
+            "pending_balance": round(pending, 2),
+            "payment_status": inv.get("payment_status") or "",
+            "created_by": inv.get("created_by_name") or "",
+        })
+        t_inv_total += grand
+        t_taxable += sub
+        t_gst += gst
+        t_cash += cash
+        t_online += online
+        t_paid += paid
+        t_pending += pending
+
+    totals = {
+        "count": len(rows),
+        "total_invoice_value": round(t_inv_total, 2),
+        "total_taxable": round(t_taxable, 2),
+        "total_gst": round(t_gst, 2),
+        "total_cash_received": round(t_cash, 2),
+        "total_online_received": round(t_online, 2),
+        "total_paid": round(t_paid, 2),
+        "total_pending_balance": round(t_pending, 2),
+    }
+
+    # Resolve the customer header info from the latest invoice if present
+    customer_header = {}
+    if invs:
+        customer_header = {
+            "customer_id": invs[0].get("customer_id") or "",
+            "customer_name": invs[0].get("customer_name") or "",
+            "customer_phone": invs[0].get("customer_phone") or "",
+            "customer_address": invs[0].get("customer_address") or "",
+            "customer_gstin": invs[0].get("customer_gstin") or "",
+        }
+    return {"rows": rows, "totals": totals, "customer": customer_header}
+
+
+@router.get("/gst/party-ledger/customers")
+async def party_ledger_customers(user: dict = Depends(require_admin)):
+    """Distinct customers that have at least one non-cancelled invoice. Used to
+    populate the customer picker in the Party Ledger tab."""
+    pipeline = [
+        {"$match": {"status": {"$ne": "cancelled"}}},
+        {"$group": {
+            "_id": {"name": "$customer_name", "phone": "$customer_phone"},
+            "customer_id": {"$first": "$customer_id"},
+            "last_invoice_date": {"$max": "$invoice_date"},
+            "invoice_count": {"$sum": 1},
+        }},
+        {"$sort": {"last_invoice_date": -1}},
+        {"$limit": 2000},
+    ]
+    rows = await db.gst_invoices.aggregate(pipeline).to_list(2000)
+    out = []
+    for r in rows:
+        out.append({
+            "customer_id": r.get("customer_id") or "",
+            "customer_name": (r["_id"].get("name") or "").strip(),
+            "customer_phone": (r["_id"].get("phone") or "").strip(),
+            "last_invoice_date": r.get("last_invoice_date"),
+            "invoice_count": r.get("invoice_count", 0),
+        })
+    return out
+
+
+@router.post("/gst/invoices/backfill-payments")
+async def backfill_payments(user: dict = Depends(require_admin)):
+    """One-time admin maintenance: backfill memo_no + cash_received + online_received +
+    payment_status on historical invoices. Source of truth: the linked sales_entry or
+    accessory_sale via sale_id. Idempotent."""
+    updated = 0
+    skipped = 0
+    cursor = db.gst_invoices.find({"status": {"$ne": "cancelled"}, "$or": [
+        {"payment_status": {"$in": [None, ""]}},
+        {"memo_no": {"$in": [None, ""]}},
+    ]}, {"_id": 0})
+    async for inv in cursor:
+        try:
+            sale_id = inv.get("sale_id")
+            sale_type = inv.get("sale_type")
+            memo_no = inv.get("memo_no") or ""
+            cash = float(inv.get("cash_received") or 0)
+            online = float(inv.get("online_received") or 0)
+            if sale_id and not (memo_no and (cash + online) > 0):
+                if sale_type == "sales_entry":
+                    sale = await db.sales_entries.find_one({"id": sale_id}, {"_id": 0})
+                    if sale:
+                        memo_no = memo_no or sale.get("memo_no") or ""
+                        cash = float(sale.get("cash_amount") or 0)
+                        online = float(sale.get("online_amount") or 0)
+                elif sale_type == "accessory_sale":
+                    sale = await db.accessory_sales.find_one({"id": sale_id}, {"_id": 0})
+                    if sale:
+                        memo_no = memo_no or sale.get("memo_no") or ""
+                        grand_for_split = float(sale.get("grand_total") or sale.get("amount") or 0)
+                        pm = (sale.get("payment_mode") or "cash").lower()
+                        if pm == "online":
+                            online = grand_for_split
+                        elif pm == "pending":
+                            pass
+                        else:
+                            cash = grand_for_split
+            memo_no = memo_no or inv.get("invoice_number")  # final fallback
+            pay = compute_payment_fields(float(inv.get("grand_total") or 0), cash, online)
+            await db.gst_invoices.update_one({"id": inv["id"]}, {"$set": {
+                "memo_no": memo_no,
+                **pay,
+            }})
+            updated += 1
+        except (TypeError, ValueError, KeyError):
+            skipped += 1
+    await log_audit(user.get("id", ""), user.get("name", ""), "backfill_payments", "gst_invoice", "",
+                    f"updated={updated} skipped={skipped}")
+    return {"updated": updated, "skipped": skipped}
+
 
 
 @router.post("/gst/invoices/{invoice_id}/cancel")
@@ -1347,6 +1618,20 @@ async def _auto_generate_invoice(sale: dict, sale_type: str, user: dict) -> Opti
         if not line_items:
             return None
 
+        # For accessory sales (payment_mode-driven), derive per-mode amounts so
+        # the invoice's cash_received / online_received / pending fields reflect reality.
+        sale_cash = float(sale.get("cash_amount") or 0)
+        sale_online = float(sale.get("online_amount") or 0)
+        if sale_type == "accessory_sale" and (sale_cash + sale_online) == 0:
+            grand_for_split = float(sale.get("grand_total") or sale.get("amount") or 0)
+            pm = (sale.get("payment_mode") or "cash").lower()
+            if pm == "online":
+                sale_online = grand_for_split
+            elif pm == "pending":
+                pass  # both stay 0 → invoice gets payment_status='Pending'
+            else:
+                sale_cash = grand_for_split
+
         payload = {
             "sale_id": sale.get("id"),
             "sale_type": sale_type,
@@ -1362,6 +1647,11 @@ async def _auto_generate_invoice(sale: dict, sale_type: str, user: dict) -> Opti
             "connection_plan_id": sale.get("connection_plan_id") or "",
             "warehouse_id": sale.get("warehouse_id", ""),
             "warehouse_name": sale.get("warehouse_name", ""),
+            # Memo No from sale entry (consumer-facing receipt no)
+            "memo_no": sale.get("memo_no") or "",
+            # Propagate received-amounts from sale entry → invoice payment fields
+            "cash_received": sale_cash,
+            "online_received": sale_online,
             # Propagate discrepancy reason from the source sale (validated at sale-entry layer)
             "discrepancy_reason": sale.get("discrepancy_reason") or "",
         }
@@ -1465,6 +1755,7 @@ async def export_invoice_pdf(invoice_id: str, user: dict = Depends(require_admin
 
     meta_left = [
         [Paragraph("<b>Invoice No:</b>", style_label), Paragraph(inv["invoice_number"], style_body)],
+        [Paragraph("<b>Memo No:</b>", style_label), Paragraph(inv.get("memo_no") or inv["invoice_number"], style_body)],
         [Paragraph("<b>Invoice Date:</b>", style_label), Paragraph(_fmt_dt(inv.get("invoice_date")), style_body)],
         [Paragraph("<b>Place of Supply:</b>", style_label), Paragraph(inv.get("place_of_supply") or cfg.get("place_of_supply", ""), style_body)],
         [Paragraph("<b>Tax Mode:</b>", style_label),
@@ -1604,6 +1895,17 @@ async def export_invoice_pdf(invoice_id: str, user: dict = Depends(require_admin
         summary_data.append(["Round Off:", f"{ro_sign} Rs. {format_inr(abs(round_off), use_symbol=False)}"])
     summary_data.append([Paragraph("<b>Grand Total:</b>", style_label),
                          Paragraph(f"<b>Rs. {format_inr(grand, use_symbol=False)}</b>", style_label)])
+    # Payment status block
+    _cash = float(inv.get("cash_received") or 0)
+    _online = float(inv.get("online_received") or 0)
+    _pending = float(inv.get("pending_amount") or 0)
+    _status = inv.get("payment_status") or ""
+    if (_cash + _online + _pending) > 0 or _status:
+        summary_data.append(["Cash Received:", f"Rs. {format_inr(_cash, use_symbol=False)}"])
+        summary_data.append(["Online Received:", f"Rs. {format_inr(_online, use_symbol=False)}"])
+        summary_data.append(["Pending Amount:", f"Rs. {format_inr(_pending, use_symbol=False)}"])
+        summary_data.append([Paragraph("<b>Payment Status:</b>", style_label),
+                             Paragraph(f"<b>{_status or '-'}</b>", style_label)])
 
     summary_tbl = Table(summary_data, colWidths=[35 * mm, 35 * mm])
     summary_tbl.setStyle(TableStyle([

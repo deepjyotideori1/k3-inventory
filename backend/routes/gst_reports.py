@@ -93,7 +93,7 @@ async def _build_daily_sales(start_date, end_date):
                     "cgst": _round(r["cgst"]), "sgst": _round(r["sgst"]),
                     "igst": _round(r["igst"]), "total_gst": _round(r["total_gst"]),
                     "grand_total": _round(r["grand_total"])} for r in by_day.values()],
-                  key=lambda x: x["date"])
+                  key=lambda x: x["date"], reverse=True)
     summary = {k: _round(sum(r[k] for r in rows)) for k in ("sub_total", "cgst", "sgst", "igst", "total_gst", "grand_total")}
     summary["invoices"] = sum(r["invoices"] for r in rows)
     columns = [
@@ -130,7 +130,7 @@ async def _build_monthly_sales(start_date, end_date):
                     "cgst": _round(r["cgst"]), "sgst": _round(r["sgst"]),
                     "igst": _round(r["igst"]), "total_gst": _round(r["total_gst"]),
                     "grand_total": _round(r["grand_total"])} for r in by_month.values()],
-                  key=lambda x: x["month"])
+                  key=lambda x: x["month"], reverse=True)
     summary = {k: _round(sum(r[k] for r in rows)) for k in ("sub_total", "cgst", "sgst", "igst", "total_gst", "grand_total")}
     summary["invoices"] = sum(r["invoices"] for r in rows)
     columns = [
@@ -168,7 +168,7 @@ async def _build_gst_report(start_date, end_date):
             "round_off": _round(inv.get("round_off")),
             "grand_total": _round(inv.get("grand_total")),
         })
-    rows.sort(key=lambda r: (r["type"], r["invoice_date"]))
+    rows.sort(key=lambda r: (r["type"], r["invoice_date"]), reverse=True)
     summary = {
         "b2b_count": sum(1 for r in rows if r["type"] == "B2B"),
         "b2c_count": sum(1 for r in rows if r["type"] == "B2C"),
