@@ -17,6 +17,10 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 import xlsxwriter
 
+from export_helpers import (
+    get_company_info_for_export, embed_logo_xlsxwriter, cleanup_logo_tempfile,
+)
+
 router = APIRouter()
 
 # ============ EXPORT ROUTES ============
@@ -297,14 +301,19 @@ async def export_excel(
     buffer = BytesIO()
     workbook = xlsxwriter.Workbook(buffer)
     worksheet = workbook.add_worksheet('Report')
-    
+
     # Formats
     header_format = workbook.add_format({'bold': True, 'bg_color': '#15803d', 'font_color': 'white', 'align': 'center', 'border': 1, 'text_wrap': True})
     cell_format = workbook.add_format({'align': 'center', 'border': 1})
-    title_format = workbook.add_format({'bold': True, 'font_size': 16, 'align': 'center', 'font_color': '#15803d'})
+    title_format = workbook.add_format({'bold': True, 'font_size': 16, 'align': 'center', 'font_color': '#15803d'})  # noqa: F841 kept for backward compat
     opening_format = workbook.add_format({'align': 'center', 'border': 1, 'bg_color': '#dbeafe'})
     activity_format = workbook.add_format({'align': 'center', 'border': 1, 'bg_color': '#fef3c7'})
     closing_format = workbook.add_format({'align': 'center', 'border': 1, 'bg_color': '#dcfce7'})
+
+    company = await get_company_info_for_export()
+    period_str = f"{start_date or 'All'} to {end_date or 'Today'}" if (start_date or end_date) else 'All time'
+    main_logo_path = None
+    breakdown_logo_path = None
     
     if report_type == "daily":
         query = {}
@@ -332,10 +341,12 @@ async def export_excel(
             wh = await db.warehouses.find_one({'id': warehouse_id}, {'_id': 0})
             warehouse_name = wh['name'] if wh else warehouse_id
         
-        worksheet.merge_range('A1:S1', f'K3 GAS SERVICE - Daily Inventory Report - {warehouse_name}', title_format)
-        if start_date and end_date:
-            worksheet.merge_range('A2:S2', f'Period: {start_date} to {end_date}', workbook.add_format({'align': 'center'}))
-        
+        main_logo_path = embed_logo_xlsxwriter(
+            worksheet, workbook, company,
+            title=f"Daily Inventory Report — {warehouse_name}",
+            period=period_str,
+            last_col_idx=18,
+        )
         # Comprehensive headers
         headers = [
             'Date', 'Warehouse',
@@ -348,7 +359,7 @@ async def export_excel(
             'Status'
         ]
         
-        row_start = 3
+        row_start = 4  # headers at row 5 (0-indexed 4); branded header occupies rows 0-2 + spacer 3
         for col, header in enumerate(headers):
             worksheet.write(row_start, col, header, header_format)
             worksheet.set_column(col, col, 12 if col > 1 else 15)  # Set column width
@@ -395,11 +406,14 @@ async def export_excel(
                 query['date'] = {'$lte': end_date}
         
         reports = await db.plant_reports.find(query, {'_id': 0}).sort('date', -1).to_list(1000)
-        
-        worksheet.merge_range('A1:R1', 'K3 GAS SERVICE - Plant Hollongi Report', title_format)
-        if start_date and end_date:
-            worksheet.merge_range('A2:R2', f'Period: {start_date} to {end_date}', workbook.add_format({'align': 'center'}))
-        
+
+        main_logo_path = embed_logo_xlsxwriter(
+            worksheet, workbook, company,
+            title='Plant Hollongi Report',
+            period=period_str,
+            last_col_idx=17,
+        )
+
         # Comprehensive headers for Plant with Day Reloading
         headers = [
             'Date',
@@ -414,10 +428,10 @@ async def export_excel(
         reloading_format = workbook.add_format({'bg_color': '#cffafe', 'align': 'center', 'border': 1})
         
         for col, header in enumerate(headers):
-            worksheet.write(3, col, header, header_format)
+            worksheet.write(4, col, header, header_format)
             worksheet.set_column(col, col, 10)
         
-        for row, r in enumerate(reports, start=4):
+        for row, r in enumerate(reports, start=5):
             # Calculate totals for deliveries and received
             del_15 = sum([d.get('quantity', 0) for d in r.get('delivery_15kg', [])])
             del_21 = sum([d.get('quantity', 0) for d in r.get('delivery_21kg', [])])
@@ -449,8 +463,13 @@ async def export_excel(
         
         # Create second sheet for warehouse breakdown
         breakdown_sheet = workbook.add_worksheet('Warehouse Breakdown')
-        breakdown_sheet.merge_range('A1:E1', 'Warehouse-wise Breakdown', title_format)
-        
+        breakdown_logo_path = embed_logo_xlsxwriter(
+            breakdown_sheet, workbook, company,
+            title='Warehouse-wise Breakdown',
+            period=period_str,
+            last_col_idx=4,
+        )
+
         breakdown_header_format = workbook.add_format({'bold': True, 'bg_color': '#15803d', 'font_color': 'white', 'align': 'center', 'border': 1})
         delivery_header_format = workbook.add_format({'bold': True, 'bg_color': '#c7d2fe', 'align': 'center', 'border': 1})
         received_header_format = workbook.add_format({'bold': True, 'bg_color': '#fed7aa', 'align': 'center', 'border': 1})
@@ -463,9 +482,9 @@ async def export_excel(
         
         breakdown_headers = ['Date', 'Type', 'Warehouse', '15kg Qty', '21kg Qty']
         for col, header in enumerate(breakdown_headers):
-            breakdown_sheet.write(2, col, header, breakdown_header_format)
+            breakdown_sheet.write(4, col, header, breakdown_header_format)
         
-        breakdown_row = 3
+        breakdown_row = 5
         for r in reports:
             report_date = r.get('date', '')
             
@@ -513,6 +532,8 @@ async def export_excel(
     
     workbook.close()
     buffer.seek(0)
+    cleanup_logo_tempfile(main_logo_path)
+    cleanup_logo_tempfile(breakdown_logo_path)
     
     # Generate filename based on report type
     date_str = datetime.now().strftime('%d%m%y')

@@ -19,6 +19,11 @@ import xlsxwriter
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
+from export_helpers import (
+    get_company_info_for_export, embed_logo_openpyxl, embed_logo_xlsxwriter,
+    cleanup_logo_tempfile,
+)
+
 router = APIRouter()
 
 @router.get("/customers")
@@ -995,36 +1000,36 @@ async def export_customer_refill_excel(
     wb = Workbook()
     ws = wb.active
     ws.title = "Refill Status"
-    
-    # Title rows
-    ws.merge_cells('A1:H1')
-    ws['A1'] = "K3 GAS SERVICE - Customer LPG Refill Status Report"
-    ws['A1'].font = Font(bold=True, size=14, color="15803d")
-    ws.merge_cells('A2:H2')
-    ws['A2'] = f"Generated: {today_display} | Total: {total_c} | Recently Refilled (<=15d): {recent_c} | Overdue (>30d): {overdue_c}"
-    ws['A2'].font = Font(size=9, color="666666")
-    
+
+    # Branded header: logo + name + title (rows 1-3, spacer row 4)
+    company = await get_company_info_for_export()
+    title = f"Customer LPG Refill Status — Total: {total_c}  |  Recent (≤15d): {recent_c}  |  Overdue (>30d): {overdue_c}"
+    logo_path = embed_logo_openpyxl(
+        ws, company, title=title, period=today_display, last_col_letter='H',
+    )
+    ws.append([])  # row 4 spacer
+
     headers = ['SL No.', 'Customer Name', 'Consumer No.', 'Phone', 'Address', 'Last Refill Date', 'Days Since Refill', 'Total Refills']
-    ws.append([])
     ws.append(headers)
-    
+
     header_fill = PatternFill(start_color="16a34a", end_color="16a34a", fill_type="solid")
     header_font = Font(bold=True, color="FFFFFF", size=10)
-    for cell in ws[4]:
+    for cell in ws[5]:
         cell.fill = header_fill
         cell.font = header_font
         cell.alignment = Alignment(horizontal='center')
-    
+
     green_font = Font(color="16a34a", bold=True)
     yellow_font = Font(color="ca8a04", bold=True)
     red_font = Font(color="dc2626", bold=True)
     red_fill = PatternFill(start_color="fef2f2", end_color="fef2f2", fill_type="solid")
     yellow_fill = PatternFill(start_color="fefce8", end_color="fefce8", fill_type="solid")
-    
+
     for i, r in enumerate(rows, 1):
         days_val = r['days'] if r['days'] is not None else 'No history'
         ws.append([i, r['name'], r['consumer_no'], r['phone'], r['address'], r['last_date'], days_val, r['total_refills']])
-        row_num = i + 4
+        # header rows 1-3 + spacer row 4 + headers row 5 = data starts at row 6
+        row_num = i + 5
         days_cell = ws.cell(row=row_num, column=7)
         if r['days'] is not None:
             if r['days'] > 30:
@@ -1035,15 +1040,16 @@ async def export_customer_refill_excel(
                 days_cell.fill = yellow_fill
             else:
                 days_cell.font = green_font
-    
+
     col_widths = [8, 25, 14, 14, 25, 16, 16, 14]
     for idx, w in enumerate(col_widths, 1):
         ws.column_dimensions[chr(64 + idx)].width = w
-    
+
     output = BytesIO()
     wb.save(output)
     output.seek(0)
-    
+    cleanup_logo_tempfile(logo_path)
+
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1325,7 +1331,18 @@ async def export_customers_excel(
     output = BytesIO()
     workbook = xlsxwriter.Workbook(output)
     worksheet = workbook.add_worksheet('Customers')
-    
+
+    # Branded header rows 0-2, spacer row 3, table headers row 4, data row 5+
+    company = await get_company_info_for_export()
+    period_str = f"{start_date or 'All'} to {end_date or 'Today'}" if (start_date or end_date) else 'All time'
+    cat_label = category.capitalize() if category and category != 'all' else 'All'
+    logo_path = embed_logo_xlsxwriter(
+        worksheet, workbook, company,
+        title=f"Customer Report — {cat_label}",
+        period=period_str,
+        last_col_idx=11,
+    )
+
     # Formats
     header_format = workbook.add_format({
         'bold': True,
@@ -1338,16 +1355,17 @@ async def export_customers_excel(
     data_format = workbook.add_format({'border': 1, 'align': 'left'})
     yes_format = workbook.add_format({'border': 1, 'align': 'center', 'bg_color': '#d4edda'})
     no_format = workbook.add_format({'border': 1, 'align': 'center', 'bg_color': '#f8d7da'})
-    
-    # Headers
+
+    # Headers (row 4 - 0-indexed)
     headers = ['Date', 'Connection Type', 'Customer Name', 'Phone', 'Address', 'Consumer No', 'Cash Memo No', 'Cylinder Nos', 'Gas Card Issued', 'KYC Done', 'Remarks', 'Warehouse']
-    
+    HEADER_ROW = 4
+
     for col, header in enumerate(headers):
-        worksheet.write(0, col, header, header_format)
+        worksheet.write(HEADER_ROW, col, header, header_format)
         worksheet.set_column(col, col, 15 if col < 4 else 20)
     
-    # Data
-    for row, c in enumerate(customers, start=1):
+    # Data (starting at row 5)
+    for row, c in enumerate(customers, start=HEADER_ROW + 1):
         worksheet.write(row, 0, c.get('date', ''), data_format)
         worksheet.write(row, 1, c.get('connection_type', '').capitalize(), data_format)
         worksheet.write(row, 2, c.get('customer_name', ''), data_format)
@@ -1363,6 +1381,7 @@ async def export_customers_excel(
     
     workbook.close()
     output.seek(0)
+    cleanup_logo_tempfile(logo_path)
     
     # Generate filename with category
     category_name = category.capitalize() if category and category != 'all' else 'All'

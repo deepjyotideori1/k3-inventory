@@ -21,6 +21,10 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 from routes.gst_billing import auto_generate_invoice_from_sale
+from export_helpers import (
+    get_company_info_for_export, embed_logo_openpyxl, embed_logo_xlsxwriter,
+    cleanup_logo_tempfile,
+)
 
 router = APIRouter()
 
@@ -908,15 +912,26 @@ async def export_sales_excel(
     wb = Workbook()
     ws = wb.active
     ws.title = "Sales Data"
-    
+
+    # Branded header: logo + company name + period (rows 1-3, blank row 4)
+    company = await get_company_info_for_export()
+    period_str = f"{start_date or 'All'} to {end_date or 'Today'}" if (start_date or end_date) else 'All time'
+    logo_path = embed_logo_openpyxl(
+        ws, company,
+        title=f"Sales Report — {warehouse_name.replace('_', ' ')}",
+        period=period_str,
+        last_col_letter='N',
+    )
+    ws.append([])  # row 4 spacer
+
     # Headers with clear form heads - include Memo No, Cylinder Nos and Refills
     headers = ['SL No.', 'Date', 'Consumer Name', 'Address', 'Consumer No.', 'Memo No.', 'Type', 'Amount (Rs.)', 'Cash (Rs.)', 'Online (Rs.)', 'Credit (Rs.)', 'New Conn Cyl', 'Refill Cyl', 'Remarks']
     ws.append(headers)
-    
-    # Style headers
+
+    # Style headers (now at row 5)
     header_fill = PatternFill(start_color="16a34a", end_color="16a34a", fill_type="solid")
     header_font = Font(bold=True, color="FFFFFF")
-    for cell in ws[1]:
+    for cell in ws[5]:
         cell.fill = header_fill
         cell.font = header_font
         cell.alignment = Alignment(horizontal='center')
@@ -979,8 +994,8 @@ async def export_sales_excel(
         ])
         total_amount += e.get('amount', 0)
     
-    # Add cylinder total row
-    cyl_total_row = len(entries) + 2
+    # Add cylinder total row (header rows 1-3 + spacer row 4 + header row 5 = +5; entries from row 6)
+    cyl_total_row = len(entries) + 6
     # Calculate cash/online/credit totals for cylinder entries
     excel_cash_total = sum(
         (e.get('cash_amount', 0) or 0) or (e.get('amount', 0) if e.get('payment_mode') == 'cash' and not e.get('cash_amount') else 0)
@@ -1088,6 +1103,7 @@ async def export_sales_excel(
     buffer = BytesIO()
     wb.save(buffer)
     buffer.seek(0)
+    cleanup_logo_tempfile(logo_path)
     
     date_str = datetime.now().strftime('%d%m%y')
     filename = f"Sales_Report_{warehouse_name}_{date_str}.xlsx"
@@ -1421,28 +1437,28 @@ async def export_sales_summary_excel(
     ws = wb.active
     group_label = {'daily': 'Daily', 'weekly': 'Weekly', 'monthly': 'Monthly'}.get(group_by, 'Daily')
     ws.title = f"{group_label} Summary"
-    
-    # Title row
-    ws.merge_cells('A1:K1')
-    ws['A1'] = f"K3 GAS SERVICE - {group_label} Sales Summary Report"
-    ws['A1'].font = Font(bold=True, size=14, color="16a34a")
-    ws['A1'].alignment = Alignment(horizontal='center')
-    
-    ws.merge_cells('A2:K2')
-    ws['A2'] = f"Warehouse: {warehouse_name.replace('_', ' ')}"
-    ws['A2'].alignment = Alignment(horizontal='center')
-    
-    # Headers
-    headers = ['Period', 'Total Amount (₹)', 'Total Entries', 'Total Refills', 
-               'Cash (₹)', 'Online (₹)', 'Pending (₹)', 
+
+    # Branded header: logo + name + period (rows 1-3, spacer row 4)
+    company = await get_company_info_for_export()
+    period_str = f"{start_date or 'All'} to {end_date or 'Today'}" if (start_date or end_date) else 'All time'
+    logo_path = embed_logo_openpyxl(
+        ws, company,
+        title=f"{group_label} Sales Summary — {warehouse_name.replace('_', ' ')}",
+        period=period_str,
+        last_col_letter='K',
+    )
+    ws.append([])  # row 4 spacer
+
+    # Headers (row 5)
+    headers = ['Period', 'Total Amount (₹)', 'Total Entries', 'Total Refills',
+               'Cash (₹)', 'Online (₹)', 'Pending (₹)',
                'Domestic New', 'Domestic Refill', 'Commercial New', 'Commercial Refill']
-    ws.append([])  # Empty row
     ws.append(headers)
     
-    # Style headers
+    # Style headers (now at row 5)
     header_fill = PatternFill(start_color="16a34a", end_color="16a34a", fill_type="solid")
     header_font = Font(bold=True, color="FFFFFF")
-    for cell in ws[4]:
+    for cell in ws[5]:
         cell.fill = header_fill
         cell.font = header_font
         cell.alignment = Alignment(horizontal='center')
@@ -1511,7 +1527,7 @@ async def export_sales_summary_excel(
         top=Side(style='thin'),
         bottom=Side(style='thin')
     )
-    for row in ws.iter_rows(min_row=4, max_row=ws.max_row, min_col=1, max_col=11):
+    for row in ws.iter_rows(min_row=5, max_row=ws.max_row, min_col=1, max_col=11):
         for cell in row:
             cell.border = thin_border
             cell.alignment = Alignment(horizontal='center')
@@ -1519,6 +1535,7 @@ async def export_sales_summary_excel(
     buffer = BytesIO()
     wb.save(buffer)
     buffer.seek(0)
+    cleanup_logo_tempfile(logo_path)
     
     date_str = datetime.now().strftime('%d%m%y')
     filename = f"Sales_Summary_{group_label}_{warehouse_name}_{date_str}.xlsx"

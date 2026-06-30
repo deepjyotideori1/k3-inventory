@@ -876,11 +876,7 @@ const GSTBilling = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {loading ? (
-                        <tr><td colSpan="9" className="p-8 text-center text-slate-500">Loading...</td></tr>
-                      ) : invoices.length === 0 ? (
-                        <tr><td colSpan="9" className="p-8 text-center text-slate-500">No invoices found.</td></tr>
-                      ) : invoices.map(inv => (
+                      {!loading && invoices.length > 0 && invoices.map(inv => (
                         <tr key={inv.id} className={`border-b hover:bg-slate-50 ${inv.status === 'cancelled' ? 'opacity-60' : ''}`} data-testid={`invoice-row-${inv.id}`}>
                           <td className="p-3 font-mono text-xs">{inv.invoice_number}</td>
                           <td className="p-3">{inv.invoice_date}</td>
@@ -926,6 +922,12 @@ const GSTBilling = () => {
                       ))}
                     </tbody>
                   </table>
+                  {loading && (
+                    <div className="p-8 text-center text-slate-500" data-testid="invoices-loading">Loading...</div>
+                  )}
+                  {!loading && invoices.length === 0 && (
+                    <div className="p-8 text-center text-slate-500" data-testid="invoices-empty">No invoices found.</div>
+                  )}
                 </div>
                 {/* Pagination */}
                 <div className="flex items-center justify-between p-3 border-t">
@@ -1097,9 +1099,7 @@ const GSTBilling = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {plans.length === 0 ? (
-                      <tr><td colSpan="8" className="p-8 text-center text-slate-500">No plans yet.</td></tr>
-                    ) : plans.map(p => {
+                    {plans.length > 0 && plans.map(p => {
                       const ratesSet = p.items?.every(i => Number(i.unit_price) > 0);
                       return (
                         <tr key={p.id} className="border-b hover:bg-slate-50" data-testid={`plan-row-${p.id}`}>
@@ -1134,6 +1134,9 @@ const GSTBilling = () => {
                     })}
                   </tbody>
                 </table>
+                {plans.length === 0 && (
+                  <div className="p-8 text-center text-slate-500" data-testid="plans-empty">No plans yet.</div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -2207,13 +2210,7 @@ const GSTBilling = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {historyLoading && (
-                      <tr><td colSpan="10" className="text-center p-4 text-slate-500">Loading…</td></tr>
-                    )}
-                    {!historyLoading && historyRows.length === 0 && (
-                      <tr><td colSpan="10" className="text-center p-4 text-slate-500">No history found for the selected filters.</td></tr>
-                    )}
-                    {!historyLoading && historyRows.map((r, i) => (
+                    {!historyLoading && historyRows.length > 0 && historyRows.map((r, i) => (
                       <tr key={i} className="border-b hover:bg-slate-50" data-testid={`history-row-${i}`}>
                         <td className="p-2 font-medium">{r.item_name}</td>
                         <td className="p-2 font-mono">{r.hsn || '-'}</td>
@@ -2233,6 +2230,12 @@ const GSTBilling = () => {
                     ))}
                   </tbody>
                 </table>
+                {historyLoading && (
+                  <div className="p-4 text-center text-slate-500" data-testid="history-loading">Loading…</div>
+                )}
+                {!historyLoading && historyRows.length === 0 && (
+                  <div className="p-4 text-center text-slate-500" data-testid="history-empty">No history found for the selected filters.</div>
+                )}
               </div>
               <p className="text-xs text-slate-500">Showing {historyRows.length} record(s).</p>
             </div>

@@ -37,6 +37,7 @@ from routes.hrms_performance import router as hrms_performance_router
 from routes.hrms_hiring import router as hrms_hiring_router
 from routes.hrms_reports import router as hrms_reports_router
 from routes.gst_billing import router as gst_billing_router
+from routes.gst_items import router as gst_items_router
 from routes.gst_reports import router as gst_reports_router
 
 ROOT_DIR = Path(__file__).parent
@@ -219,6 +220,7 @@ app.include_router(hrms_performance_router, prefix="/api")
 app.include_router(hrms_hiring_router, prefix="/api")
 app.include_router(hrms_reports_router, prefix="/api")
 app.include_router(gst_billing_router, prefix="/api")
+app.include_router(gst_items_router, prefix="/api")
 app.include_router(gst_reports_router, prefix="/api")
 
 
