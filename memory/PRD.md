@@ -25,6 +25,33 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 
 
 ---
+## AUTO CUSTOMER MOBILE / MASTER LINK (Added 2026-07-01)
+
+Customer Master (`db.customers`) is now the single source of truth for customer identity fields on GST invoices, with historical snapshot semantics.
+
+### Backend
+- New endpoint `GET /api/gst/customer-lookup` (`gst_billing.py` ~L1063):
+  - `?q=<>=2chars` → list of customers matching name/consumer_no/phone (max 15, warehouse-scoped for non-admins).
+  - `?customer_id=<id>` → single customer document.
+  - Response items include `id`, `customer_name`, `phone`, `address`, `consumer_no`, `connection_type`, `warehouse_id`, `warehouse_name`.
+- `create_invoice` auto-hydrates from Customer Master when `customer_id` is supplied: authoritative values for name/phone/address/consumer_no/connection_type + warehouse (if not explicitly sent). Sets `customer_source = 'master' | 'manual'`.
+- New invoice fields (snapshotted): `customer_consumer_no`, `customer_connection_type`, `customer_source`.
+- `update_invoice` editable set includes the two new fields but **does not** re-hydrate — historical snapshot preserved on edit.
+
+### Frontend (`GSTBilling.jsx`)
+- "Link to Customer Master" block at top of the New/Edit Invoice modal:
+  - Debounced typeahead (`inv-customer-lookup-input` → `inv-customer-lookup-dropdown` → `inv-customer-lookup-item-<id>`).
+  - Selecting a customer: auto-populates Name/Phone/Address, shows green `inv-customer-linked-badge`, chip strip with Customer ID + Consumer No. + Category. Fires toast.
+  - When phone is missing: amber warning banner (`inv-customer-phone-warning`) with deep-link to `/customers`.
+  - "Unlink" button (`inv-customer-unlink`) clears the link but preserves already-typed values.
+- Invoice View dialog: adds Consumer No. + Category rows (conditional) and colors phone amber when empty (`view-customer-phone`, `view-customer-consumer-no`, `view-customer-connection-type`).
+
+### Tests
+- `/app/backend/tests/test_customer_lookup.py` — 10 passing tests (lookup shape, empty q, id lookup, non-admin 403, auto-hydration on POST, historical snapshot on GET, immutability on PUT, warehouse scoping).
+
+---
+
+
 ## INVOICES TAB — ADVANCED FILTERS (Added 2026-07-01)
 
 Expanded filter panel on the Invoices tab with per-tab Warehouse dropdown + Month + Financial Year + Payment Status filters. Shares state with the global header warehouse filter (bi-directional).
