@@ -25,6 +25,26 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 
 
 ---
+## INVOICES TAB — ADVANCED FILTERS (Added 2026-07-01)
+
+Expanded filter panel on the Invoices tab with per-tab Warehouse dropdown + Month + Financial Year + Payment Status filters. Shares state with the global header warehouse filter (bi-directional).
+
+### Backend params added
+- `list_invoices` (`GET /api/gst/invoices`) now accepts: `fy` (Indian FY like `2026-27` → Apr–Mar range), `payment_status` (`Paid`|`Partial`|`Pending`). Search now also matches `memo_no`.
+- `get_invoice_summary` (`GET /api/gst/invoices/summary`) now accepts: `fy`, `month`, `year`, `payment_status`, `item_type`, `warehouse_ids` — so header KPI cards reflect active filters.
+- `export_invoices_excel` (`GET /api/gst/invoices/export/excel`) accepts the full superset — Excel export honors all active filters (warehouse + fy/month/date-range + payment_status + item_type + status + search including memo_no).
+
+### Frontend (`GSTBilling.jsx`)
+- Two-row filter panel: Row 1 = search-input, invoice-warehouse-filter (popover multi-select, shares state with global), status-filter, payment-status-filter, bill-type-filter. Row 2 = fy-filter (last 5 FYs), month-filter (12 months), start-date, end-date, reset-filters-btn (conditional), export-excel-btn.
+- Mutual exclusion: selecting FY resets Month + disables date range; selecting Month resets FY + disables date range; changing a date resets both FY and Month.
+- Live filter-chip summary strip (invoice-results-count) shows: current/total invoices + active warehouse/FY/month/payment_status.
+
+### Tests
+- `/app/backend/tests/test_invoice_advanced_filters.py` — 20 new passing tests (fy/month/year/payment_status/memo-search/combined/pagination/export/fake-wh/non-admin).
+
+---
+
+
 ## WAREHOUSE-WISE INVOICE FILTER & SEGREGATION (Added 2026-07-01)
 
 Cross-cutting feature that layers a warehouse dimension on every GST reporting/query endpoint.
