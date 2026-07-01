@@ -690,18 +690,39 @@ def _match_plan_for_sale(plans: List[dict], connection_type: str, cylinder_count
 async def get_invoice_summary(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    month: Optional[int] = None,
+    year: Optional[int] = None,
+    fy: Optional[str] = None,
+    payment_status: Optional[str] = None,
+    item_type: Optional[str] = None,
     warehouse_ids: Optional[str] = None,
     user: dict = Depends(require_admin),
 ):
     await ensure_seed()
     q: Dict[str, Any] = {}
     apply_warehouse_filter(q, warehouse_ids, user)
+    if payment_status:
+        q["payment_status"] = payment_status
+    if item_type:
+        q["bill_type"] = item_type
     if start_date or end_date:
         q["invoice_date"] = {}
         if start_date:
             q["invoice_date"]["$gte"] = start_date
         if end_date:
             q["invoice_date"]["$lte"] = end_date
+    if month and year:
+        from calendar import monthrange
+        _, last = monthrange(year, month)
+        q["invoice_date"] = {"$gte": f"{year}-{month:02d}-01", "$lte": f"{year}-{month:02d}-{last:02d}"}
+    elif year:
+        q["invoice_date"] = {"$gte": f"{year}-01-01", "$lte": f"{year}-12-31"}
+    if fy:
+        try:
+            start_yr = int(str(fy).split("-")[0])
+            q["invoice_date"] = {"$gte": f"{start_yr}-04-01", "$lte": f"{start_yr + 1}-03-31"}
+        except (ValueError, IndexError):
+            pass
 
     pipeline = [
         {"$match": q} if q else {"$match": {}},
@@ -736,6 +757,11 @@ async def export_invoices_excel(
     status: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    month: Optional[int] = None,
+    year: Optional[int] = None,
+    fy: Optional[str] = None,
+    payment_status: Optional[str] = None,
+    item_type: Optional[str] = None,
     warehouse_ids: Optional[str] = None,
     user: dict = Depends(require_admin),
 ):
@@ -749,15 +775,33 @@ async def export_invoices_excel(
     apply_warehouse_filter(q, warehouse_ids, user)
     if status:
         q["status"] = status
+    if payment_status:
+        q["payment_status"] = payment_status
+    if item_type:
+        q["bill_type"] = item_type
     if start_date or end_date:
         q["invoice_date"] = {}
         if start_date:
             q["invoice_date"]["$gte"] = start_date
         if end_date:
             q["invoice_date"]["$lte"] = end_date
+    if month and year:
+        from calendar import monthrange
+        _, last = monthrange(year, month)
+        q["invoice_date"] = {"$gte": f"{year}-{month:02d}-01", "$lte": f"{year}-{month:02d}-{last:02d}"}
+    elif year:
+        q["invoice_date"] = {"$gte": f"{year}-01-01", "$lte": f"{year}-12-31"}
+    if fy:
+        try:
+            start_yr = int(str(fy).split("-")[0])
+            q["invoice_date"] = {"$gte": f"{start_yr}-04-01", "$lte": f"{start_yr + 1}-03-31"}
+        except (ValueError, IndexError):
+            pass
     if search:
         q["$or"] = [{"invoice_number": {"$regex": search, "$options": "i"}},
-                    {"customer_name": {"$regex": search, "$options": "i"}}]
+                    {"memo_no": {"$regex": search, "$options": "i"}},
+                    {"customer_name": {"$regex": search, "$options": "i"}},
+                    {"customer_phone": {"$regex": search, "$options": "i"}}]
 
     invoices = await db.gst_invoices.find(q, {"_id": 0}).sort([("invoice_date", -1), ("created_at", -1)]).to_list(50000)
     cfg = await db.gst_config.find_one({"key": "gst_config"}, {"_id": 0}) or {}
@@ -964,7 +1008,9 @@ async def list_invoices(
     end_date: Optional[str] = None,
     month: Optional[int] = None,
     year: Optional[int] = None,
+    fy: Optional[str] = None,
     payment_mode: Optional[str] = None,
+    payment_status: Optional[str] = None,
     item_type: Optional[str] = None,
     warehouse_ids: Optional[str] = None,
     user: dict = Depends(require_admin),
@@ -976,6 +1022,8 @@ async def list_invoices(
         q["status"] = status
     if payment_mode:
         q["payment_mode"] = payment_mode
+    if payment_status:
+        q["payment_status"] = payment_status
     if item_type:
         q["bill_type"] = item_type
     if start_date:
@@ -988,10 +1036,18 @@ async def list_invoices(
         q["invoice_date"] = {"$gte": f"{year}-{month:02d}-01", "$lte": f"{year}-{month:02d}-{last:02d}"}
     elif year:
         q["invoice_date"] = {"$gte": f"{year}-01-01", "$lte": f"{year}-12-31"}
+    if fy:
+        # Indian FY like "2026-27" -> Apr 1 2026 to Mar 31 2027
+        try:
+            start_yr = int(str(fy).split("-")[0])
+            q["invoice_date"] = {"$gte": f"{start_yr}-04-01", "$lte": f"{start_yr + 1}-03-31"}
+        except (ValueError, IndexError):
+            pass
     if search and search.strip():
         s = search.strip()
         q["$or"] = [
             {"invoice_number": {"$regex": s, "$options": "i"}},
+            {"memo_no": {"$regex": s, "$options": "i"}},
             {"customer_name": {"$regex": s, "$options": "i"}},
             {"customer_phone": {"$regex": s, "$options": "i"}},
         ]

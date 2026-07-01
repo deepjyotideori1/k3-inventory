@@ -77,6 +77,25 @@ const monthStartISO = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
 };
 
+// Indian FY options: current FY + previous 4. FY is Apr-Mar; if month < 4 the FY started previous year.
+const fyOptions = () => {
+  const d = new Date();
+  const startYr = d.getMonth() + 1 >= 4 ? d.getFullYear() : d.getFullYear() - 1;
+  const opts = [];
+  for (let i = 0; i < 5; i++) {
+    const s = startYr - i;
+    opts.push({ value: `${s}-${String((s + 1) % 100).padStart(2, '0')}`, label: `${s}-${String((s + 1) % 100).padStart(2, '0')}` });
+  }
+  return opts;
+};
+
+const MONTH_LABELS = [
+  { v: '1', l: 'January' }, { v: '2', l: 'February' }, { v: '3', l: 'March' },
+  { v: '4', l: 'April' }, { v: '5', l: 'May' }, { v: '6', l: 'June' },
+  { v: '7', l: 'July' }, { v: '8', l: 'August' }, { v: '9', l: 'September' },
+  { v: '10', l: 'October' }, { v: '11', l: 'November' }, { v: '12', l: 'December' },
+];
+
 const GSTBilling = () => {
   const { user, isAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState('invoices');
@@ -87,6 +106,9 @@ const GSTBilling = () => {
   const [billTypeFilter, setBillTypeFilter] = useState('all');
   const [startDate, setStartDate] = useState(monthStartISO());
   const [endDate, setEndDate] = useState(todayISO());
+  const [monthFilter, setMonthFilter] = useState('all');    // 'all' or '1'..'12'
+  const [fyFilter, setFyFilter] = useState('all');          // 'all' or e.g. '2026-27'
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState('all');  // 'all'|'Paid'|'Partial'|'Pending'
   const [page, setPage] = useState(1);
 
   // Data
@@ -193,8 +215,17 @@ const GSTBilling = () => {
       if (search) params.search = search;
       if (statusFilter !== 'all') params.status = statusFilter;
       if (billTypeFilter !== 'all') params.item_type = billTypeFilter;
-      if (startDate) params.start_date = startDate;
-      if (endDate) params.end_date = endDate;
+      if (paymentStatusFilter !== 'all') params.payment_status = paymentStatusFilter;
+      if (fyFilter !== 'all') {
+        params.fy = fyFilter;
+      } else if (monthFilter !== 'all') {
+        const now = new Date();
+        params.month = Number(monthFilter);
+        params.year = now.getFullYear();
+      } else {
+        if (startDate) params.start_date = startDate;
+        if (endDate) params.end_date = endDate;
+      }
       if (warehouseIdsCsv) params.warehouse_ids = warehouseIdsCsv;
       const { data } = await getGstInvoices(params);
       setInvoices(data.invoices || []);
@@ -205,17 +236,29 @@ const GSTBilling = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, search, statusFilter, billTypeFilter, startDate, endDate, warehouseIdsCsv, redirectIfNotAdmin]);
+  }, [page, search, statusFilter, billTypeFilter, paymentStatusFilter, monthFilter, fyFilter, startDate, endDate, warehouseIdsCsv, redirectIfNotAdmin]);
 
   const loadSummary = useCallback(async () => {
     if (redirectIfNotAdmin()) return;
     try {
-      const params = { start_date: startDate, end_date: endDate };
+      const params = {};
+      if (fyFilter !== 'all') {
+        params.fy = fyFilter;
+      } else if (monthFilter !== 'all') {
+        const now = new Date();
+        params.month = Number(monthFilter);
+        params.year = now.getFullYear();
+      } else {
+        params.start_date = startDate;
+        params.end_date = endDate;
+      }
+      if (paymentStatusFilter !== 'all') params.payment_status = paymentStatusFilter;
+      if (billTypeFilter !== 'all') params.item_type = billTypeFilter;
       if (warehouseIdsCsv) params.warehouse_ids = warehouseIdsCsv;
       const { data } = await getGstSummary(params);
       setSummary(data || {});
     } catch (e) { /* swallow */ }
-  }, [startDate, endDate, warehouseIdsCsv, redirectIfNotAdmin]);
+  }, [startDate, endDate, monthFilter, fyFilter, paymentStatusFilter, billTypeFilter, warehouseIdsCsv, redirectIfNotAdmin]);
 
   const loadConfig = useCallback(async () => {
     try {
@@ -458,13 +501,24 @@ const GSTBilling = () => {
 
   const handleExcelExport = async () => {
     try {
-      await exportGstInvoicesExcel({
+      const params = {
         search: search || undefined,
         status: statusFilter !== 'all' ? statusFilter : undefined,
-        start_date: startDate,
-        end_date: endDate,
+        item_type: billTypeFilter !== 'all' ? billTypeFilter : undefined,
+        payment_status: paymentStatusFilter !== 'all' ? paymentStatusFilter : undefined,
         warehouse_ids: warehouseIdsCsv,
-      });
+      };
+      if (fyFilter !== 'all') {
+        params.fy = fyFilter;
+      } else if (monthFilter !== 'all') {
+        const now = new Date();
+        params.month = Number(monthFilter);
+        params.year = now.getFullYear();
+      } else {
+        params.start_date = startDate;
+        params.end_date = endDate;
+      }
+      await exportGstInvoicesExcel(params);
       toast.success('Excel downloaded');
     } catch (e) {
       toast.error('Excel export failed');
@@ -1137,19 +1191,91 @@ const GSTBilling = () => {
                   <div className="md:col-span-2 relative">
                     <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                     <Input
-                      placeholder="Search invoice no, customer, phone..."
+                      placeholder="Search invoice no, memo no, customer, phone..."
                       value={search}
                       onChange={e => { setSearch(e.target.value); setPage(1); }}
                       className="pl-9"
                       data-testid="search-input"
                     />
                   </div>
+                  {/* Warehouse (per-tab) — shares state with the header filter */}
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="justify-between gap-2 font-normal"
+                        data-testid="invoice-warehouse-filter"
+                      >
+                        <span className="flex items-center gap-2 truncate">
+                          <Warehouse className="w-4 h-4 text-blue-700 shrink-0" />
+                          <span className="truncate">{warehouseFilterLabel}</span>
+                        </span>
+                        <ChevronDown className="w-4 h-4 opacity-60 shrink-0" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-72 p-0">
+                      <div className="flex items-center justify-between px-3 py-2 border-b">
+                        <span className="text-sm font-medium">Warehouse</span>
+                        {selectedWarehouseIds.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={clearWarehouseSelection}
+                            className="text-xs text-blue-700 hover:underline"
+                            data-testid="invoice-warehouse-clear"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                      <div className="max-h-64 overflow-y-auto py-1">
+                        {warehouses.length === 0 && (
+                          <div className="px-3 py-4 text-xs text-slate-500">No warehouses found.</div>
+                        )}
+                        {warehouses.map(w => {
+                          const checked = selectedWarehouseIds.includes(w.id);
+                          return (
+                            <label
+                              key={w.id}
+                              className="flex items-start gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"
+                              data-testid={`invoice-warehouse-item-${w.id}`}
+                            >
+                              <Checkbox
+                                checked={checked}
+                                onCheckedChange={() => toggleWarehouseId(w.id)}
+                                className="mt-0.5"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium truncate">
+                                  {w.name}{w.code ? ` (${w.code})` : ''}
+                                </div>
+                                <div className="text-[10px] text-slate-500 truncate">
+                                  {w.location || '—'}{w.is_plant ? ' · Plant' : ''}
+                                </div>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                      <div className="px-3 py-2 border-t text-[11px] text-slate-500">
+                        Empty selection = all warehouses.
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                   <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setPage(1); }}>
                     <SelectTrigger data-testid="status-filter"><SelectValue placeholder="Status" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Status</SelectItem>
                       <SelectItem value="active">Active</SelectItem>
                       <SelectItem value="cancelled">Cancelled</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={paymentStatusFilter} onValueChange={v => { setPaymentStatusFilter(v); setPage(1); }}>
+                    <SelectTrigger data-testid="payment-status-filter"><SelectValue placeholder="Payment" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Payments</SelectItem>
+                      <SelectItem value="Paid">Paid</SelectItem>
+                      <SelectItem value="Partial">Partial</SelectItem>
+                      <SelectItem value="Pending">Pending</SelectItem>
                     </SelectContent>
                   </Select>
                   <Select value={billTypeFilter} onValueChange={v => { setBillTypeFilter(v); setPage(1); }}>
@@ -1162,13 +1288,77 @@ const GSTBilling = () => {
                       <SelectItem value="manual">Manual</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} data-testid="start-date" />
-                  <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} data-testid="end-date" />
                 </div>
-                <div className="flex justify-end mt-3">
-                  <Button variant="outline" onClick={handleExcelExport} data-testid="export-excel-btn">
-                    <FileSpreadsheet className="w-4 h-4 mr-1" /> Export Excel
-                  </Button>
+
+                <div className="grid grid-cols-1 md:grid-cols-6 gap-3 mt-3">
+                  <Select value={fyFilter} onValueChange={v => { setFyFilter(v); if (v !== 'all') setMonthFilter('all'); setPage(1); }}>
+                    <SelectTrigger data-testid="fy-filter"><SelectValue placeholder="Financial Year" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All FYs</SelectItem>
+                      {fyOptions().map(o => (
+                        <SelectItem key={o.value} value={o.value}>FY {o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={monthFilter} onValueChange={v => { setMonthFilter(v); if (v !== 'all') setFyFilter('all'); setPage(1); }}>
+                    <SelectTrigger data-testid="month-filter"><SelectValue placeholder="Month" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Months</SelectItem>
+                      {MONTH_LABELS.map(m => (
+                        <SelectItem key={m.v} value={m.v}>{m.l}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type="date"
+                    value={startDate}
+                    onChange={e => { setStartDate(e.target.value); setMonthFilter('all'); setFyFilter('all'); setPage(1); }}
+                    data-testid="start-date"
+                    disabled={monthFilter !== 'all' || fyFilter !== 'all'}
+                  />
+                  <Input
+                    type="date"
+                    value={endDate}
+                    onChange={e => { setEndDate(e.target.value); setMonthFilter('all'); setFyFilter('all'); setPage(1); }}
+                    data-testid="end-date"
+                    disabled={monthFilter !== 'all' || fyFilter !== 'all'}
+                  />
+                  <div className="md:col-span-2 flex justify-end items-center gap-2">
+                    {(monthFilter !== 'all' || fyFilter !== 'all' || paymentStatusFilter !== 'all' || selectedWarehouseIds.length > 0 || search) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setMonthFilter('all');
+                          setFyFilter('all');
+                          setPaymentStatusFilter('all');
+                          setBillTypeFilter('all');
+                          setStatusFilter('all');
+                          setSearch('');
+                          setSelectedWarehouseIds([]);
+                          setStartDate(monthStartISO());
+                          setEndDate(todayISO());
+                          setPage(1);
+                        }}
+                        data-testid="reset-filters-btn"
+                      >
+                        <XCircle className="w-4 h-4 mr-1" /> Reset
+                      </Button>
+                    )}
+                    <Button variant="outline" onClick={handleExcelExport} data-testid="export-excel-btn">
+                      <FileSpreadsheet className="w-4 h-4 mr-1" /> Export Excel
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="mt-2 text-xs text-slate-500" data-testid="invoice-results-count">
+                  Showing <strong>{invoices.length}</strong> of <strong>{totalInvoices}</strong> invoice{totalInvoices !== 1 ? 's' : ''}
+                  {selectedWarehouseIds.length > 0 && (
+                    <> · Warehouse: <strong>{warehouseFilterLabel}</strong></>
+                  )}
+                  {fyFilter !== 'all' && <> · FY <strong>{fyFilter}</strong></>}
+                  {monthFilter !== 'all' && <> · Month: <strong>{MONTH_LABELS.find(m => m.v === monthFilter)?.l}</strong></>}
+                  {paymentStatusFilter !== 'all' && <> · Payment: <strong>{paymentStatusFilter}</strong></>}
                 </div>
               </CardContent>
             </Card>

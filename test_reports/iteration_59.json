@@ -1,0 +1,48 @@
+{
+  "summary": "Verified new Invoices-tab advanced filters (Warehouse popover + Month + FY + Payment Status + memo_no search) end-to-end. Backend: 20/20 new pytest tests pass in /app/backend/tests/test_invoice_advanced_filters.py (fy, month/year, payment_status Paid/Partial/Pending, memo_no substring search, combined warehouse+fy+payment_status+status, pagination preservation, xlsx export honouring all params, fake-wh returns 0, invalid FY gracefully ignored, employee 403). Frontend (admin @ /gst-billing): all 12 new/verified data-testids present and functional — search-input, invoice-warehouse-filter, status-filter, payment-status-filter, bill-type-filter, fy-filter, month-filter, start-date, end-date, export-excel-btn, invoice-results-count, warehouse-filter-trigger. FY dropdown shows exactly 'All FYs' + 5 Indian FYs (2026-27..2022-23). Selecting FY 2026-27 correctly disables start-date/end-date and updates chip 'Showing 33 of 33 invoices · FY 2026-27'. Month dropdown shows 'All Months' + 12 month names; July selection auto-resets FY and shows 'Month: July'. Payment dropdown has 'All Payments/Paid/Partial/Pending' — chip shows 'Payment: Paid' when Paid selected. Search 'search-input' now matches memo_no (typed '11111' returned exactly 1 row whose memo_no='11111' — previously would not match). Warehouse per-tab popover has 4 warehouse items; selecting Jullang updated BOTH header 'warehouse-filter-trigger' label and tab 'invoice-warehouse-filter' label to 'Jullang' (state shared, spec 1b). reset-filters-btn appears only when a filter differs from default; clicking it restores all defaults. Employee lock verified via curl: GET /api/gst/invoices returns 403 as expected. Header KPI cards (Total Invoices/Active/Cancelled/Total GST Collected) now reflect warehouse_ids + payment_status + fy filters — the iteration_58 summary-endpoint bug is FIXED.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Invoices tab table",
+        "issues": [
+          "React dev-time hydration console warnings: '<span> cannot be a child of <tbody>' and '<tr> cannot be a child of <span>' (see /app/frontend/src/pages/GSTBilling.jsx around line 1386-1388). Caused by an emergent x-source wrapper <span style={display:contents}> being rendered around each <tr>. Non-blocking (rows render and are interactive) but should be cleaned up because hydration warnings can hide real ones in production. Not a functional issue."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_invoice_advanced_filters.py",
+    "/app/test_reports/pytest/invoice_advanced_filters.xml"
+  ],
+  "action_items": [
+    "(Optional / non-blocking) Investigate the <span data-ve-dynamic> wrapper injected around <tr> inside <tbody> in GSTBilling.jsx (~L1386) — produces React hydration warnings but does not break UI.",
+    "No functional bugs — feature is fully working and ready for release."
+  ],
+  "critical_code_review_comments": [
+    "list_invoices, get_invoice_summary and export_invoices_excel now all accept the same superset of filter params (fy, month, year, payment_status, item_type, warehouse_ids, search) — consistent and clean.",
+    "FY parsing (gst_billing.py L720-725, L794-799, L1039-1045) is duplicated 3x — consider extracting into a helper `date_range_from_fy(fy)` to avoid drift.",
+    "memo_no was added to the search $or in both list_invoices (L1050) and export_invoices_excel (L802) — good parity.",
+    "Frontend correctly threads state-sharing between header warehouse-filter-trigger and tab-level invoice-warehouse-filter (verified: selecting Jullang in one updates both labels).",
+    "reset-filters-btn conditional-render logic works as spec — button hidden when defaults are in effect.",
+    "GSTBilling.jsx is now 3414 lines — approaching maintainability limit. Consider splitting InvoicesTab, WarehousesTab, DiscrepanciesTab, PartyLedgerTab into separate files to reduce cognitive load."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_invoice_advanced_filters.py (new — 20 tests covering fy/month/payment_status/memo-search/combined/pagination/export/fake-wh/non-admin)"
+  ],
+  "success_rate": {
+    "backend": "20/20 (100%)",
+    "frontend": "100% — all filter data-testids, dropdowns, chips, state-sharing, reset button, mutual-exclusion (fy vs month vs date-range), and memo_no search verified"
+  },
+  "test_credentials": "admin@k3gas.com / Admin@123 (Master Admin); employee@k3gas.com / Employee@123 (used for 403 lock test)",
+  "seed_data_creation": "None. Tests use existing seeded invoices (memo_no '11111' already present in DB).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "iteration_58 summary-endpoint bug (get_invoice_summary ignoring warehouse_ids) is FIXED — confirmed via test_summary_combined and by the warehouse-filter-item click updating the header KPI to 0/0/0 for Jullang under the tight default date range. All Invoices-tab filter combinations work end-to-end backend+frontend. Feature ready to ship.",
+  "rca of the issue": "N/A — no functional issues found in this iteration."
+}
