@@ -20,7 +20,8 @@ import { toast } from 'sonner';
 import {
   Receipt, Search, Plus, FileDown, FileSpreadsheet, Settings as SettingsIcon,
   Edit2, XCircle, Trash2, Eye, RefreshCw, ChevronLeft, ChevronRight, FileText, AlertCircle,
-  Upload, History, AlertTriangle, CheckCircle2, Ban, Users, Warehouse, ChevronDown
+  Upload, History, AlertTriangle, CheckCircle2, Ban, Users, Warehouse, ChevronDown,
+  User as UserIcon, Phone as PhoneIcon
 } from 'lucide-react';
 import {
   getGstInvoices, getGstSummary, getGstConfig, updateGstConfig,
@@ -34,7 +35,8 @@ import {
   getGstItemHistory, downloadGstItemHistoryExcel,
   listGstDiscrepancies, reviewGstDiscrepancy,
   getPartyLedgerCustomers, getPartyLedger,
-  getGstWarehouseSummary, exportGstWarehouseSummaryExcel, getWarehouses
+  getGstWarehouseSummary, exportGstWarehouseSummaryExcel, getWarehouses,
+  gstCustomerLookup
 } from '../lib/api';
 
 const formatRs = (n) => {
@@ -193,6 +195,11 @@ const GSTBilling = () => {
 
   // Manual invoice form state
   const [invForm, setInvForm] = useState(null);
+  // Customer Master picker (autocomplete in the invoice modal)
+  const [custLookupQuery, setCustLookupQuery] = useState('');
+  const [custLookupResults, setCustLookupResults] = useState([]);
+  const [custLookupOpen, setCustLookupOpen] = useState(false);
+  const [custLookupLoading, setCustLookupLoading] = useState(false);
 
   // Generate-from-sale state
   const [genSaleType, setGenSaleType] = useState('sales_entry');
@@ -537,10 +544,14 @@ const GSTBilling = () => {
       setInvForm({
         invoice_date: todayISO(),
         memo_no: '',
+        customer_id: '',
         customer_name: '',
         customer_phone: '',
         customer_address: '',
         customer_gstin: '',
+        customer_consumer_no: '',
+        customer_connection_type: '',
+        customer_source: 'manual',
         tax_mode: config.default_tax_mode || 'intra_state',
         payment_mode: 'cash',
         bill_type: 'manual',
@@ -552,6 +563,63 @@ const GSTBilling = () => {
       });
     }
     setShowInvoiceDialog(true);
+    // Reset customer picker state
+    setCustLookupQuery('');
+    setCustLookupResults([]);
+    setCustLookupOpen(false);
+  };
+
+  // Debounced Customer Master search
+  useEffect(() => {
+    if (!showInvoiceDialog) return;
+    const q = custLookupQuery.trim();
+    if (q.length < 2) {
+      setCustLookupResults([]);
+      return;
+    }
+    let cancelled = false;
+    setCustLookupLoading(true);
+    const t = setTimeout(async () => {
+      try {
+        const { data } = await gstCustomerLookup({ q, limit: 15 });
+        if (!cancelled) setCustLookupResults(data?.customers || []);
+      } catch (e) {
+        if (!cancelled) setCustLookupResults([]);
+      } finally {
+        if (!cancelled) setCustLookupLoading(false);
+      }
+    }, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [custLookupQuery, showInvoiceDialog]);
+
+  const applyCustomerFromMaster = (c) => {
+    if (!c) return;
+    setInvForm(prev => ({
+      ...prev,
+      customer_id: c.id || '',
+      customer_name: c.customer_name || '',
+      customer_phone: c.phone || '',
+      customer_address: c.address || '',
+      customer_consumer_no: c.consumer_no || '',
+      customer_connection_type: (c.connection_type || '').toLowerCase(),
+      customer_source: 'master',
+    }));
+    setCustLookupOpen(false);
+    setCustLookupQuery('');
+    setCustLookupResults([]);
+    if (!c.phone) {
+      toast.warning('Customer mobile number is not available in the Customer Database.');
+    } else {
+      toast.success(`Loaded ${c.customer_name} from Customer Master`);
+    }
+  };
+
+  const clearCustomerLink = () => {
+    setInvForm(prev => ({
+      ...prev,
+      customer_id: '',
+      customer_source: 'manual',
+    }));
   };
 
   const emptyLineItem = () => ({
@@ -2586,6 +2654,98 @@ const GSTBilling = () => {
               </DialogHeader>
 
               <div className="space-y-4">
+                {/* Customer Master picker — auto-fills customer details from Customer DB */}
+                <div className="rounded-md border border-blue-100 bg-blue-50/40 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="flex items-center gap-2 text-blue-900">
+                      <UserIcon className="w-4 h-4" /> Link to Customer Master
+                    </Label>
+                    {invForm.customer_id && (
+                      <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200" data-testid="inv-customer-linked-badge">
+                        <CheckCircle2 className="w-3 h-3 mr-1" />
+                        Linked{invForm.customer_source === 'master' ? ' · Customer DB' : ''}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <Input
+                      placeholder="Search Customer Master by Name, Consumer No., or Phone (min 2 chars)…"
+                      value={custLookupQuery}
+                      onChange={e => { setCustLookupQuery(e.target.value); setCustLookupOpen(true); }}
+                      onFocus={() => setCustLookupOpen(true)}
+                      className="pl-9"
+                      data-testid="inv-customer-lookup-input"
+                    />
+                    {custLookupOpen && custLookupQuery.trim().length >= 2 && (
+                      <div className="absolute z-50 left-0 right-0 mt-1 bg-white border rounded-md shadow-lg max-h-64 overflow-y-auto" data-testid="inv-customer-lookup-dropdown">
+                        {custLookupLoading && (
+                          <div className="p-3 text-xs text-slate-500">Searching…</div>
+                        )}
+                        {!custLookupLoading && custLookupResults.length === 0 && (
+                          <div className="p-3 text-xs text-slate-500" data-testid="inv-customer-lookup-empty">
+                            No matches found. You can still type customer details manually below.
+                          </div>
+                        )}
+                        {!custLookupLoading && custLookupResults.map(c => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => applyCustomerFromMaster(c)}
+                            className="w-full text-left px-3 py-2 hover:bg-blue-50 border-b last:border-b-0"
+                            data-testid={`inv-customer-lookup-item-${c.id}`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="text-sm font-medium truncate">{c.customer_name}</div>
+                                <div className="text-[11px] text-slate-500 truncate">
+                                  {c.phone ? (
+                                    <span className="text-emerald-700">📞 {c.phone}</span>
+                                  ) : (
+                                    <span className="text-amber-700">📞 not on file</span>
+                                  )}
+                                  {c.consumer_no && <> · CN: <span className="font-mono">{c.consumer_no}</span></>}
+                                  {c.connection_type && <> · {c.connection_type}</>}
+                                  {c.warehouse_name && <> · {c.warehouse_name}</>}
+                                </div>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {invForm.customer_id && (
+                    <div className="flex items-center gap-3 flex-wrap text-xs text-slate-600">
+                      <span>Customer ID: <span className="font-mono">{invForm.customer_id.slice(0, 8)}…</span></span>
+                      {invForm.customer_consumer_no && <span>· Consumer No.: <span className="font-mono">{invForm.customer_consumer_no}</span></span>}
+                      {invForm.customer_connection_type && <span>· Category: <span className="capitalize">{invForm.customer_connection_type}</span></span>}
+                      <button
+                        type="button"
+                        onClick={clearCustomerLink}
+                        className="text-red-600 hover:underline ml-auto"
+                        data-testid="inv-customer-unlink"
+                      >
+                        Unlink
+                      </button>
+                    </div>
+                  )}
+                  {invForm.customer_id && !invForm.customer_phone && (
+                    <div className="flex items-start gap-2 p-2 rounded bg-amber-50 border border-amber-200 text-xs" data-testid="inv-customer-phone-warning">
+                      <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-amber-800 font-medium">Customer mobile number is not available in the Customer Database.</p>
+                        <p className="text-amber-700 mt-0.5">
+                          You can enter the phone manually below for this invoice, or
+                          <a href="/customers" target="_blank" rel="noreferrer" className="text-blue-700 hover:underline ml-1">
+                            update the Customer Master record →
+                          </a>
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* Customer block */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <div>
@@ -2860,7 +3020,22 @@ const GSTBilling = () => {
                     <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
                       <strong>Name:</strong><span className="break-words">{viewingInvoice.customer_name}</span>
                       <strong>Address:</strong><span className="break-words">{viewingInvoice.customer_address || '-'}</span>
-                      <strong>Mobile:</strong><span>{viewingInvoice.customer_phone || '-'}</span>
+                      <strong>Mobile:</strong>
+                      <span data-testid="view-customer-phone" className={viewingInvoice.customer_phone ? '' : 'text-amber-700'}>
+                        {viewingInvoice.customer_phone || 'Not available in Customer DB'}
+                      </span>
+                      {viewingInvoice.customer_consumer_no && (
+                        <>
+                          <strong>Consumer No.:</strong>
+                          <span className="font-mono" data-testid="view-customer-consumer-no">{viewingInvoice.customer_consumer_no}</span>
+                        </>
+                      )}
+                      {viewingInvoice.customer_connection_type && (
+                        <>
+                          <strong>Category:</strong>
+                          <span className="capitalize" data-testid="view-customer-connection-type">{viewingInvoice.customer_connection_type}</span>
+                        </>
+                      )}
                       <strong>GSTIN:</strong><span>{viewingInvoice.customer_gstin || '-'}</span>
                       <strong>Warehouse:</strong><span>{viewingInvoice.warehouse_name || '-'}</span>
                     </div>

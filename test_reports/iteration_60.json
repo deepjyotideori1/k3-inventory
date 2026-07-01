@@ -1,0 +1,36 @@
+{
+  "summary": "End-to-end verification of the new 'Link to Customer Master' picker in the GST Invoice creation modal + backend customer-lookup endpoint + auto-hydration + historical-snapshot behavior. BACKEND: 10/10 new pytest tests pass in /app/backend/tests/test_customer_lookup.py — covers (a) q<2 returns empty, (b) full customer shape (id/customer_name/phone/address/consumer_no/connection_type/warehouse_id/warehouse_name), (c) SFG returns empty phone, (d) lookup by customer_id, (e) unknown customer_id returns null, (f) employee@k3gas.com receives 403, (g) POST /api/gst/invoices with only {customer_id,line_items} auto-hydrates name/phone/address/consumer_no/connection_type + sets customer_source='master', (h) POST without customer_id -> customer_source='manual', (i) historical snapshot: invoice A keeps phone=9990000000 after PUT /api/customers/X {phone:7777700007}; invoice B created afterwards uses the new 7777700007, (j) PUT /api/gst/invoices/{id} (remarks-only edit) after master phone change does NOT clobber the invoice's original phone snapshot. FRONTEND (admin @ /gst-billing -> New Invoice): (1) inv-customer-lookup-input renders at TOP of modal above invoice fields. (2) Debounce works — 1 char produces no dropdown; 3 chars ('BUG') opens inv-customer-lookup-dropdown listing 4 matches, each with data-testid=inv-customer-lookup-item-<id> and showing name + phone (📞 9990000000) + · domestic. (3) Selecting BUG_FIX_VERIFY: inv-customer-name auto-populated ('BUG_FIX_VERIFY Customer'), inv-customer-phone auto-populated ('9990000000'), green 'Linked · Customer DB' badge (inv-customer-linked-badge) appears, chip strip shows 'Customer ID: 199e4fe0… · Consumer No.: 9999911111 · Category: Domestic', inv-customer-phone-warning is HIDDEN. (4) Unlink (inv-customer-unlink) clears the badge and the chip strip but PRESERVES the currently-typed values in inv-customer-name (verified: name still 'BUG_FIX_VERIFY Customer' after unlink). (5) Selecting SFG (empty phone): amber inv-customer-phone-warning banner appears with the link '→ update the Customer Master record' pointing to /customers (href verified), toast 'Customer mobile number is not available in the Customer Database.' fires, inv-customer-phone input is empty, chip strip shows 'Customer ID: 49bc92d8… · Consumer No.: 1111111111 · Category: Domestic'. (6) Invoice View dialog contains data-testid=view-customer-phone (renders 'Not available in Customer DB' in amber for the legacy invoice); view-customer-consumer-no & view-customer-connection-type are conditionally rendered only when their fields are populated — that is the correct spec (legacy invoice K3/2026-27/0274 predates the new fields so both are absent). Existing GSTIN & Warehouse rows remain visible. (7) Party Ledger tab loads with the existing customer grouping (SFG, TEST_IJUM, TEST_CUST_099c24 with phone 9718745223, TEST_CUST_6af0ca) — no regression.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Invoices tab table", "issues": ["Pre-existing (iteration_59 known-issue): React hydration warnings '<span> cannot be a child of <tbody>' and '<tr> cannot be a child of <span>' from the emergent x-source <span style={display:contents}> wrapper around <tr> at GSTBilling.jsx ~L1454-1456. Non-blocking, not caused by this iteration's changes."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_customer_lookup.py",
+    "/app/test_reports/pytest/customer_lookup.xml"
+  ],
+  "action_items": [
+    "No functional action items — feature is fully working end-to-end. Ship it."
+  ],
+  "critical_code_review_comments": [
+    "gst_billing.py customer_lookup (L1061-1100) correctly locks non-admins to their own warehouse_id via query['warehouse_id'] before the $or search — good.",
+    "create_invoice (L1116-1139) hydrates from master with a proper snapshot copy (lower-cased connection_type, uppercased GSTIN kept out-of-scope because it is invoice-only) — clean single source of truth.",
+    "update_invoice editable set (~L1247) includes customer_consumer_no + customer_connection_type but the auto-hydration block is only in create_invoice, so historical snapshots are correctly preserved on edit (verified by test_update_invoice_preserves_snapshot).",
+    "Frontend Customer Picker at GSTBilling.jsx ~L2670-2740: dropdown correctly closes on outside click, badge/warning render conditionally on customer_source==='master' + phone truthiness — reactive UX is clean.",
+    "GSTBilling.jsx is now ~3450 lines — continuing to grow; strongly recommend splitting into per-tab files as previously flagged in iteration_59.",
+    "Minor: inv-customer-lookup-item- keys use customer.id — good stable key; safe for React re-renders."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_customer_lookup.py (new — 10 tests for customer-lookup endpoint, auto-hydration, historical snapshot, edit-preserves-snapshot, non-admin 403)"
+  ],
+  "success_rate": {"backend": "10/10 (100%)", "frontend": "100% — all 6 spec flows verified (picker present, debounce, dropdown+items, auto-populate+badge+chip, empty-phone amber warning + /customers link, unlink preserving typed values)"},
+  "test_credentials": "admin@k3gas.com / Admin@123 (Master Admin); employee@k3gas.com / Employee@123 (used for 403 lock test)",
+  "seed_data_creation": "Tests create + delete their own transient invoices; existing seeded customers BUG_FIX_VERIFY (199e4fe0-…, phone 9990000000) and SFG (49bc92d8-af1e-43e4-9b86-0ae99f01845b, consumer_no 1111111111, no phone) were used and left unchanged. Test invoice #K3/2026-27/0274 pre-existed and was NOT modified.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Customer Master link/hydration/snapshot feature is fully verified backend + frontend. Regression tests live at /app/backend/tests/test_customer_lookup.py (10 tests). The auto-hydration behavior + historical snapshot semantics on POST and immutability on PUT are covered by pytest — future iterations only need to re-run this file. The pre-existing tbody/span hydration warning at GSTBilling.jsx ~L1454 remains (iteration_59 flag) — non-blocking.",
+  "rca of the issue": "N/A — no functional issues found in this iteration."
+}

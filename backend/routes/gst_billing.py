@@ -1058,6 +1058,48 @@ async def list_invoices(
 
 
 # ============ INVOICES - SINGLE (these must come AFTER list/summary/export) ============
+@router.get("/gst/customer-lookup")
+async def customer_lookup(
+    q: Optional[str] = None,
+    customer_id: Optional[str] = None,
+    limit: int = 15,
+    user: dict = Depends(require_admin),
+):
+    """Search Customer Master by name / consumer_no / phone (min 2 chars),
+    OR fetch a single customer by customer_id.
+    Non-admins are hard-locked to their own warehouse."""
+    query: Dict[str, Any] = {}
+    role = (user or {}).get("role", "").lower()
+    is_admin = role in ("admin", "super_admin", "master_admin")
+    if not is_admin:
+        own = user.get("warehouse_id") or ""
+        query["warehouse_id"] = own if own else "__no_warehouse__"
+
+    if customer_id:
+        query["id"] = customer_id
+        c = await db.customers.find_one(query, {"_id": 0})
+        return {"customer": c or None}
+
+    s = (q or "").strip()
+    if len(s) < 2:
+        return {"customers": []}
+    query["$or"] = [
+        {"customer_name": {"$regex": s, "$options": "i"}},
+        {"consumer_no": {"$regex": s, "$options": "i"}},
+        {"phone": {"$regex": s, "$options": "i"}},
+    ]
+    docs = await db.customers.find(query, {"_id": 0}).sort("customer_name", 1).limit(max(1, min(50, limit))).to_list(50)
+
+    wh_ids = list({d.get("warehouse_id") for d in docs if d.get("warehouse_id")})
+    wh_map: Dict[str, str] = {}
+    if wh_ids:
+        for w in await db.warehouses.find({"id": {"$in": wh_ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(100):
+            wh_map[w["id"]] = w.get("name", "")
+    for d in docs:
+        d["warehouse_name"] = wh_map.get(d.get("warehouse_id", ""), "")
+    return {"customers": docs}
+
+
 @router.post("/gst/invoices")
 async def create_invoice(data: dict, user: dict = Depends(require_admin)):
     """Manual invoice creation. Validates against expected amount (from connection plan
@@ -1070,6 +1112,31 @@ async def create_invoice(data: dict, user: dict = Depends(require_admin)):
     if not line_items:
         raise HTTPException(status_code=400, detail="At least one line item is required")
     totals = compute_totals(line_items, tax_mode)
+
+    # ---- Customer Master hydration (single source of truth) ----
+    # When customer_id is supplied, pull authoritative details from the Customer
+    # Master and stamp them onto the invoice as a point-in-time snapshot.
+    # Fields the client sent still win for anything the master doesn't own
+    # (like customer_gstin, which lives on the invoice only).
+    customer_id = (data.get("customer_id") or "").strip()
+    customer_source = "manual"
+    if customer_id:
+        cust = await db.customers.find_one({"id": customer_id}, {"_id": 0})
+        if cust:
+            customer_source = "master"
+            data["customer_name"] = cust.get("customer_name") or data.get("customer_name") or ""
+            data["customer_phone"] = cust.get("phone") or data.get("customer_phone") or ""
+            data["customer_address"] = cust.get("address") or data.get("customer_address") or ""
+            data["customer_consumer_no"] = cust.get("consumer_no") or ""
+            data["customer_connection_type"] = (cust.get("connection_type") or "").lower()
+            # If warehouse wasn't explicitly sent, inherit from the customer record
+            if not data.get("warehouse_id"):
+                data["warehouse_id"] = cust.get("warehouse_id") or ""
+                if cust.get("warehouse_id"):
+                    wh = await db.warehouses.find_one({"id": cust["warehouse_id"]}, {"_id": 0, "name": 1})
+                    if wh:
+                        data["warehouse_name"] = wh.get("name", "")
+    data["customer_source"] = customer_source
 
     # ---- Discrepancy detection ----
     expected = await compute_expected_amount({**data, "tax_mode": tax_mode})
@@ -1105,6 +1172,10 @@ async def create_invoice(data: dict, user: dict = Depends(require_admin)):
         "customer_phone": (data.get("customer_phone") or "").strip(),
         "customer_address": data.get("customer_address") or "",
         "customer_gstin": (data.get("customer_gstin") or "").strip().upper(),
+        # Historical snapshots of Customer Master fields at time of invoicing
+        "customer_consumer_no": (data.get("customer_consumer_no") or "").strip(),
+        "customer_connection_type": (data.get("customer_connection_type") or "").strip().lower(),
+        "customer_source": data.get("customer_source") or "manual",  # 'master' | 'manual'
         "place_of_supply": data.get("place_of_supply") or cfg.get("place_of_supply", ""),
         "tax_mode": tax_mode,
         "bill_type": data.get("bill_type") or "manual",
@@ -1158,7 +1229,8 @@ async def update_invoice(invoice_id: str, data: dict, user: dict = Depends(requi
         raise HTTPException(status_code=400, detail="Cannot edit a cancelled invoice")
     editable = {
         "invoice_date", "customer_name", "customer_phone", "customer_address",
-        "customer_gstin", "place_of_supply", "tax_mode", "payment_mode",
+        "customer_gstin", "customer_consumer_no", "customer_connection_type",
+        "place_of_supply", "tax_mode", "payment_mode",
         "remarks", "line_items", "bill_type", "connection_plan_id",
         "memo_no", "cash_received", "online_received",
     }

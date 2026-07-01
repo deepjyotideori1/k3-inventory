@@ -742,6 +742,9 @@ export const exportGstWarehouseSummaryExcel = async (params = {}) => {
   window.URL.revokeObjectURL(url);
 };
 
+// GST Customer Master lookup (auto-populate invoice form)
+export const gstCustomerLookup = (params) => api.get('/gst/customer-lookup', { params });
+
 // GST Reports
 export const listGstReports = () => api.get('/gst/reports/list');
 export const getGstReport = (reportType, params) => api.get(`/gst/reports/${reportType}`, { params });
