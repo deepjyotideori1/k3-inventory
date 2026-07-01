@@ -1527,6 +1527,265 @@ async def warehouse_summary(
     return {"rows": rows, "totals": totals}
 
 
+@router.get("/gst/warehouse-summary/excel")
+async def warehouse_summary_excel(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    warehouse_ids: Optional[str] = None,
+    user: dict = Depends(require_admin),
+):
+    """Branded workbook: Sheet 1 = grand totals + per-warehouse KPI table.
+    Sheets 2..N = one detail sheet per warehouse listing its invoices."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    from export_helpers import get_company_info_for_export, embed_logo_openpyxl, cleanup_logo_tempfile
+
+    # 1) Aggregate summary (reuse the same query as warehouse_summary)
+    match: Dict[str, Any] = {"status": {"$ne": "cancelled"}}
+    apply_warehouse_filter(match, warehouse_ids, user)
+    if start_date:
+        match.setdefault("invoice_date", {})["$gte"] = start_date
+    if end_date:
+        match.setdefault("invoice_date", {})["$lte"] = end_date
+
+    all_wh = await db.warehouses.find({}, {"_id": 0}).sort("name", 1).to_list(500)
+    wh_map = {w["id"]: w for w in all_wh}
+
+    role = (user or {}).get("role", "").lower()
+    is_admin = role in ("admin", "super_admin", "master_admin")
+    if is_admin:
+        base_wh_ids = list(wh_map.keys())
+        if warehouse_ids:
+            allowed = {w.strip() for w in warehouse_ids.split(",") if w.strip()}
+            base_wh_ids = [wid for wid in base_wh_ids if wid in allowed]
+    else:
+        own = user.get("warehouse_id") or ""
+        base_wh_ids = [own] if own else []
+
+    invoices = await db.gst_invoices.find(match, {"_id": 0}).sort([("warehouse_name", 1), ("invoice_date", -1)]).to_list(200000)
+
+    # Group invoices by warehouse
+    by_wh_invoices: Dict[str, List[dict]] = {}
+    for inv in invoices:
+        wid = inv.get("warehouse_id") or ""
+        by_wh_invoices.setdefault(wid, []).append(inv)
+
+    def _r(v):
+        try:
+            return round(float(v or 0), 2)
+        except (TypeError, ValueError):
+            return 0.0
+
+    # Build per-warehouse KPI rows
+    kpi_rows: List[dict] = []
+    for wid in base_wh_ids:
+        wh = wh_map.get(wid) or {}
+        wh_invs = by_wh_invoices.get(wid, [])
+        kpi_rows.append({
+            "warehouse_id": wid,
+            "warehouse_name": wh.get("name") or "(unknown)",
+            "warehouse_code": wh.get("code") or "",
+            "is_plant": bool(wh.get("is_plant", False)),
+            "total_invoices": len(wh_invs),
+            "total_sales": _r(sum(i.get("grand_total") or 0 for i in wh_invs)),
+            "taxable_value": _r(sum(i.get("sub_total") or 0 for i in wh_invs)),
+            "gst_collected": _r(sum(i.get("total_gst") or 0 for i in wh_invs)),
+            "cash_collections": _r(sum(i.get("cash_received") or 0 for i in wh_invs)),
+            "online_collections": _r(sum(i.get("online_received") or 0 for i in wh_invs)),
+            "pending_amount": _r(sum(i.get("pending_amount") or 0 for i in wh_invs)),
+            "discrepancy_count": sum(1 for i in wh_invs if i.get("is_discrepancy")),
+        })
+
+    # Orphaned invoices (warehouse_id not in wh_map) - included when admin
+    orphaned_ids = [wid for wid in by_wh_invoices.keys() if wid and wid not in wh_map]
+    if is_admin:
+        if warehouse_ids:
+            allowed_set = {w.strip() for w in warehouse_ids.split(",") if w.strip()}
+            orphaned_ids = [wid for wid in orphaned_ids if wid in allowed_set]
+        for wid in orphaned_ids:
+            wh_invs = by_wh_invoices.get(wid, [])
+            kpi_rows.append({
+                "warehouse_id": wid,
+                "warehouse_name": (wh_invs[0].get("warehouse_name") if wh_invs else "") or "(unassigned)",
+                "warehouse_code": "",
+                "is_plant": False,
+                "total_invoices": len(wh_invs),
+                "total_sales": _r(sum(i.get("grand_total") or 0 for i in wh_invs)),
+                "taxable_value": _r(sum(i.get("sub_total") or 0 for i in wh_invs)),
+                "gst_collected": _r(sum(i.get("total_gst") or 0 for i in wh_invs)),
+                "cash_collections": _r(sum(i.get("cash_received") or 0 for i in wh_invs)),
+                "online_collections": _r(sum(i.get("online_received") or 0 for i in wh_invs)),
+                "pending_amount": _r(sum(i.get("pending_amount") or 0 for i in wh_invs)),
+                "discrepancy_count": sum(1 for i in wh_invs if i.get("is_discrepancy")),
+            })
+
+    kpi_rows.sort(key=lambda r: r["total_sales"], reverse=True)
+
+    # 2) Build the workbook
+    wb = Workbook()
+    thin = Side(style="thin", color="BBBBBB")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    period = f"{start_date or 'All'} to {end_date or 'All'}"
+    company = await get_company_info_for_export()
+
+    # Sheet 1: Summary
+    ws = wb.active
+    ws.title = "Summary"
+    headers1 = [
+        ("Warehouse", "warehouse_name"),
+        ("Code", "warehouse_code"),
+        ("Invoices", "total_invoices"),
+        ("Total Sales", "total_sales"),
+        ("Taxable Value", "taxable_value"),
+        ("GST Collected", "gst_collected"),
+        ("Cash Received", "cash_collections"),
+        ("Online Received", "online_collections"),
+        ("Pending", "pending_amount"),
+        ("Discrepancies", "discrepancy_count"),
+    ]
+    last_col1 = get_column_letter(len(headers1))
+    logo_path = embed_logo_openpyxl(ws, company,
+                                     title="GST Warehouse-wise Summary",
+                                     period=period,
+                                     last_col_letter=last_col1)
+
+    header_row = 5
+    for c_idx, (lbl, _key) in enumerate(headers1, 1):
+        cell = ws.cell(row=header_row, column=c_idx, value=lbl)
+        cell.font = Font(bold=True, color="FFFFFF", size=10)
+        cell.fill = PatternFill("solid", fgColor="1E5A8C")
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = border
+
+    r = header_row + 1
+    for row in kpi_rows:
+        for c_idx, (_lbl, key) in enumerate(headers1, 1):
+            cell = ws.cell(row=r, column=c_idx, value=row.get(key, ""))
+            cell.border = border
+            cell.font = Font(size=9)
+            if key in ("total_sales", "taxable_value", "gst_collected", "cash_collections", "online_collections", "pending_amount"):
+                cell.number_format = "#,##0.00"
+                cell.alignment = Alignment(horizontal="right")
+            elif key in ("total_invoices", "discrepancy_count"):
+                cell.alignment = Alignment(horizontal="center")
+            else:
+                cell.alignment = Alignment(horizontal="left")
+        r += 1
+
+    # Totals row
+    if kpi_rows:
+        for c_idx, (_lbl, key) in enumerate(headers1, 1):
+            cell = ws.cell(row=r, column=c_idx)
+            cell.fill = PatternFill("solid", fgColor="E0EDDF")
+            cell.font = Font(bold=True, size=10)
+            cell.border = border
+            if c_idx == 1:
+                cell.value = "GRAND TOTAL"
+                cell.alignment = Alignment(horizontal="right")
+            elif key in ("total_sales", "taxable_value", "gst_collected", "cash_collections", "online_collections", "pending_amount"):
+                cell.value = round(sum(row[key] for row in kpi_rows), 2)
+                cell.number_format = "#,##0.00"
+                cell.alignment = Alignment(horizontal="right")
+            elif key in ("total_invoices", "discrepancy_count"):
+                cell.value = sum(row[key] for row in kpi_rows)
+                cell.alignment = Alignment(horizontal="center")
+
+    ws.freeze_panes = f"A{header_row + 1}"
+    ws.auto_filter.ref = f"A{header_row}:{last_col1}{r}"
+    widths = [26, 10, 10, 16, 16, 15, 15, 15, 14, 13]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    # Sheets 2..N: One per warehouse (only for warehouses that have invoices)
+    detail_headers = [
+        ("Invoice No.", "invoice_number", "left"),
+        ("Memo No.", "memo_no", "left"),
+        ("Date", "invoice_date", "center"),
+        ("Customer", "customer_name", "left"),
+        ("Mobile", "customer_phone", "left"),
+        ("Type", "bill_type", "center"),
+        ("Sub Total", "sub_total", "amount"),
+        ("Total GST", "total_gst", "amount"),
+        ("Grand Total", "grand_total", "amount"),
+        ("Cash", "cash_received", "amount"),
+        ("Online", "online_received", "amount"),
+        ("Pending", "pending_amount", "amount"),
+        ("Payment Status", "payment_status", "center"),
+        ("Status", "status", "center"),
+    ]
+    last_col2 = get_column_letter(len(detail_headers))
+
+    for kpi in kpi_rows:
+        wh_invs = by_wh_invoices.get(kpi["warehouse_id"], [])
+        if not wh_invs:
+            continue
+        sheet_name = (kpi["warehouse_name"] or "Warehouse")[:31].replace("/", "-").replace("\\", "-")
+        # Avoid duplicate names
+        base = sheet_name
+        suffix_n = 2
+        while sheet_name in wb.sheetnames:
+            sheet_name = f"{base[:28]}_{suffix_n}"
+            suffix_n += 1
+        ws2 = wb.create_sheet(sheet_name)
+        embed_logo_openpyxl(ws2, company,
+                             title=f"{kpi['warehouse_name']} - Invoices",
+                             period=period,
+                             last_col_letter=last_col2)
+        for c_idx, (lbl, _key, _align) in enumerate(detail_headers, 1):
+            cell = ws2.cell(row=header_row, column=c_idx, value=lbl)
+            cell.font = Font(bold=True, color="FFFFFF", size=10)
+            cell.fill = PatternFill("solid", fgColor="1E5A8C")
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            cell.border = border
+
+        rr = header_row + 1
+        for inv in wh_invs:
+            for c_idx, (_lbl, key, align) in enumerate(detail_headers, 1):
+                v = inv.get(key, "")
+                cell = ws2.cell(row=rr, column=c_idx, value=v)
+                cell.border = border
+                cell.font = Font(size=9)
+                if align == "amount" and isinstance(v, (int, float)):
+                    cell.number_format = "#,##0.00"
+                    cell.alignment = Alignment(horizontal="right")
+                elif align == "center":
+                    cell.alignment = Alignment(horizontal="center")
+                else:
+                    cell.alignment = Alignment(horizontal="left", wrap_text=True)
+            rr += 1
+        # Totals row per sheet
+        for c_idx, (_lbl, key, align) in enumerate(detail_headers, 1):
+            cell = ws2.cell(row=rr, column=c_idx)
+            cell.fill = PatternFill("solid", fgColor="E0EDDF")
+            cell.font = Font(bold=True, size=10)
+            cell.border = border
+            if c_idx == 1:
+                cell.value = "TOTAL"
+                cell.alignment = Alignment(horizontal="right")
+            elif align == "amount":
+                total = round(sum(float(i.get(key) or 0) for i in wh_invs), 2)
+                cell.value = total
+                cell.number_format = "#,##0.00"
+                cell.alignment = Alignment(horizontal="right")
+
+        ws2.freeze_panes = f"A{header_row + 1}"
+        ws2.auto_filter.ref = f"A{header_row}:{last_col2}{rr}"
+        col_widths = [18, 14, 12, 24, 14, 14, 12, 12, 14, 12, 12, 12, 14, 12]
+        for i, w in enumerate(col_widths, 1):
+            ws2.column_dimensions[get_column_letter(i)].width = w
+        ws2.page_setup.orientation = ws2.ORIENTATION_LANDSCAPE
+
+    buf = BytesIO()
+    wb.save(buf)
+    cleanup_logo_tempfile(logo_path)
+    buf.seek(0)
+    fname = f"Warehouse_Summary_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M')}.xlsx"
+    return StreamingResponse(iter([buf.read()]),
+                             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+
 @router.post("/gst/invoices/backfill-payments")
 async def backfill_payments(user: dict = Depends(require_admin)):
     """One-time admin maintenance: backfill memo_no + cash_received + online_received +

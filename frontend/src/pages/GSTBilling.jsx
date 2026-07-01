@@ -34,7 +34,7 @@ import {
   getGstItemHistory, downloadGstItemHistoryExcel,
   listGstDiscrepancies, reviewGstDiscrepancy,
   getPartyLedgerCustomers, getPartyLedger,
-  getGstWarehouseSummary, getWarehouses
+  getGstWarehouseSummary, exportGstWarehouseSummaryExcel, getWarehouses
 } from '../lib/api';
 
 const formatRs = (n) => {
@@ -265,6 +265,17 @@ const GSTBilling = () => {
       setWarehouseSummaryLoading(false);
     }
   }, [startDate, endDate, warehouseIdsCsv]);
+
+  const handleWarehouseSummaryExcel = async () => {
+    try {
+      const params = { start_date: startDate, end_date: endDate };
+      if (warehouseIdsCsv) params.warehouse_ids = warehouseIdsCsv;
+      await exportGstWarehouseSummaryExcel(params);
+      toast.success('Warehouse summary Excel downloaded');
+    } catch (e) {
+      toast.error('Excel export failed');
+    }
+  };
 
   const runReport = useCallback(async () => {
     if (!reportType) return;
@@ -1306,6 +1317,9 @@ const GSTBilling = () => {
                   <Button size="sm" variant="outline" onClick={loadWarehouseSummary} disabled={warehouseSummaryLoading} data-testid="wh-refresh-btn">
                     <RefreshCw className={`w-4 h-4 mr-1 ${warehouseSummaryLoading ? 'animate-spin' : ''}`} />
                     Refresh
+                  </Button>
+                  <Button size="sm" onClick={handleWarehouseSummaryExcel} className="bg-emerald-700 hover:bg-emerald-800" data-testid="wh-excel-btn">
+                    <FileSpreadsheet className="w-4 h-4 mr-1" /> Download Excel
                   </Button>
                 </div>
               </CardHeader>

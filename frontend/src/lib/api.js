@@ -730,6 +730,17 @@ export const backfillGstPayments = () => api.post('/gst/invoices/backfill-paymen
 
 // GST Warehouse summary (per-warehouse 8-metric grid)
 export const getGstWarehouseSummary = (params = {}) => api.get('/gst/warehouse-summary', { params });
+export const exportGstWarehouseSummaryExcel = async (params = {}) => {
+  const response = await api.get('/gst/warehouse-summary/excel', { params, responseType: 'blob' });
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', `Warehouse_Summary_${new Date().toISOString().split('T')[0]}.xlsx`);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+};
 
 // GST Reports
 export const listGstReports = () => api.get('/gst/reports/list');
