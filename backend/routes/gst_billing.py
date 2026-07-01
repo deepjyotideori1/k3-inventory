@@ -345,6 +345,31 @@ def compute_totals(line_items: List[dict], tax_mode: str) -> dict:
 DISCREPANCY_TOLERANCE = 1.0  # ±₹1 rounding allowance
 
 
+# ============ WAREHOUSE FILTER (role-based) ============
+def apply_warehouse_filter(query: dict, warehouse_ids: Optional[str], user: dict) -> dict:
+    """Mutates and returns `query` with warehouse constraints applied.
+
+    - Admin users: filter by comma-separated warehouse_ids if given; otherwise no filter (see all).
+    - Non-admin users: HARD-LOCKED to their own `user.warehouse_id`.
+    """
+    role = (user or {}).get("role", "").lower()
+    is_admin = role in ("admin", "super_admin", "master_admin")
+    if not is_admin:
+        own = (user or {}).get("warehouse_id") or ""
+        query["warehouse_id"] = own or "__no_warehouse__"
+        return query
+    if warehouse_ids:
+        ids = [w.strip() for w in warehouse_ids.split(",") if w.strip()]
+        if ids:
+            query["warehouse_id"] = {"$in": ids}
+    return query
+
+
+def _dangling_compute_payment_fields_placeholder():
+    """Deprecated no-op — kept only to preserve line-number stability during refactor."""
+    return None
+
+
 async def compute_expected_amount(payload: dict) -> Optional[float]:
     """Returns the expected grand_total for an invoice payload based on:
        1. The linked Connection Plan (if connection_plan_id is set and all plan items have rates)
@@ -709,6 +734,7 @@ async def export_invoices_excel(
     status: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    warehouse_ids: Optional[str] = None,
     user: dict = Depends(require_admin),
 ):
     """Item-wise Invoice Register Excel export with all spec columns,
@@ -718,6 +744,7 @@ async def export_invoices_excel(
     from openpyxl.utils import get_column_letter
 
     q: Dict[str, Any] = {}
+    apply_warehouse_filter(q, warehouse_ids, user)
     if status:
         q["status"] = status
     if start_date or end_date:
@@ -937,10 +964,12 @@ async def list_invoices(
     year: Optional[int] = None,
     payment_mode: Optional[str] = None,
     item_type: Optional[str] = None,
+    warehouse_ids: Optional[str] = None,
     user: dict = Depends(require_admin),
 ):
     await ensure_seed()
     q: Dict[str, Any] = {}
+    apply_warehouse_filter(q, warehouse_ids, user)
     if status:
         q["status"] = status
     if payment_mode:
@@ -1134,10 +1163,13 @@ async def update_invoice(invoice_id: str, data: dict, user: dict = Depends(requi
 # ============ DISCREPANCY REVIEW ENDPOINTS ============
 @router.get("/gst/discrepancies")
 async def list_discrepancies(status: Optional[str] = None, start_date: Optional[str] = None,
-                              end_date: Optional[str] = None, user: dict = Depends(require_admin)):
+                              end_date: Optional[str] = None,
+                              warehouse_ids: Optional[str] = None,
+                              user: dict = Depends(require_admin)):
     """List all invoices flagged as discrepancy. Filter by status (pending/approved/rejected/corrected)
     and optional invoice_date range."""
     q: Dict[str, Any] = {"is_discrepancy": True}
+    apply_warehouse_filter(q, warehouse_ids, user)
     if status and status != "all":
         q["discrepancy_status"] = status
     if start_date or end_date:
@@ -1241,6 +1273,7 @@ async def party_ledger(
     period: Optional[str] = None,        # all | today | this_month | this_year | custom
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    warehouse_ids: Optional[str] = None,
     user: dict = Depends(require_admin),
 ):
     """Per-customer ledger of all GST invoices with payment breakdown + totals.
@@ -1256,6 +1289,7 @@ async def party_ledger(
         raise HTTPException(status_code=400, detail="One of customer_id / customer_phone / customer_name is required")
 
     q: Dict[str, Any] = {"status": {"$ne": "cancelled"}}
+    apply_warehouse_filter(q, warehouse_ids, user)
     if customer_id:
         q["customer_id"] = customer_id
     elif customer_phone:
@@ -1353,11 +1387,13 @@ async def party_ledger(
 
 
 @router.get("/gst/party-ledger/customers")
-async def party_ledger_customers(user: dict = Depends(require_admin)):
+async def party_ledger_customers(warehouse_ids: Optional[str] = None, user: dict = Depends(require_admin)):
     """Distinct customers that have at least one non-cancelled invoice. Used to
-    populate the customer picker in the Party Ledger tab."""
+    populate the customer picker in the Party Ledger tab. Respects warehouse filter."""
+    match: Dict[str, Any] = {"status": {"$ne": "cancelled"}}
+    apply_warehouse_filter(match, warehouse_ids, user)
     pipeline = [
-        {"$match": {"status": {"$ne": "cancelled"}}},
+        {"$match": match},
         {"$group": {
             "_id": {"name": "$customer_name", "phone": "$customer_phone"},
             "customer_id": {"$first": "$customer_id"},
@@ -1378,6 +1414,115 @@ async def party_ledger_customers(user: dict = Depends(require_admin)):
             "invoice_count": r.get("invoice_count", 0),
         })
     return out
+
+
+# ============ WAREHOUSE-WISE SUMMARY ============
+@router.get("/gst/warehouse-summary")
+async def warehouse_summary(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    warehouse_ids: Optional[str] = None,
+    user: dict = Depends(require_admin),
+):
+    """Per-warehouse aggregated 8-metric grid:
+    total_invoices, total_sales (grand_total sum), taxable_value, gst_collected,
+    cash_collections, online_collections, pending_amount, discrepancy_count.
+    Returns rows sorted by total_sales DESC + a grand-total row."""
+    match: Dict[str, Any] = {"status": {"$ne": "cancelled"}}
+    apply_warehouse_filter(match, warehouse_ids, user)
+    if start_date:
+        match.setdefault("invoice_date", {})["$gte"] = start_date
+    if end_date:
+        match.setdefault("invoice_date", {})["$lte"] = end_date
+
+    # Also load all active warehouses so an admin can see zero-row warehouses
+    all_wh = await db.warehouses.find({}, {"_id": 0}).sort("name", 1).to_list(500)
+    wh_map = {w["id"]: w for w in all_wh}
+
+    pipeline = [
+        {"$match": match},
+        {"$group": {
+            "_id": "$warehouse_id",
+            "warehouse_name": {"$first": "$warehouse_name"},
+            "total_invoices": {"$sum": 1},
+            "total_sales": {"$sum": "$grand_total"},
+            "taxable_value": {"$sum": "$sub_total"},
+            "gst_collected": {"$sum": "$total_gst"},
+            "cash_collections": {"$sum": "$cash_received"},
+            "online_collections": {"$sum": "$online_received"},
+            "pending_amount": {"$sum": "$pending_amount"},
+            "discrepancy_count": {"$sum": {"$cond": ["$is_discrepancy", 1, 0]}},
+        }},
+    ]
+    rows_agg = await db.gst_invoices.aggregate(pipeline).to_list(500)
+    by_id = {r["_id"] or "": r for r in rows_agg}
+
+    # Admin sees ALL warehouses (including zero-row); non-admin only their own
+    role = (user or {}).get("role", "").lower()
+    is_admin = role in ("admin", "super_admin", "master_admin")
+    if is_admin:
+        base_wh_ids = list(wh_map.keys())
+        if warehouse_ids:
+            allowed = {w.strip() for w in warehouse_ids.split(",") if w.strip()}
+            base_wh_ids = [wid for wid in base_wh_ids if wid in allowed]
+    else:
+        own = user.get("warehouse_id") or ""
+        base_wh_ids = [own] if own else []
+
+    def _round(v):
+        try:
+            return round(float(v or 0), 2)
+        except (TypeError, ValueError):
+            return 0.0
+
+    rows: List[dict] = []
+    for wid in base_wh_ids:
+        wh = wh_map.get(wid) or {}
+        agg = by_id.get(wid, {})
+        rows.append({
+            "warehouse_id": wid,
+            "warehouse_name": wh.get("name") or agg.get("warehouse_name") or "(unknown)",
+            "warehouse_code": wh.get("code") or "",
+            "is_plant": bool(wh.get("is_plant", False)),
+            "total_invoices": int(agg.get("total_invoices", 0)),
+            "total_sales": _round(agg.get("total_sales", 0)),
+            "taxable_value": _round(agg.get("taxable_value", 0)),
+            "gst_collected": _round(agg.get("gst_collected", 0)),
+            "cash_collections": _round(agg.get("cash_collections", 0)),
+            "online_collections": _round(agg.get("online_collections", 0)),
+            "pending_amount": _round(agg.get("pending_amount", 0)),
+            "discrepancy_count": int(agg.get("discrepancy_count", 0)),
+        })
+    # Include any invoices with warehouse_id NOT in wh_map (orphaned/legacy) — group as one bucket
+    orphaned = {wid: agg for wid, agg in by_id.items() if wid and wid not in wh_map and (not is_admin or (not warehouse_ids or wid in {w.strip() for w in (warehouse_ids or '').split(',')}))}
+    for wid, agg in orphaned.items():
+        rows.append({
+            "warehouse_id": wid,
+            "warehouse_name": agg.get("warehouse_name") or "(unassigned)",
+            "warehouse_code": "",
+            "is_plant": False,
+            "total_invoices": int(agg.get("total_invoices", 0)),
+            "total_sales": _round(agg.get("total_sales", 0)),
+            "taxable_value": _round(agg.get("taxable_value", 0)),
+            "gst_collected": _round(agg.get("gst_collected", 0)),
+            "cash_collections": _round(agg.get("cash_collections", 0)),
+            "online_collections": _round(agg.get("online_collections", 0)),
+            "pending_amount": _round(agg.get("pending_amount", 0)),
+            "discrepancy_count": int(agg.get("discrepancy_count", 0)),
+        })
+
+    rows.sort(key=lambda r: r["total_sales"], reverse=True)
+    totals = {
+        "total_invoices": sum(r["total_invoices"] for r in rows),
+        "total_sales": _round(sum(r["total_sales"] for r in rows)),
+        "taxable_value": _round(sum(r["taxable_value"] for r in rows)),
+        "gst_collected": _round(sum(r["gst_collected"] for r in rows)),
+        "cash_collections": _round(sum(r["cash_collections"] for r in rows)),
+        "online_collections": _round(sum(r["online_collections"] for r in rows)),
+        "pending_amount": _round(sum(r["pending_amount"] for r in rows)),
+        "discrepancy_count": sum(r["discrepancy_count"] for r in rows),
+    }
+    return {"rows": rows, "totals": totals}
 
 
 @router.post("/gst/invoices/backfill-payments")

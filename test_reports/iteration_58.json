@@ -1,0 +1,50 @@
+{
+  "summary": "Verified Warehouse-wise Invoice Filter feature end-to-end. Backend: 32/33 pytest tests pass in test_warehouse_filter.py; 1 real bug found — /api/gst/invoices/summary silently ignores warehouse_ids (no param declared, no apply_warehouse_filter call). All 11 report builders (daily_sales/monthly_sales/gst_report/hsn_summary/item_wise/customer_wise/warehouse_wise/cancelled/payment_wise/tax_summary/discrepancy_invoices) correctly honor warehouse_ids (both jullang-only and fake-id returning [] verified via parametrised tests). Excel/PDF exports at /api/gst/reports/{type}/excel and /pdf also honor the filter. Frontend (admin login → /gst-billing): warehouse-filter-trigger present in header with default 'All Warehouses' label; 7 tabs present in correct order (Invoices, Warehouses, Discrepancies, Party Ledger, Reports, Connection Plans, Item Master); Warehouses tab renders wh-grand-totals strip + wh-cards-grid with 4 cards each showing all 8 metrics; discrepancy badge visible on Jullang only (1 disc.); wh-start-date defaults to 2026-07-01, wh-refresh-btn reloads correctly with expanded date range (Jullang → 15 invoices, Rs.20,92,938.81); popover checkboxes use testid warehouse-filter-item-<id> (NOT -option-<id> as stated in review request); label transitions verified: 'All Warehouses' → 'Jullang' (1 select) → '2 warehouses selected' (2 select) → 'All Warehouses' (clear); wh-view-invoices-<id> click auto-switches to Invoices tab AND applies the warehouse filter (verified: 15 Jullang rows displayed after click); Discrepancies tab correctly scoped when filter active (only 1 Jullang discrepancy shown); export-excel-btn present. Backend header 'Total Invoices' still shows 34 when Jullang filter is applied — this is the summary-endpoint bug surfacing in the UI (not a frontend bug).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "GET /api/gst/invoices/summary",
+        "issue": "Does not accept `warehouse_ids` query param nor call apply_warehouse_filter (see backend/routes/gst_billing.py L689-728). Consequently the header KPI strip on /gst-billing (Total Invoices, Active, Cancelled, Total GST Collected) is NOT scoped to the selected warehouse even after the user picks one. The review request explicitly lists this endpoint among those that must accept warehouse_ids. Fix: add `warehouse_ids: Optional[str] = None` parameter and call `apply_warehouse_filter(q, warehouse_ids, user)` before the aggregate pipeline."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Header KPI strip after selecting warehouse",
+        "issue": "Total Invoices/Active/Cancelled/Total GST Collected remain unchanged when a warehouse is selected in the header filter. Root cause = backend /api/gst/invoices/summary ignores warehouse_ids (see backend issue above). Frontend appears to be sending the param correctly (invoice list + warehouse-summary DO filter), but summary ignores it.",
+        "affected_selectors": ["header total-invoices card", "header total-gst-collected card"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_warehouse_filter.py",
+    "/app/test_reports/pytest/warehouse_filter.xml"
+  ],
+  "action_items": [
+    "Add `warehouse_ids: Optional[str] = None` to get_invoice_summary() in /app/backend/routes/gst_billing.py L689 and call `apply_warehouse_filter(q, warehouse_ids, user)` before the aggregation pipeline.",
+    "(Docs/consistency) Review request refers to `data-testid=warehouse-filter-option-<id>` but the implementation uses `warehouse-filter-item-<id>`. Either accept the current naming or rename in the JSX for consistency with the spec. Same applies to tab testids: actual code uses `tab-ledger` / `tab-plans` / `tab-items` (review request said `tab-party-ledger` / `tab-connection-plans` / `tab-item-master`)."
+  ],
+  "critical_code_review_comments": [
+    "apply_warehouse_filter() correctly hard-locks non-admin users to their own warehouse_id (L357-360). Good defense.",
+    "gst_reports.py threads warehouse_ids through _fetch_invoices → apply_warehouse_filter consistently across all 11 builders + export endpoints. Well-refactored.",
+    "gst_billing.py's warehouse-summary endpoint (L1420) correctly emits placeholder rows for warehouses with no invoices when admin has no explicit filter — good UX.",
+    "BUG: get_invoice_summary (L689) is the ONLY endpoint listed in the review request that was NOT updated to accept warehouse_ids. Since the invoice list, discrepancies, warehouse-summary, party-ledger, and all 11 reports were updated, this is an obvious oversight. UI-visible impact: header KPIs don't reflect the selected warehouse filter."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_warehouse_filter.py (new — 33 tests covering warehouse-summary, invoice-list, invoices/summary, discrepancies, party-ledger, 11 report builders, excel/pdf exports, non-admin lock)"
+  ],
+  "success_rate": {
+    "backend": "32/33 (97%) — 1 failure exposes real bug in /api/gst/invoices/summary ignoring warehouse_ids",
+    "frontend": "100% — all data-testids, tab order, popover behaviour, label transitions, wh-view-invoices auto-nav, discrepancy scoping, export button all verified"
+  },
+  "test_credentials": "admin@k3gas.com / Admin@123 (Master Admin)",
+  "seed_data_creation": "None. Read-only tests against existing DB data (Jullang has 15 historical invoices).",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "One backend fix required in /app/backend/routes/gst_billing.py L689-728 (get_invoice_summary): add `warehouse_ids: Optional[str] = None` parameter and call `apply_warehouse_filter(q, warehouse_ids, user)` before the aggregate pipeline. After fix, re-run: pytest backend/tests/test_warehouse_filter.py::TestInvoiceListWithWarehouseFilter::test_summary_filtered_by_fake -v. Also note that the actual data-testids in the code differ from those quoted in the review-request spec (item vs option, tab-ledger/plans/items vs tab-party-ledger/connection-plans/item-master) — test scripts should use the actual code names.",
+  "rca of the issue": "ROOT CAUSE: /api/gst/invoices/summary was missed during the iteration that threaded `warehouse_ids` through the GST module. All sibling endpoints (invoices list, warehouse-summary, discrepancies, party-ledger, and all 11 reports) were updated. The summary endpoint's function signature at gst_billing.py L689 still only accepts start_date/end_date/user. REPRO: curl 'BASE/api/gst/invoices/summary?warehouse_ids=00000000-0000-0000-0000-000000000000' returns count=34 (all invoices) instead of 0. UI SYMPTOM: header KPI cards (Total Invoices, Active, Cancelled, Total GST Collected) on /gst-billing remain unchanged when the user picks a warehouse. MITIGATION: add `warehouse_ids: Optional[str] = None` param + `apply_warehouse_filter(q, warehouse_ids, user)` call before the aggregation pipeline. No frontend change needed — GSTBilling.jsx already threads warehouseIdsCsv into loadSummary()."
+}

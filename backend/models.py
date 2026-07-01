@@ -52,6 +52,7 @@ class PasswordChangeRequest(BaseModel):
 class WarehouseBase(BaseModel):
     name: str
     location: str
+    code: str = ""   # short identifier used as prefix in invoices/reports (e.g. HAM, K3M)
     is_plant: bool = False
     is_active: bool = True
 
@@ -62,6 +63,7 @@ class WarehouseResponse(BaseModel):
     id: str
     name: str
     location: str
+    code: str = ""
     is_plant: bool
     is_active: bool
     created_at: str

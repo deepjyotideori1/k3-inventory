@@ -724,9 +724,12 @@ export const correctGstDiscrepancy = (invoiceId, line_items, note = '') =>
   api.post(`/gst/discrepancies/${invoiceId}/correct`, { line_items, note });
 
 // GST Party Ledger
-export const getPartyLedgerCustomers = () => api.get('/gst/party-ledger/customers');
+export const getPartyLedgerCustomers = (params = {}) => api.get('/gst/party-ledger/customers', { params });
 export const getPartyLedger = (params) => api.get('/gst/party-ledger', { params });
 export const backfillGstPayments = () => api.post('/gst/invoices/backfill-payments');
+
+// GST Warehouse summary (per-warehouse 8-metric grid)
+export const getGstWarehouseSummary = (params = {}) => api.get('/gst/warehouse-summary', { params });
 
 // GST Reports
 export const listGstReports = () => api.get('/gst/reports/list');

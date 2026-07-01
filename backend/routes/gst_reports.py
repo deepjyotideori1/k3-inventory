@@ -28,6 +28,7 @@ import logging
 
 from database import db
 from deps import require_admin
+from routes.gst_billing import apply_warehouse_filter
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -57,7 +58,9 @@ def _round(x):
 
 
 async def _fetch_invoices(start_date: Optional[str], end_date: Optional[str],
-                          include_cancelled: bool = False) -> List[dict]:
+                          include_cancelled: bool = False,
+                          warehouse_ids: Optional[str] = None,
+                          user: Optional[dict] = None) -> List[dict]:
     q: Dict[str, Any] = {}
     if not include_cancelled:
         q["status"] = "active"
@@ -67,13 +70,14 @@ async def _fetch_invoices(start_date: Optional[str], end_date: Optional[str],
             q["invoice_date"]["$gte"] = start_date
         if end_date:
             q["invoice_date"]["$lte"] = end_date
+    apply_warehouse_filter(q, warehouse_ids, user or {})
     invoices = await db.gst_invoices.find(q, {"_id": 0}).sort("invoice_date", 1).to_list(200000)
     return invoices
 
 
 # ---------------- Report builders (return rows + summary + columns) ----------------
-async def _build_daily_sales(start_date, end_date):
-    invoices = await _fetch_invoices(start_date, end_date)
+async def _build_daily_sales(start_date, end_date, warehouse_ids=None, user=None):
+    invoices = await _fetch_invoices(start_date, end_date, warehouse_ids=warehouse_ids, user=user)
     by_day: Dict[str, dict] = {}
     for inv in invoices:
         d = inv.get("invoice_date") or ""
@@ -109,8 +113,8 @@ async def _build_daily_sales(start_date, end_date):
     return rows, summary, columns
 
 
-async def _build_monthly_sales(start_date, end_date):
-    invoices = await _fetch_invoices(start_date, end_date)
+async def _build_monthly_sales(start_date, end_date, warehouse_ids=None, user=None):
+    invoices = await _fetch_invoices(start_date, end_date, warehouse_ids=warehouse_ids, user=user)
     by_month: Dict[str, dict] = {}
     for inv in invoices:
         d = (inv.get("invoice_date") or "")[:7]  # YYYY-MM
@@ -146,9 +150,9 @@ async def _build_monthly_sales(start_date, end_date):
     return rows, summary, columns
 
 
-async def _build_gst_report(start_date, end_date):
+async def _build_gst_report(start_date, end_date, warehouse_ids=None, user=None):
     """GSTR-1 style: B2B (with GSTIN) + B2C (without GSTIN), per invoice."""
-    invoices = await _fetch_invoices(start_date, end_date)
+    invoices = await _fetch_invoices(start_date, end_date, warehouse_ids=warehouse_ids, user=user)
     rows = []
     for inv in invoices:
         gstin = (inv.get("customer_gstin") or "").strip()
@@ -199,9 +203,9 @@ async def _build_gst_report(start_date, end_date):
     return rows, summary, columns
 
 
-async def _build_hsn_summary(start_date, end_date):
+async def _build_hsn_summary(start_date, end_date, warehouse_ids=None, user=None):
     """GSTR-1 HSN Summary: group all line items by HSN code."""
-    invoices = await _fetch_invoices(start_date, end_date)
+    invoices = await _fetch_invoices(start_date, end_date, warehouse_ids=warehouse_ids, user=user)
     by_hsn: Dict[str, dict] = {}
     for inv in invoices:
         for li in inv.get("line_items", []):
@@ -241,8 +245,8 @@ async def _build_hsn_summary(start_date, end_date):
     return rows, summary, columns
 
 
-async def _build_item_wise(start_date, end_date):
-    invoices = await _fetch_invoices(start_date, end_date)
+async def _build_item_wise(start_date, end_date, warehouse_ids=None, user=None):
+    invoices = await _fetch_invoices(start_date, end_date, warehouse_ids=warehouse_ids, user=user)
     by_item: Dict[str, dict] = {}
     for inv in invoices:
         for li in inv.get("line_items", []):
@@ -283,8 +287,8 @@ async def _build_item_wise(start_date, end_date):
     return rows, summary, columns
 
 
-async def _build_customer_wise(start_date, end_date):
-    invoices = await _fetch_invoices(start_date, end_date)
+async def _build_customer_wise(start_date, end_date, warehouse_ids=None, user=None):
+    invoices = await _fetch_invoices(start_date, end_date, warehouse_ids=warehouse_ids, user=user)
     by_cust: Dict[str, dict] = {}
     for inv in invoices:
         key = (inv.get("customer_name") or "—") + "|" + (inv.get("customer_phone") or "")
@@ -318,8 +322,8 @@ async def _build_customer_wise(start_date, end_date):
     return rows, summary, columns
 
 
-async def _build_warehouse_wise(start_date, end_date):
-    invoices = await _fetch_invoices(start_date, end_date)
+async def _build_warehouse_wise(start_date, end_date, warehouse_ids=None, user=None):
+    invoices = await _fetch_invoices(start_date, end_date, warehouse_ids=warehouse_ids, user=user)
     by_wh: Dict[str, dict] = {}
     for inv in invoices:
         wh = inv.get("warehouse_name") or "—"
@@ -351,7 +355,7 @@ async def _build_warehouse_wise(start_date, end_date):
     return rows, summary, columns
 
 
-async def _build_cancelled(start_date, end_date):
+async def _build_cancelled(start_date, end_date, warehouse_ids=None, user=None):
     q: Dict[str, Any] = {"status": "cancelled"}
     if start_date or end_date:
         q["invoice_date"] = {}
@@ -359,6 +363,7 @@ async def _build_cancelled(start_date, end_date):
             q["invoice_date"]["$gte"] = start_date
         if end_date:
             q["invoice_date"]["$lte"] = end_date
+    apply_warehouse_filter(q, warehouse_ids, user or {})
     invoices = await db.gst_invoices.find(q, {"_id": 0}).sort("invoice_date", -1).to_list(50000)
     rows = []
     for inv in invoices:
@@ -387,8 +392,8 @@ async def _build_cancelled(start_date, end_date):
     return rows, summary, columns
 
 
-async def _build_payment_wise(start_date, end_date):
-    invoices = await _fetch_invoices(start_date, end_date)
+async def _build_payment_wise(start_date, end_date, warehouse_ids=None, user=None):
+    invoices = await _fetch_invoices(start_date, end_date, warehouse_ids=warehouse_ids, user=user)
     by_mode: Dict[str, dict] = defaultdict(lambda: {"payment_mode": "", "invoices": 0,
                                                      "sub_total": 0, "total_gst": 0, "grand_total": 0})
     for inv in invoices:
@@ -416,9 +421,9 @@ async def _build_payment_wise(start_date, end_date):
     return rows, summary, columns
 
 
-async def _build_tax_summary(start_date, end_date):
+async def _build_tax_summary(start_date, end_date, warehouse_ids=None, user=None):
     """Group invoice line items by GST rate slab; show CGST/SGST/IGST collected per slab."""
-    invoices = await _fetch_invoices(start_date, end_date)
+    invoices = await _fetch_invoices(start_date, end_date, warehouse_ids=warehouse_ids, user=user)
     by_rate: Dict[float, dict] = {}
     for inv in invoices:
         for li in inv.get("line_items", []):
@@ -448,7 +453,7 @@ async def _build_tax_summary(start_date, end_date):
     return rows, summary, columns
 
 
-async def _build_discrepancy_invoices(start_date, end_date):
+async def _build_discrepancy_invoices(start_date, end_date, warehouse_ids=None, user=None):
     q: Dict[str, Any] = {"is_discrepancy": True}
     if start_date or end_date:
         q["invoice_date"] = {}
@@ -456,6 +461,7 @@ async def _build_discrepancy_invoices(start_date, end_date):
             q["invoice_date"]["$gte"] = start_date
         if end_date:
             q["invoice_date"]["$lte"] = end_date
+    apply_warehouse_filter(q, warehouse_ids, user or {})
     docs = await db.gst_invoices.find(q, {"_id": 0}).sort("created_at", -1).to_list(5000)
     rows = []
     total_expected = 0.0
@@ -511,7 +517,8 @@ async def _build_discrepancy_invoices(start_date, end_date):
 
 
 # ---------------- Report dispatcher ----------------
-async def _build_report(report_type: str, start_date: Optional[str], end_date: Optional[str]):
+async def _build_report(report_type: str, start_date: Optional[str], end_date: Optional[str],
+                        warehouse_ids: Optional[str] = None, user: Optional[dict] = None):
     builders = {
         "daily_sales": _build_daily_sales,
         "monthly_sales": _build_monthly_sales,
@@ -528,7 +535,7 @@ async def _build_report(report_type: str, start_date: Optional[str], end_date: O
     fn = builders.get(report_type)
     if not fn:
         raise HTTPException(status_code=400, detail=f"Unknown report_type. Must be one of: {sorted(REPORT_TYPES)}")
-    return await fn(start_date, end_date)
+    return await fn(start_date, end_date, warehouse_ids=warehouse_ids, user=user)
 
 
 REPORT_LABELS = {
@@ -554,8 +561,10 @@ async def list_reports(user: dict = Depends(require_admin)):
 
 @router.get("/gst/reports/{report_type}")
 async def get_report(report_type: str, start_date: Optional[str] = None,
-                     end_date: Optional[str] = None, user: dict = Depends(require_admin)):
-    rows, summary, columns = await _build_report(report_type, start_date, end_date)
+                     end_date: Optional[str] = None, warehouse_ids: Optional[str] = None,
+                     user: dict = Depends(require_admin)):
+    rows, summary, columns = await _build_report(report_type, start_date, end_date,
+                                                  warehouse_ids=warehouse_ids, user=user)
     return {
         "report_type": report_type,
         "label": REPORT_LABELS.get(report_type, report_type),
@@ -569,12 +578,14 @@ async def get_report(report_type: str, start_date: Optional[str] = None,
 
 @router.get("/gst/reports/{report_type}/excel")
 async def export_report_excel(report_type: str, start_date: Optional[str] = None,
-                              end_date: Optional[str] = None, user: dict = Depends(require_admin)):
+                              end_date: Optional[str] = None, warehouse_ids: Optional[str] = None,
+                              user: dict = Depends(require_admin)):
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     from openpyxl.utils import get_column_letter
 
-    rows, summary, columns = await _build_report(report_type, start_date, end_date)
+    rows, summary, columns = await _build_report(report_type, start_date, end_date,
+                                                  warehouse_ids=warehouse_ids, user=user)
     label = REPORT_LABELS.get(report_type, report_type)
     cfg = await db.gst_config.find_one({"key": "gst_config"}, {"_id": 0}) or {}
 
@@ -669,14 +680,16 @@ async def export_report_excel(report_type: str, start_date: Optional[str] = None
 
 @router.get("/gst/reports/{report_type}/pdf")
 async def export_report_pdf(report_type: str, start_date: Optional[str] = None,
-                            end_date: Optional[str] = None, user: dict = Depends(require_admin)):
+                            end_date: Optional[str] = None, warehouse_ids: Optional[str] = None,
+                            user: dict = Depends(require_admin)):
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib import colors
     from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
     from reportlab.lib.units import mm
     from reportlab.lib.styles import ParagraphStyle
 
-    rows, summary, columns = await _build_report(report_type, start_date, end_date)
+    rows, summary, columns = await _build_report(report_type, start_date, end_date,
+                                                  warehouse_ids=warehouse_ids, user=user)
     label = REPORT_LABELS.get(report_type, report_type)
     cfg = await db.gst_config.find_one({"key": "gst_config"}, {"_id": 0}) or {}
 

@@ -14,11 +14,13 @@ import {
 import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Textarea } from '../components/ui/textarea';
+import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
+import { Checkbox } from '../components/ui/checkbox';
 import { toast } from 'sonner';
 import {
   Receipt, Search, Plus, FileDown, FileSpreadsheet, Settings as SettingsIcon,
   Edit2, XCircle, Trash2, Eye, RefreshCw, ChevronLeft, ChevronRight, FileText, AlertCircle,
-  Upload, History, AlertTriangle, CheckCircle2, Ban, Users
+  Upload, History, AlertTriangle, CheckCircle2, Ban, Users, Warehouse, ChevronDown
 } from 'lucide-react';
 import {
   getGstInvoices, getGstSummary, getGstConfig, updateGstConfig,
@@ -31,7 +33,8 @@ import {
   downloadGstItemTemplate, bulkUploadGstItems,
   getGstItemHistory, downloadGstItemHistoryExcel,
   listGstDiscrepancies, reviewGstDiscrepancy,
-  getPartyLedgerCustomers, getPartyLedger
+  getPartyLedgerCustomers, getPartyLedger,
+  getGstWarehouseSummary, getWarehouses
 } from '../lib/api';
 
 const formatRs = (n) => {
@@ -159,6 +162,13 @@ const GSTBilling = () => {
   const [reportStart, setReportStart] = useState(monthStartISO());
   const [reportEnd, setReportEnd] = useState(todayISO());
 
+  // Warehouses (multi-select filter + Warehouses tab)
+  const [warehouses, setWarehouses] = useState([]);
+  const [selectedWarehouseIds, setSelectedWarehouseIds] = useState([]);
+  const [warehouseSummary, setWarehouseSummary] = useState({ rows: [], totals: {} });
+  const [warehouseSummaryLoading, setWarehouseSummaryLoading] = useState(false);
+  const warehouseIdsCsv = selectedWarehouseIds.length ? selectedWarehouseIds.join(',') : undefined;
+
   // Manual invoice form state
   const [invForm, setInvForm] = useState(null);
 
@@ -185,6 +195,7 @@ const GSTBilling = () => {
       if (billTypeFilter !== 'all') params.item_type = billTypeFilter;
       if (startDate) params.start_date = startDate;
       if (endDate) params.end_date = endDate;
+      if (warehouseIdsCsv) params.warehouse_ids = warehouseIdsCsv;
       const { data } = await getGstInvoices(params);
       setInvoices(data.invoices || []);
       setTotalPages(data.pages || 1);
@@ -194,15 +205,17 @@ const GSTBilling = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, search, statusFilter, billTypeFilter, startDate, endDate, redirectIfNotAdmin]);
+  }, [page, search, statusFilter, billTypeFilter, startDate, endDate, warehouseIdsCsv, redirectIfNotAdmin]);
 
   const loadSummary = useCallback(async () => {
     if (redirectIfNotAdmin()) return;
     try {
-      const { data } = await getGstSummary({ start_date: startDate, end_date: endDate });
+      const params = { start_date: startDate, end_date: endDate };
+      if (warehouseIdsCsv) params.warehouse_ids = warehouseIdsCsv;
+      const { data } = await getGstSummary(params);
       setSummary(data || {});
     } catch (e) { /* swallow */ }
-  }, [startDate, endDate, redirectIfNotAdmin]);
+  }, [startDate, endDate, warehouseIdsCsv, redirectIfNotAdmin]);
 
   const loadConfig = useCallback(async () => {
     try {
@@ -232,11 +245,34 @@ const GSTBilling = () => {
     } catch (e) { /* swallow */ }
   }, []);
 
+  const loadWarehouses = useCallback(async () => {
+    try {
+      const { data } = await getWarehouses();
+      setWarehouses(data || []);
+    } catch (e) { /* swallow */ }
+  }, []);
+
+  const loadWarehouseSummary = useCallback(async () => {
+    setWarehouseSummaryLoading(true);
+    try {
+      const params = { start_date: startDate, end_date: endDate };
+      if (warehouseIdsCsv) params.warehouse_ids = warehouseIdsCsv;
+      const { data } = await getGstWarehouseSummary(params);
+      setWarehouseSummary(data || { rows: [], totals: {} });
+    } catch (e) {
+      toast.error('Failed to load warehouse summary');
+    } finally {
+      setWarehouseSummaryLoading(false);
+    }
+  }, [startDate, endDate, warehouseIdsCsv]);
+
   const runReport = useCallback(async () => {
     if (!reportType) return;
     setReportLoading(true);
     try {
-      const { data } = await getGstReport(reportType, { start_date: reportStart, end_date: reportEnd });
+      const params = { start_date: reportStart, end_date: reportEnd };
+      if (warehouseIdsCsv) params.warehouse_ids = warehouseIdsCsv;
+      const { data } = await getGstReport(reportType, params);
       setReportData(data);
     } catch (e) {
       toast.error('Failed to load report');
@@ -244,12 +280,14 @@ const GSTBilling = () => {
     } finally {
       setReportLoading(false);
     }
-  }, [reportType, reportStart, reportEnd]);
+  }, [reportType, reportStart, reportEnd, warehouseIdsCsv]);
 
   const handleExportReportExcel = async () => {
     try {
       const label = reportData?.label || reportType;
-      await exportGstReportExcel(reportType, { start_date: reportStart, end_date: reportEnd }, label);
+      const params = { start_date: reportStart, end_date: reportEnd };
+      if (warehouseIdsCsv) params.warehouse_ids = warehouseIdsCsv;
+      await exportGstReportExcel(reportType, params, label);
       toast.success('Excel downloaded');
     } catch (e) {
       toast.error('Excel export failed');
@@ -259,7 +297,9 @@ const GSTBilling = () => {
   const handleExportReportPdf = async () => {
     try {
       const label = reportData?.label || reportType;
-      await exportGstReportPdf(reportType, { start_date: reportStart, end_date: reportEnd }, label);
+      const params = { start_date: reportStart, end_date: reportEnd };
+      if (warehouseIdsCsv) params.warehouse_ids = warehouseIdsCsv;
+      await exportGstReportPdf(reportType, params, label);
       toast.success('PDF downloaded');
     } catch (e) {
       toast.error('PDF export failed');
@@ -277,6 +317,7 @@ const GSTBilling = () => {
     try {
       const params = {};
       if (discStatusFilter && discStatusFilter !== 'all') params.status = discStatusFilter;
+      if (warehouseIdsCsv) params.warehouse_ids = warehouseIdsCsv;
       const res = await listGstDiscrepancies(params);
       const data = res?.data || res;
       setDiscrepancyRows(data.rows || []);
@@ -286,16 +327,18 @@ const GSTBilling = () => {
     } finally {
       setDiscLoading(false);
     }
-  }, [discStatusFilter]);
+  }, [discStatusFilter, warehouseIdsCsv]);
 
   const loadLedgerCustomers = useCallback(async () => {
     try {
-      const res = await getPartyLedgerCustomers();
+      const params = {};
+      if (warehouseIdsCsv) params.warehouse_ids = warehouseIdsCsv;
+      const res = await getPartyLedgerCustomers(params);
       setLedgerCustomers(res?.data || res || []);
     } catch (e) {
       toast.error('Failed to load customers');
     }
-  }, []);
+  }, [warehouseIdsCsv]);
 
   const loadLedger = useCallback(async () => {
     if (!ledgerSelected) {
@@ -312,6 +355,7 @@ const GSTBilling = () => {
         if (ledgerStartDate) params.start_date = ledgerStartDate;
         if (ledgerEndDate) params.end_date = ledgerEndDate;
       }
+      if (warehouseIdsCsv) params.warehouse_ids = warehouseIdsCsv;
       const res = await getPartyLedger(params);
       const data = res?.data || res;
       setLedgerRows(data.rows || []);
@@ -321,14 +365,22 @@ const GSTBilling = () => {
     } finally {
       setLedgerLoading(false);
     }
-  }, [ledgerSelected, ledgerPeriod, ledgerStartDate, ledgerEndDate]);
+  }, [ledgerSelected, ledgerPeriod, ledgerStartDate, ledgerEndDate, warehouseIdsCsv]);
 
   useEffect(() => {
     loadConfig();
     loadItems();
     loadPlans();
     loadReportsList();
-  }, [loadConfig, loadItems, loadPlans, loadReportsList]);
+    loadWarehouses();
+  }, [loadConfig, loadItems, loadPlans, loadReportsList, loadWarehouses]);
+
+  // Auto-load warehouse summary when Warehouses tab is active OR filter/dates change
+  useEffect(() => {
+    if (activeTab === 'warehouses') {
+      loadWarehouseSummary();
+    }
+  }, [activeTab, loadWarehouseSummary]);
 
   // Auto-run report when type/dates change AND user is on Reports tab
   useEffect(() => {
@@ -400,6 +452,7 @@ const GSTBilling = () => {
         status: statusFilter !== 'all' ? statusFilter : undefined,
         start_date: startDate,
         end_date: endDate,
+        warehouse_ids: warehouseIdsCsv,
       });
       toast.success('Excel downloaded');
     } catch (e) {
@@ -918,6 +971,83 @@ const GSTBilling = () => {
 
   const preview = computePreview();
 
+  // ----- Warehouse Filter (multi-select checkbox dropdown) -----
+  const toggleWarehouseId = (wid) => {
+    setSelectedWarehouseIds(prev => prev.includes(wid) ? prev.filter(x => x !== wid) : [...prev, wid]);
+    setPage(1);
+  };
+  const clearWarehouseSelection = () => { setSelectedWarehouseIds([]); setPage(1); };
+  const warehouseFilterLabel = selectedWarehouseIds.length === 0
+    ? 'All Warehouses'
+    : selectedWarehouseIds.length === 1
+      ? (warehouses.find(w => w.id === selectedWarehouseIds[0])?.name || '1 selected')
+      : `${selectedWarehouseIds.length} warehouses selected`;
+
+  const WarehouseFilter = (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          className="justify-between gap-2 min-w-[220px]"
+          data-testid="warehouse-filter-trigger"
+        >
+          <span className="flex items-center gap-2 truncate">
+            <Warehouse className="w-4 h-4 text-blue-700" />
+            <span className="truncate">{warehouseFilterLabel}</span>
+          </span>
+          <ChevronDown className="w-4 h-4 opacity-60" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-72 p-0">
+        <div className="flex items-center justify-between px-3 py-2 border-b">
+          <span className="text-sm font-medium">Filter by Warehouse</span>
+          {selectedWarehouseIds.length > 0 && (
+            <button
+              type="button"
+              onClick={clearWarehouseSelection}
+              className="text-xs text-blue-700 hover:underline"
+              data-testid="warehouse-filter-clear"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+        <div className="max-h-64 overflow-y-auto py-1">
+          {warehouses.length === 0 && (
+            <div className="px-3 py-4 text-xs text-slate-500">No warehouses found.</div>
+          )}
+          {warehouses.map(w => {
+            const checked = selectedWarehouseIds.includes(w.id);
+            return (
+              <label
+                key={w.id}
+                className="flex items-start gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer"
+                data-testid={`warehouse-filter-item-${w.id}`}
+              >
+                <Checkbox
+                  checked={checked}
+                  onCheckedChange={() => toggleWarehouseId(w.id)}
+                  className="mt-0.5"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">
+                    {w.name}{w.code ? ` (${w.code})` : ''}
+                  </div>
+                  <div className="text-[10px] text-slate-500 truncate">
+                    {w.location || '—'}{w.is_plant ? ' · Plant' : ''}
+                  </div>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+        <div className="px-3 py-2 border-t text-[11px] text-slate-500">
+          Empty selection = show all warehouses in your scope.
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+
   return (
     <Layout>
       <div className="space-y-6" data-testid="gst-billing-page">
@@ -931,6 +1061,7 @@ const GSTBilling = () => {
             <p className="text-sm text-slate-500">Auto-generated tax invoices for new sales. Manual control for legacy entries.</p>
           </div>
           <div className="flex flex-wrap gap-2">
+            {WarehouseFilter}
             <Button variant="outline" onClick={() => { loadInvoices(); loadSummary(); }} data-testid="refresh-btn">
               <RefreshCw className="w-4 h-4 mr-1" /> Refresh
             </Button>
@@ -978,6 +1109,7 @@ const GSTBilling = () => {
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="invoices" data-testid="tab-invoices">Invoices</TabsTrigger>
+            <TabsTrigger value="warehouses" data-testid="tab-warehouses">Warehouses</TabsTrigger>
             <TabsTrigger value="discrepancies" data-testid="tab-discrepancies">Discrepancies</TabsTrigger>
             <TabsTrigger value="ledger" data-testid="tab-ledger">Party Ledger</TabsTrigger>
             <TabsTrigger value="reports" data-testid="tab-reports">Reports</TabsTrigger>
@@ -1145,6 +1277,166 @@ const GSTBilling = () => {
                     </Button>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* WAREHOUSES TAB */}
+          <TabsContent value="warehouses" className="space-y-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-2">
+                  <Warehouse className="w-5 h-5 text-blue-700" />
+                  <div>
+                    <CardTitle className="text-base">Warehouse-wise Summary</CardTitle>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Per-warehouse KPIs for the selected date range. Use the header filter to focus on one or more warehouses.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-end gap-2">
+                  <div>
+                    <Label className="text-[10px]">From</Label>
+                    <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="h-8 text-xs" data-testid="wh-start-date" />
+                  </div>
+                  <div>
+                    <Label className="text-[10px]">To</Label>
+                    <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="h-8 text-xs" data-testid="wh-end-date" />
+                  </div>
+                  <Button size="sm" variant="outline" onClick={loadWarehouseSummary} disabled={warehouseSummaryLoading} data-testid="wh-refresh-btn">
+                    <RefreshCw className={`w-4 h-4 mr-1 ${warehouseSummaryLoading ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {warehouseSummaryLoading && (
+                  <div className="p-6 text-center text-slate-500" data-testid="wh-loading">Loading warehouse summary…</div>
+                )}
+                {!warehouseSummaryLoading && (warehouseSummary.rows || []).length === 0 && (
+                  <div className="p-6 text-center text-slate-500" data-testid="wh-empty">
+                    No warehouse data for the selected period.
+                  </div>
+                )}
+                {!warehouseSummaryLoading && (warehouseSummary.rows || []).length > 0 && (
+                  <>
+                    {/* Grand totals strip */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2" data-testid="wh-grand-totals">
+                      <div className="bg-slate-50 rounded p-2 text-center">
+                        <p className="text-[10px] text-slate-500 uppercase">Total Invoices</p>
+                        <p className="text-lg font-bold text-slate-800">{warehouseSummary.totals?.total_invoices || 0}</p>
+                      </div>
+                      <div className="bg-blue-50 rounded p-2 text-center">
+                        <p className="text-[10px] text-blue-700 uppercase">Total Sales</p>
+                        <p className="text-base font-bold text-blue-700">{formatRs(warehouseSummary.totals?.total_sales || 0)}</p>
+                      </div>
+                      <div className="bg-emerald-50 rounded p-2 text-center">
+                        <p className="text-[10px] text-emerald-700 uppercase">Collections (Cash+Online)</p>
+                        <p className="text-base font-bold text-emerald-700">{formatRs((warehouseSummary.totals?.cash_collections || 0) + (warehouseSummary.totals?.online_collections || 0))}</p>
+                      </div>
+                      <div className="bg-amber-50 rounded p-2 text-center">
+                        <p className="text-[10px] text-amber-700 uppercase">Pending</p>
+                        <p className="text-base font-bold text-amber-700">{formatRs(warehouseSummary.totals?.pending_amount || 0)}</p>
+                      </div>
+                    </div>
+
+                    {/* Per-warehouse cards grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3" data-testid="wh-cards-grid">
+                      {warehouseSummary.rows.map(row => (
+                        <Card
+                          key={row.warehouse_id || row.warehouse_name}
+                          className="border-slate-200 hover:shadow-md transition-shadow"
+                          data-testid={`wh-card-${row.warehouse_id || 'unassigned'}`}
+                        >
+                          <CardContent className="p-4 space-y-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <Warehouse className="w-4 h-4 text-blue-700" />
+                                  <h4 className="font-semibold text-slate-800 truncate">{row.warehouse_name}</h4>
+                                  {row.is_plant && (
+                                    <Badge variant="outline" className="text-[10px]">Plant</Badge>
+                                  )}
+                                </div>
+                                {row.warehouse_code && (
+                                  <p className="text-[10px] text-slate-500 mt-0.5 font-mono">Code: {row.warehouse_code}</p>
+                                )}
+                              </div>
+                              {row.discrepancy_count > 0 && (
+                                <Badge className="bg-amber-100 text-amber-700 border-amber-200">
+                                  <AlertTriangle className="w-3 h-3 mr-1" />
+                                  {row.discrepancy_count} disc.
+                                </Badge>
+                              )}
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              <div>
+                                <p className="text-slate-500 text-[10px] uppercase">Invoices</p>
+                                <p className="font-semibold text-slate-800">{row.total_invoices}</p>
+                              </div>
+                              <div>
+                                <p className="text-slate-500 text-[10px] uppercase">Total Sales</p>
+                                <p className="font-semibold text-blue-700">{formatRs(row.total_sales)}</p>
+                              </div>
+                              <div>
+                                <p className="text-slate-500 text-[10px] uppercase">Taxable</p>
+                                <p className="font-medium">{formatRs(row.taxable_value)}</p>
+                              </div>
+                              <div>
+                                <p className="text-slate-500 text-[10px] uppercase">GST Collected</p>
+                                <p className="font-medium text-purple-700">{formatRs(row.gst_collected)}</p>
+                              </div>
+                              <div>
+                                <p className="text-slate-500 text-[10px] uppercase">Cash</p>
+                                <p className="font-medium text-emerald-700">{formatRs(row.cash_collections)}</p>
+                              </div>
+                              <div>
+                                <p className="text-slate-500 text-[10px] uppercase">Online</p>
+                                <p className="font-medium text-emerald-700">{formatRs(row.online_collections)}</p>
+                              </div>
+                              <div className="col-span-2 pt-2 border-t border-slate-100 flex items-center justify-between">
+                                <span className="text-[10px] uppercase text-amber-700">Pending Balance</span>
+                                <span className="font-bold text-amber-700">{formatRs(row.pending_amount)}</span>
+                              </div>
+                            </div>
+
+                            {row.warehouse_id && (
+                              <div className="pt-1 flex gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-[11px] h-7 flex-1"
+                                  onClick={() => {
+                                    setSelectedWarehouseIds([row.warehouse_id]);
+                                    setActiveTab('invoices');
+                                  }}
+                                  data-testid={`wh-view-invoices-${row.warehouse_id}`}
+                                >
+                                  <FileText className="w-3 h-3 mr-1" /> Invoices
+                                </Button>
+                                {row.discrepancy_count > 0 && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-[11px] h-7 flex-1"
+                                    onClick={() => {
+                                      setSelectedWarehouseIds([row.warehouse_id]);
+                                      setActiveTab('discrepancies');
+                                    }}
+                                    data-testid={`wh-view-disc-${row.warehouse_id}`}
+                                  >
+                                    <AlertTriangle className="w-3 h-3 mr-1" /> Disc.
+                                  </Button>
+                                )}
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
