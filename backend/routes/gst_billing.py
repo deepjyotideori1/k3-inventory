@@ -690,10 +690,12 @@ def _match_plan_for_sale(plans: List[dict], connection_type: str, cylinder_count
 async def get_invoice_summary(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    warehouse_ids: Optional[str] = None,
     user: dict = Depends(require_admin),
 ):
     await ensure_seed()
     q: Dict[str, Any] = {}
+    apply_warehouse_filter(q, warehouse_ids, user)
     if start_date or end_date:
         q["invoice_date"] = {}
         if start_date:

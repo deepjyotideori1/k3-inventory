@@ -25,6 +25,29 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 
 
 ---
+## WAREHOUSE-WISE INVOICE FILTER & SEGREGATION (Added 2026-07-01)
+
+Cross-cutting feature that layers a warehouse dimension on every GST reporting/query endpoint.
+
+### Backend
+- `apply_warehouse_filter(query, warehouse_ids, user)` helper in `gst_billing.py` (L349) — role-based:
+  - Admin: filter by comma-separated `warehouse_ids`; empty = no filter (see all).
+  - Non-admin: HARD-LOCKED to their own `user.warehouse_id` (ignores any `warehouse_ids` param).
+- `warehouse_ids` query param added to: `/api/gst/invoices` (list), `/api/gst/invoices/summary`, `/api/gst/invoices/export/excel`, `/api/gst/discrepancies`, `/api/gst/party-ledger`, `/api/gst/party-ledger/customers`, `/api/gst/warehouse-summary`, all 11 report endpoints (`/api/gst/reports/{type}` + `/excel` + `/pdf`).
+- `/api/gst/warehouse-summary` endpoint (`gst_billing.py` L1420) returns per-warehouse KPI rows: `total_invoices, total_sales, taxable_value, gst_collected, cash_collections, online_collections, pending_amount, discrepancy_count` + grand-totals. Admins see all warehouses (including zero-row); non-admins see only their own.
+- `Warehouse` model has `code` field (short prefix e.g. HAM, K3M).
+
+### Frontend (`/app/frontend/src/pages/GSTBilling.jsx`)
+- Global multi-select checkbox dropdown filter (`WarehouseFilter`) in the header that applies across ALL tabs. Empty selection = all warehouses.
+- New "Warehouses" tab (2nd position, after Invoices) — per-warehouse card grid with 8 metrics + drill-down buttons (`Invoices`, `Discrepancies`) that auto-apply the warehouse filter and switch tabs.
+- All fetches (`loadInvoices`, `loadSummary`, `loadDiscrepancies`, `loadLedger`, `loadLedgerCustomers`, `runReport`, `handleExcelExport`, `handleExportReportExcel`, `handleExportReportPdf`, `loadWarehouseSummary`) thread `warehouseIdsCsv` param.
+
+### Tests
+- `/app/backend/tests/test_warehouse_filter.py` — 33 passing tests covering: warehouse-summary, invoice list, invoices/summary, discrepancies, party-ledger, all 11 report builders (both jullang-only and fake-id returning empty), Excel/PDF exports, non-admin hard lock.
+
+---
+
+
 
 ## GST BILLING DASHBOARD (Added 2026-02-29)
 
