@@ -25,6 +25,23 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 
 
 ---
+## BUG FIXES (2026-07-03)
+
+### Bug 1 — Malformed Invoice Numbers (`K3/2026-27/0001/2026-27/0037`)
+- **Root cause**: Users could type slashes / FY segments into Settings → Prefix/Suffix. `next_invoice_number` then produced numbers like `K3/2026-27/0001/2026-27/0037`.
+- **Fix**: Backend `update_gst_config` (`gst_billing.py` ~L585) now sanitizes both fields — keeps only the first `/`-separated token, drops FY-like segments, caps length to 10 chars. Falls back to `INV` if the result is empty.
+- **New endpoint**: `POST /api/gst/invoices/repair-numbers` (admin-only, idempotent). Scans all invoices and rewrites malformed numbers (>3 segments) to `<prefix>/<first-FY>/<last-4-digit-seq>`.
+- **UI**: Settings → Numbering tab now shows a "Repair Malformed Invoice Numbers" banner with a `repair-invoice-numbers-btn` button. Helper text on the Prefix/Suffix inputs warns against `/` and FY.
+- **Note**: Preview DB is clean; **production users must redeploy then click Repair once**.
+
+### Bug 2 — Payment Status Sync on Sales-Entry Edit
+- **Root cause**: `update_sales_entry` in `sales.py` didn't propagate changes to the linked GST invoice. Payment fields (`cash_received`, `online_received`, `pending_amount`, `payment_status`) stayed stale.
+- **Fix**: New helper `sync_invoice_payment_from_sale(sale, sale_type)` in `gst_billing.py` (~L475). It re-runs `compute_payment_fields()` against the current sale amounts and updates the linked invoice. Called best-effort at the end of `update_sales_entry`.
+- **Note**: The manual "Edit Invoice" flow already worked — `update_invoice` recomputes payment status whenever `cash_received/online_received/payment_mode/line_items/tax_mode` change.
+
+---
+
+
 ## AUTO CUSTOMER MOBILE / MASTER LINK (Added 2026-07-01)
 
 Customer Master (`db.customers`) is now the single source of truth for customer identity fields on GST invoices, with historical snapshot semantics.
