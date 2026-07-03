@@ -36,7 +36,7 @@ import {
   listGstDiscrepancies, reviewGstDiscrepancy,
   getPartyLedgerCustomers, getPartyLedger,
   getGstWarehouseSummary, exportGstWarehouseSummaryExcel, getWarehouses,
-  gstCustomerLookup
+  gstCustomerLookup, repairGstInvoiceNumbers
 } from '../lib/api';
 
 const formatRs = (n) => {
@@ -2314,12 +2314,12 @@ const GSTBilling = () => {
                   <div>
                     <Label>Invoice Prefix</Label>
                     <Input value={config.prefix || ''} onChange={e => setConfig({ ...config, prefix: e.target.value })} data-testid="config-prefix" />
-                    <p className="text-xs text-slate-500 mt-1">Default: INV</p>
+                    <p className="text-xs text-slate-500 mt-1">Letters/digits only, e.g. <span className="font-mono">K3</span> or <span className="font-mono">INV</span>. <strong>Do NOT include <span className="font-mono">/</span> or the FY.</strong></p>
                   </div>
                   <div>
                     <Label>Invoice Suffix</Label>
                     <Input value={config.suffix || ''} onChange={e => setConfig({ ...config, suffix: e.target.value })} data-testid="config-suffix" />
-                    <p className="text-xs text-slate-500 mt-1">Optional</p>
+                    <p className="text-xs text-slate-500 mt-1">Optional short tag (no <span className="font-mono">/</span>, no FY).</p>
                   </div>
                   <div>
                     <Label>Default Tax Mode</Label>
@@ -2349,6 +2349,31 @@ const GSTBilling = () => {
                 <div className="text-xs text-slate-600 p-3 bg-blue-50 border border-blue-100 rounded">
                   <div><strong>Format preview:</strong> {config.prefix || 'INV'}/{config.current_fy || 'YYYY-YY'}/0001{config.suffix ? `/${config.suffix}` : ''}</div>
                   <div className="mt-1">Next invoice number: <strong>{config.next_seq || 1}</strong> (FY {config.current_fy || '-'})</div>
+                </div>
+                <div className="rounded border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-xs text-amber-900 font-medium">Repair Malformed Invoice Numbers</p>
+                  <p className="text-[11px] text-amber-800 mt-0.5">
+                    If some invoices show a duplicated pattern like <span className="font-mono">K3/2026-27/0001/2026-27/0037</span>,
+                    click below to normalize them to <span className="font-mono">K3/2026-27/0037</span>. Correctly-formed numbers are left untouched.
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-2 border-amber-300 text-amber-900 hover:bg-amber-100"
+                    data-testid="repair-invoice-numbers-btn"
+                    onClick={async () => {
+                      if (!window.confirm('Scan and repair all malformed invoice numbers?')) return;
+                      try {
+                        const { data } = await repairGstInvoiceNumbers();
+                        toast.success(`Repaired ${data.repaired} invoice number(s).`);
+                        loadInvoices();
+                      } catch (e) {
+                        toast.error(e?.response?.data?.detail || 'Repair failed');
+                      }
+                    }}
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 mr-1" /> Repair Now
+                  </Button>
                 </div>
               </TabsContent>
 

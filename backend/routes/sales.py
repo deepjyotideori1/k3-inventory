@@ -20,7 +20,7 @@ import xlsxwriter
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
-from routes.gst_billing import auto_generate_invoice_from_sale, validate_sale_discrepancy
+from routes.gst_billing import auto_generate_invoice_from_sale, validate_sale_discrepancy, sync_invoice_payment_from_sale
 from export_helpers import (
     get_company_info_for_export, embed_logo_openpyxl, embed_logo_xlsxwriter,
     cleanup_logo_tempfile,
@@ -425,6 +425,11 @@ async def update_sales_entry(
     await db.sales_entries.update_one({'id': entry_id}, {'$set': update_data})
     
     updated = await db.sales_entries.find_one({'id': entry_id}, {'_id': 0})
+    # Sync any linked GST invoice's payment_status when payment amounts changed
+    try:
+        await sync_invoice_payment_from_sale(updated, 'sales_entry')
+    except Exception:
+        pass  # sync is best-effort; don't fail the sales-entry update
     warehouse = await db.warehouses.find_one({'id': updated.get('warehouse_id')}, {'_id': 0})
     
     return {

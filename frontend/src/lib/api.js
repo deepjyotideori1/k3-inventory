@@ -745,6 +745,9 @@ export const exportGstWarehouseSummaryExcel = async (params = {}) => {
 // GST Customer Master lookup (auto-populate invoice form)
 export const gstCustomerLookup = (params) => api.get('/gst/customer-lookup', { params });
 
+// GST Invoice-number repair (fixes malformed numbers with duplicated FY segments)
+export const repairGstInvoiceNumbers = () => api.post('/gst/invoices/repair-numbers');
+
 // GST Reports
 export const listGstReports = () => api.get('/gst/reports/list');
 export const getGstReport = (reportType, params) => api.get(`/gst/reports/${reportType}`, { params });

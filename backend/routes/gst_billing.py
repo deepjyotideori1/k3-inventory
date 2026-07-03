@@ -472,6 +472,47 @@ def compute_payment_fields(grand_total: float, cash_received: float = 0,
     }
 
 
+async def sync_invoice_payment_from_sale(sale: dict, sale_type: str) -> Optional[dict]:
+    """Called when a sale is edited. If an active GST invoice is linked to this sale,
+    recompute its cash_received/online_received/pending_amount/payment_status from the
+    updated sale. Returns the new payment fields (or None if no linked invoice).
+
+    Business rules match _auto_generate_invoice: for accessory_sales without an explicit
+    cash/online split, we bucket the grand_total by payment_mode (cash | online | pending).
+    For sales_entries we take cash_amount + online_amount as-is.
+    """
+    inv = await db.gst_invoices.find_one(
+        {"sale_id": sale.get("id"), "sale_type": sale_type, "status": "active"},
+        {"_id": 0},
+    )
+    if not inv:
+        return None
+
+    sale_cash = float(sale.get("cash_amount") or 0)
+    sale_online = float(sale.get("online_amount") or 0)
+    if sale_type == "accessory_sale" and (sale_cash + sale_online) == 0:
+        grand_for_split = float(sale.get("grand_total") or sale.get("amount") or 0)
+        pm = (sale.get("payment_mode") or "cash").lower()
+        if pm == "online":
+            sale_online = grand_for_split
+        elif pm == "pending":
+            pass  # keep both 0 → Pending
+        else:
+            sale_cash = grand_for_split
+
+    pay = compute_payment_fields(
+        inv.get("grand_total", 0),
+        sale_cash,
+        sale_online,
+        sale.get("payment_mode") or inv.get("payment_mode"),
+    )
+    pay["updated_at"] = datetime.now(timezone.utc).isoformat()
+    if sale.get("payment_mode"):
+        pay["payment_mode"] = sale["payment_mode"]
+    await db.gst_invoices.update_one({"id": inv["id"]}, {"$set": pay})
+    return pay
+
+
 async def validate_sale_discrepancy(sale: dict, sale_type: str) -> dict:
     """Compute expected vs actual for a sale BEFORE it is persisted. Used by
     routes/sales.py and routes/accessories.py to enforce the mandatory-reason rule
@@ -552,11 +593,64 @@ async def update_gst_config(data: dict, user: dict = Depends(require_admin)):
     updates = {k: v for k, v in data.items() if k in allowed}
     if updates.get("default_tax_mode") and updates["default_tax_mode"] not in ("intra_state", "inter_state"):
         raise HTTPException(status_code=400, detail="default_tax_mode must be intra_state or inter_state")
+
+    # Sanitize prefix/suffix — the invoice number template is `<prefix>/<FY>/<seq>[/<suffix>]`
+    # so allowing slashes, spaces, or FY-like segments here produces broken numbers like
+    # `K3/2026-27/0001/2026-27/0037`. We keep only the FIRST clean token before any `/`
+    # and drop FY-like patterns silently.
+    import re as _re
+    def _sanitize_token(v):
+        if v is None:
+            return v
+        # Keep only the first `/`-separated token
+        s = str(v).strip().split("/")[0].split("\\")[0].strip()
+        # Drop FY-like segments (YYYY-YY or YYYY-YYYY)
+        if _re.fullmatch(r"\d{4}-\d{2,4}", s):
+            return ""
+        return s.replace(" ", "")[:10]
+    if "prefix" in updates:
+        updates["prefix"] = _sanitize_token(updates["prefix"]) or "INV"
+    if "suffix" in updates:
+        updates["suffix"] = _sanitize_token(updates["suffix"]) or ""
+
     await db.gst_config.update_one({"key": "gst_config"}, {"$set": updates}, upsert=True)
     await log_audit(user.get("id", ""), user.get("name", ""), "update", "gst_config", "",
                     f"Updated: {','.join(updates.keys())}")
     cfg = await db.gst_config.find_one({"key": "gst_config"}, {"_id": 0})
     return cfg
+
+
+@router.post("/gst/invoices/repair-numbers")
+async def repair_invoice_numbers(user: dict = Depends(require_admin)):
+    """One-time cleanup: fix malformed invoice_numbers like
+    `K3/2026-27/0001/2026-27/0037` -> `K3/2026-27/0037` by keeping the FIRST
+    FY-segment + LAST 4-digit sequence. Idempotent: correctly-formed numbers
+    are left untouched.
+    """
+    import re as _re
+    docs = await db.gst_invoices.find({}, {"_id": 0, "id": 1, "invoice_number": 1}).to_list(200000)
+    fixed: List[dict] = []
+    fy_re = _re.compile(r"\d{4}-\d{2,4}")
+    seq_re = _re.compile(r"\d{3,6}")
+    for d in docs:
+        num = d.get("invoice_number") or ""
+        parts = [p for p in num.split("/") if p.strip()]
+        # Correct form has EXACTLY 3 segments: prefix, FY, seq
+        if len(parts) <= 3:
+            continue
+        prefix = parts[0]
+        fys = [p for p in parts if fy_re.fullmatch(p)]
+        seqs = [p for p in parts if seq_re.fullmatch(p) and not fy_re.fullmatch(p)]
+        if not fys or not seqs:
+            continue
+        new_num = f"{prefix}/{fys[0]}/{seqs[-1]}"
+        if new_num == num:
+            continue
+        await db.gst_invoices.update_one({"id": d["id"]}, {"$set": {"invoice_number": new_num}})
+        fixed.append({"id": d["id"], "before": num, "after": new_num})
+    await log_audit(user.get("id", ""), user.get("name", ""), "repair", "gst_invoice", "",
+                    f"Repaired {len(fixed)} invoice numbers")
+    return {"repaired": len(fixed), "changes": fixed[:100]}
 
 
 # Note: Item Master CRUD + Rate History + Bulk Update endpoints have been
