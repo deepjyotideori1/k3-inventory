@@ -235,6 +235,20 @@ async def update_accessory_entry(entry_id: str, data: AccessoryEntryCreate, user
     updated = await db.accessory_entries.find_one({'id': entry_id}, {'_id': 0})
     return updated
 
+
+@router.delete("/accessory-entries/{entry_id}")
+async def delete_accessory_entry(entry_id: str, user: dict = Depends(require_admin)):
+    """Delete an accessory entry - Admin only. Hard delete; summary/reports
+    are recomputed on the next fetch."""
+    existing = await db.accessory_entries.find_one({'id': entry_id}, {'_id': 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    result = await db.accessory_entries.delete_one({'id': entry_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return {"success": True, "id": entry_id}
+
+
 @router.get("/accessory-entries/summary")
 async def get_accessory_summary(
     accessory_id: Optional[str] = None,

@@ -25,6 +25,22 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 
 
 ---
+## ACCESSORY ENTRIES — EDIT + DELETE (2026-07-13)
+
+Per-row Edit/Delete actions in the LPG Accessories → Reports → Detailed Entries table.
+
+### Backend
+- New endpoint `DELETE /api/accessory-entries/{entry_id}` (`accessories.py` ~L239) — admin-only, 404 if not found, hard-delete. Curl-verified: 404 on missing id, 403 for non-admin.
+- PUT endpoint already existed — no change.
+
+### Frontend (`AccessoryReports.jsx`)
+- New API helper `deleteAccessoryEntry(entryId)` in `lib/api.js`.
+- Actions column now renders BOTH `edit-entry-<id>` (blue pencil) and `delete-entry-<id>` (red trash, admin-only) buttons.
+- Delete uses a shadcn `AlertDialog` (`delete-entry-dialog` / `delete-entry-cancel` / `delete-entry-confirm`) showing accessory + dealer + date + issued/sold/remaining context to prevent accidental deletion.
+
+---
+
+
 ## BUG FIXES (2026-07-03)
 
 ### Bug 1 — Malformed Invoice Numbers (`K3/2026-27/0001/2026-27/0037`)

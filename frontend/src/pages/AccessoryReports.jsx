@@ -11,6 +11,7 @@ import {
   getAccessoryEntries, 
   createAccessoryEntry,
   updateAccessoryEntry,
+  deleteAccessoryEntry,
   getAccessorySummary,
   getLatestAccessoryRemaining,
   exportAccessoryPDF,
@@ -25,6 +26,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '../components/ui/dialog';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '../components/ui/alert-dialog';
 import { 
   Package,
   Plus,
@@ -67,6 +72,8 @@ const AccessoryReports = () => {
   
   // Edit mode state
   const [editingEntry, setEditingEntry] = useState(null);
+  const [deletingEntry, setDeletingEntry] = useState(null);
+  const [deletingEntryLoading, setDeletingEntryLoading] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   
   // System calculated remaining
@@ -316,6 +323,23 @@ const AccessoryReports = () => {
       toast.error('Failed to update entry');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDeleteEntry = async () => {
+    if (!deletingEntry) return;
+    setDeletingEntryLoading(true);
+    try {
+      await deleteAccessoryEntry(deletingEntry.id);
+      toast.success('Entry deleted');
+      setDeletingEntry(null);
+      fetchEntries();
+      fetchSummary();
+    } catch (error) {
+      console.error('Failed to delete entry:', error);
+      toast.error(error?.response?.data?.detail || 'Failed to delete entry');
+    } finally {
+      setDeletingEntryLoading(false);
     }
   };
 
@@ -943,15 +967,30 @@ const AccessoryReports = () => {
                             <td>{e.total_remaining}</td>
                             <td className="text-sm text-slate-600">{e.remarks || '-'}</td>
                             <td>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleEditEntry(e)}
-                                className="text-blue-600 hover:text-blue-800 hover:bg-blue-50"
-                                data-testid={`edit-entry-${e.id}`}
-                              >
-                                <Pencil className="w-4 h-4" />
-                              </Button>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleEditEntry(e)}
+                                  className="text-blue-600 hover:text-blue-800 hover:bg-blue-50"
+                                  data-testid={`edit-entry-${e.id}`}
+                                  title="Edit entry"
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </Button>
+                                {isAdmin && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setDeletingEntry(e)}
+                                    className="text-red-600 hover:text-red-800 hover:bg-red-50"
+                                    data-testid={`delete-entry-${e.id}`}
+                                    title="Delete entry"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -1055,6 +1094,42 @@ const AccessoryReports = () => {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Delete Entry Confirmation */}
+        <AlertDialog open={!!deletingEntry} onOpenChange={(open) => { if (!open) setDeletingEntry(null); }}>
+          <AlertDialogContent data-testid="delete-entry-dialog">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete this accessory entry?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {deletingEntry && (
+                  <span className="block space-y-1">
+                    <span className="block">
+                      <strong>{deletingEntry.accessory_name}</strong> · Dealer: {deletingEntry.dealer_name}
+                    </span>
+                    <span className="block">
+                      Date: {formatDate(deletingEntry.date)} · Issued: {deletingEntry.total_issued} · Sold: {deletingEntry.total_sold} · Remaining: {deletingEntry.total_remaining}
+                    </span>
+                    <span className="block text-red-700 mt-2">
+                      This action can’t be undone. The entry will be removed from all summaries and reports.
+                    </span>
+                  </span>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-testid="delete-entry-cancel">Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteEntry}
+                disabled={deletingEntryLoading}
+                className="bg-red-600 hover:bg-red-700 focus:ring-red-500"
+                data-testid="delete-entry-confirm"
+              >
+                {deletingEntryLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Trash2 className="w-4 h-4 mr-2" />}
+                Delete Entry
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </Layout>
   );
