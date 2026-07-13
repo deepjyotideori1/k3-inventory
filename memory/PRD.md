@@ -25,6 +25,31 @@ Build an Inventory Dashboard for K3 GAS SERVICE business with tagline "Khayal Ha
 
 
 ---
+## ACCESSORY SALES — EDIT + DELETE (2026-07-13)
+
+Per-row Edit/Delete on the Accessory Sales list, with cross-cascades to inventory + the auto-generated GST invoice.
+
+### Backend
+- **New `PUT /api/accessory-sales/{sale_id}`** (`accessories.py` ~L633) — admin only.
+  - Rebuilds items with fresh accessory names/totals.
+  - Reverses inventory deduction from the OLD items, then re-applies for the NEW items via `_restore_inventory_for_sale_items` + `_apply_inventory_for_sale_items` helpers.
+  - Calls `rebuild_linked_invoice_from_sale` (new helper in `gst_billing.py`) which updates the linked active GST invoice's customer info + line items + totals + payments **in place** — preserves `invoice_number` and `id`.
+- **Enhanced `DELETE /api/accessory-sales/{sale_id}`** — now restores inventory + calls `cancel_linked_invoice_from_sale` (new helper) which flips the linked invoice `status → cancelled` + stamps audit fields.
+- New public helpers on `gst_billing.py`: `rebuild_linked_invoice_from_sale`, `cancel_linked_invoice_from_sale`.
+
+### Frontend (`AccessorySales.jsx`)
+- New API helper `updateAccessorySale`.
+- Actions column now renders both `edit-accessory-sale-<id>` (blue pencil) and `delete-accessory-sale-<id>` (red trash) buttons.
+- `handleEdit(sale)` prefills the existing create dialog and toggles the dialog into edit mode (title becomes "Edit Accessory Sale", save button label becomes "Update Sale"). `resetForm()` runs on dialog close so the next open is clean.
+- Delete uses a shadcn `AlertDialog` (`delete-accessory-sale-dialog` / `-cancel` / `-confirm`) showing customer + memo + items + total + a red "This will restore inventory and cancel the linked GST invoice" warning.
+
+### Verified end-to-end (curl)
+- CREATE → sold+3 · UPDATE qty 3→5 → sold+2 delta applied · DELETE → sold restored to baseline. ✅
+- EDIT of a real linked sale (memo 1111 → CASCADE-TEST, pm cash → online) → linked GST invoice memo, payment_mode, online_received all synced. ✅
+
+---
+
+
 ## ACCESSORY ENTRIES — EDIT + DELETE (2026-07-13)
 
 Per-row Edit/Delete actions in the LPG Accessories → Reports → Detailed Entries table.

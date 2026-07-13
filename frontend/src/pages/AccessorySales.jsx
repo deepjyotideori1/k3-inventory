@@ -6,6 +6,7 @@ import {
   getCustomers,
   getAccessorySales,
   createAccessorySale,
+  updateAccessorySale,
   deleteAccessorySale,
   getAccessorySalesSummary,
   exportAccessorySalesPDF,
@@ -21,6 +22,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '../components/ui/dialog';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '../components/ui/alert-dialog';
 import { RadioGroup, RadioGroupItem } from '../components/ui/radio-group';
 import SearchBar from '../components/SearchBar';
 import { HighlightMatch } from '../components/SearchBar';
@@ -32,6 +37,7 @@ import {
   FileText,
   Download,
   Trash2,
+  Pencil,
   Calendar,
   FileSpreadsheet,
   Save,
@@ -78,6 +84,9 @@ const AccessorySales = () => {
   const [remarks, setRemarks] = useState('');
   const [selectedWarehouse, setSelectedWarehouse] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [editingSale, setEditingSale] = useState(null);           // sale object being edited (null = create mode)
+  const [deletingSale, setDeletingSale] = useState(null);         // sale object queued for deletion
+  const [deletingSaleLoading, setDeletingSaleLoading] = useState(false);
   
   // Filters
   const [dateRange, setDateRange] = useState('daily');
@@ -178,6 +187,45 @@ const AccessorySales = () => {
     }, 0);
   };
 
+  const resetForm = () => {
+    setDialogOpen(false);
+    setEditingSale(null);
+    setCustomerMode('existing');
+    setSelectedCustomer(null);
+    setNewCustomer({ name: '', phone: '', address: '' });
+    setSaleItems([{ accessory_id: '', quantity: 1, unit_price: 0 }]);
+    setPaymentMode('cash');
+    setSaleDate(getTodayDate());
+    setMemoNo('');
+    setRemarks('');
+  };
+
+  const handleEdit = (sale) => {
+    setEditingSale(sale);
+    // Prefill the sale-form state from the existing sale record
+    setCustomerMode('existing');
+    // Try to match against customers list to expose warehouse/id via SearchableSelect
+    const custMatch = customers.find(c => c.id === sale.customer_id) || {
+      id: sale.customer_id || 'inline',
+      customer_name: sale.customer_name,
+      phone: sale.customer_phone || '',
+      address: sale.customer_address || '',
+    };
+    setSelectedCustomer(custMatch);
+    setNewCustomer({ name: '', phone: '', address: '' });
+    setSaleItems((sale.items && sale.items.length > 0 ? sale.items : [{}]).map(it => ({
+      accessory_id: it.accessory_id || '',
+      quantity: it.quantity || 1,
+      unit_price: it.unit_price || 0,
+    })));
+    setPaymentMode(sale.payment_mode || 'cash');
+    setSaleDate(sale.date || getTodayDate());
+    setMemoNo(sale.memo_no || '');
+    setRemarks(sale.remarks || '');
+    setSelectedWarehouse(sale.warehouse_id || '');
+    setDialogOpen(true);
+  };
+
   const handleSubmit = async () => {
     // Validation
     if (customerMode === 'existing' && !selectedCustomer) {
@@ -213,45 +261,47 @@ const AccessorySales = () => {
         warehouse_id: isAdmin ? selectedWarehouse : user?.warehouse_id
       };
 
-      await createAccessorySale(saleData);
-      toast.success('Sale recorded successfully!');
-      
+      if (editingSale) {
+        await updateAccessorySale(editingSale.id, saleData);
+        toast.success('Sale updated successfully');
+      } else {
+        await createAccessorySale(saleData);
+        toast.success('Sale recorded successfully!');
+      }
+
       // Reset form
-      setDialogOpen(false);
-      setCustomerMode('existing');
-      setSelectedCustomer(null);
-      setNewCustomer({ name: '', phone: '', address: '' });
-      setSaleItems([{ accessory_id: '', quantity: 1, unit_price: 0 }]);
-      setPaymentMode('cash');
-      setMemoNo('');
-      setRemarks('');
-      
+      resetForm();
+
       // Refresh data
       fetchSales();
       fetchSummary();
       fetchData();
     } catch (error) {
-      console.error('Failed to create sale:', error);
+      console.error('Failed to save sale:', error);
       const detail = error?.response?.data?.detail;
       const msg = typeof detail === 'string'
         ? detail
-        : (detail?.message || (Array.isArray(detail) && detail[0]?.msg) || 'Failed to record sale');
+        : (detail?.message || (Array.isArray(detail) && detail[0]?.msg) || 'Failed to save sale');
       toast.error(msg);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleDelete = async (saleId) => {
-    if (!window.confirm('Are you sure you want to delete this sale?')) return;
-    
+  const handleDeleteConfirm = async () => {
+    if (!deletingSale) return;
+    setDeletingSaleLoading(true);
     try {
-      await deleteAccessorySale(saleId);
+      await deleteAccessorySale(deletingSale.id);
       toast.success('Sale deleted');
+      setDeletingSale(null);
       fetchSales();
       fetchSummary();
+      fetchData();
     } catch (error) {
-      toast.error('Failed to delete sale');
+      toast.error(error?.response?.data?.detail || 'Failed to delete sale');
+    } finally {
+      setDeletingSaleLoading(false);
     }
   };
 
@@ -310,7 +360,7 @@ const AccessorySales = () => {
             <p className="text-slate-500 mt-1">Record and manage accessory sales</p>
           </div>
           <Button 
-            onClick={() => setDialogOpen(true)}
+            onClick={() => { setEditingSale(null); setDialogOpen(true); }}
             className="bg-purple-700 hover:bg-purple-800"
             data-testid="add-sale-btn"
           >
@@ -548,14 +598,28 @@ const AccessorySales = () => {
                             <td className="text-sm text-slate-600">{sale.created_by_name}</td>
                             {isAdmin && (
                               <td>
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm"
-                                  onClick={() => handleDelete(sale.id)}
-                                  className="text-red-600 hover:text-red-800"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleEdit(sale)}
+                                    className="text-blue-600 hover:text-blue-800 hover:bg-blue-50"
+                                    data-testid={`edit-accessory-sale-${sale.id}`}
+                                    title="Edit sale"
+                                  >
+                                    <Pencil className="w-4 h-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setDeletingSale(sale)}
+                                    className="text-red-600 hover:text-red-800 hover:bg-red-50"
+                                    data-testid={`delete-accessory-sale-${sale.id}`}
+                                    title="Delete sale"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </div>
                               </td>
                             )}
                           </tr>
@@ -577,12 +641,12 @@ const AccessorySales = () => {
         </Tabs>
 
         {/* New Sale Dialog */}
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) resetForm(); else setDialogOpen(true); }}>
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <ShoppingBag className="w-5 h-5 text-purple-700" />
-                New Accessory Sale
+                {editingSale ? 'Edit Accessory Sale' : 'New Accessory Sale'}
               </DialogTitle>
             </DialogHeader>
 
@@ -826,13 +890,50 @@ const AccessorySales = () => {
                 onClick={handleSubmit}
                 disabled={submitting}
                 className="bg-purple-700 hover:bg-purple-800"
+                data-testid="save-accessory-sale-btn"
               >
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-                Save Sale
+                {editingSale ? 'Update Sale' : 'Save Sale'}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Delete Sale Confirmation */}
+        <AlertDialog open={!!deletingSale} onOpenChange={(open) => { if (!open) setDeletingSale(null); }}>
+          <AlertDialogContent data-testid="delete-accessory-sale-dialog">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete this accessory sale?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {deletingSale && (
+                  <span className="block space-y-1">
+                    <span className="block">
+                      <strong>{deletingSale.customer_name}</strong> · Memo: {deletingSale.memo_no || '—'} · {formatDate(deletingSale.date)}
+                    </span>
+                    <span className="block text-slate-600">
+                      {(deletingSale.items || []).map(it => `${it.accessory_name} × ${it.quantity}`).join(', ')} · Total: {formatINR(deletingSale.grand_total || 0)}
+                    </span>
+                    <span className="block text-red-700 mt-2">
+                      This will restore the sold quantities back to inventory and cancel the linked GST invoice. This can’t be undone.
+                    </span>
+                  </span>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-testid="delete-accessory-sale-cancel">Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteConfirm}
+                disabled={deletingSaleLoading}
+                className="bg-red-600 hover:bg-red-700 focus:ring-red-500"
+                data-testid="delete-accessory-sale-confirm"
+              >
+                {deletingSaleLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Trash2 className="w-4 h-4 mr-2" />}
+                Delete Sale
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </Layout>
   );

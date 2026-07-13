@@ -22,7 +22,12 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 import xlsxwriter
 
-from routes.gst_billing import auto_generate_invoice_from_sale, validate_sale_discrepancy
+from routes.gst_billing import (
+    auto_generate_invoice_from_sale,
+    validate_sale_discrepancy,
+    rebuild_linked_invoice_from_sale,
+    cancel_linked_invoice_from_sale,
+)
 
 router = APIRouter()
 
@@ -623,13 +628,128 @@ async def get_accessory_sale(sale_id: str, user: dict = Depends(get_current_user
         raise HTTPException(status_code=404, detail="Sale not found")
     return sale
 
+async def _restore_inventory_for_sale_items(items: list):
+    """Reverse the inventory deduction that was applied when the sale was created.
+    For each item, decrement `total_sold` on the LATEST accessory entry for that
+    accessory and recompute `total_remaining`. Best-effort — skips items where
+    no matching entry exists (already deleted)."""
+    for it in items or []:
+        acc_id = it.get('accessory_id')
+        qty = int(it.get('quantity') or 0)
+        if not acc_id or qty <= 0:
+            continue
+        latest = await db.accessory_entries.find_one(
+            {'accessory_id': acc_id}, {'_id': 0}, sort=[('date', -1)]
+        )
+        if not latest:
+            continue
+        new_sold = max(0, int(latest.get('total_sold', 0)) - qty)
+        new_remaining = int(latest.get('total_issued', 0)) - new_sold
+        await db.accessory_entries.update_one(
+            {'id': latest['id']},
+            {'$set': {'total_sold': new_sold, 'total_remaining': max(0, new_remaining)}},
+        )
+
+
+async def _apply_inventory_for_sale_items(items: list):
+    """Same logic used at sale creation — deduct from the latest entry per accessory."""
+    for it in items or []:
+        acc_id = it.get('accessory_id')
+        qty = int(it.get('quantity') or 0)
+        if not acc_id or qty <= 0:
+            continue
+        latest = await db.accessory_entries.find_one(
+            {'accessory_id': acc_id}, {'_id': 0}, sort=[('date', -1)]
+        )
+        if not latest:
+            continue
+        new_sold = int(latest.get('total_sold', 0)) + qty
+        new_remaining = int(latest.get('total_issued', 0)) - new_sold
+        await db.accessory_entries.update_one(
+            {'id': latest['id']},
+            {'$set': {'total_sold': new_sold, 'total_remaining': max(0, new_remaining)}},
+        )
+
+
+@router.put("/accessory-sales/{sale_id}")
+async def update_accessory_sale(sale_id: str, data: AccessorySaleCreate, user: dict = Depends(require_admin)):
+    """Update an accessory sale — restores inventory from the old items, applies
+    inventory for the new items, updates the sale, and rebuilds the linked GST
+    invoice in place (preserves invoice_number)."""
+    existing = await db.accessory_sales.find_one({'id': sale_id}, {'_id': 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Sale not found")
+
+    # Rebuild the item list with fresh accessory names/totals
+    sale_items = []
+    subtotal = 0.0
+    for item in data.items:
+        accessory = await db.accessories.find_one({'id': item.accessory_id, 'is_active': True}, {'_id': 0})
+        if not accessory:
+            raise HTTPException(status_code=404, detail=f"Accessory not found: {item.accessory_id}")
+        item_total = item.quantity * item.unit_price
+        sale_items.append({
+            'accessory_id': item.accessory_id,
+            'accessory_name': accessory['name'],
+            'quantity': item.quantity,
+            'unit_price': item.unit_price,
+            'total_amount': item_total,
+        })
+        subtotal += item_total
+
+    # Inventory: reverse old items, apply new items
+    await _restore_inventory_for_sale_items(existing.get('items', []))
+    await _apply_inventory_for_sale_items(sale_items)
+
+    update_data = {
+        'customer_name': data.customer_name,
+        'customer_phone': data.customer_phone,
+        'customer_address': data.customer_address,
+        'date': data.date,
+        'memo_no': data.memo_no,
+        'items': sale_items,
+        'subtotal': subtotal,
+        'amount': subtotal,
+        'grand_total': subtotal,
+        'payment_mode': data.payment_mode,
+        'remarks': data.remarks,
+        'updated_by': user['id'],
+        'updated_by_name': user['name'],
+        'updated_at': datetime.now(timezone.utc).isoformat(),
+    }
+    await db.accessory_sales.update_one({'id': sale_id}, {'$set': update_data})
+    updated = await db.accessory_sales.find_one({'id': sale_id}, {'_id': 0})
+
+    # Rebuild linked GST invoice (best-effort)
+    try:
+        await rebuild_linked_invoice_from_sale(updated, 'accessory_sale', user)
+    except Exception:
+        pass
+
+    return updated
+
+
 @router.delete("/accessory-sales/{sale_id}")
 async def delete_accessory_sale(sale_id: str, user: dict = Depends(require_admin)):
-    """Delete an accessory sale - Admin only"""
+    """Delete an accessory sale — Admin only.
+    Restores inventory (adds back sold quantities to the latest accessory entries)
+    and cancels any linked auto-generated GST invoice so it disappears from
+    active reports and the party ledger."""
     sale = await db.accessory_sales.find_one({'id': sale_id}, {'_id': 0})
     if not sale:
         raise HTTPException(status_code=404, detail="Sale not found")
-    
+
+    # Restore inventory (best-effort — never block delete on inventory issues)
+    try:
+        await _restore_inventory_for_sale_items(sale.get('items', []))
+    except Exception:
+        pass
+    # Cancel the linked GST invoice
+    try:
+        await cancel_linked_invoice_from_sale(sale_id, 'accessory_sale', user)
+    except Exception:
+        pass
+
     await db.accessory_sales.delete_one({'id': sale_id})
     return {"message": "Sale deleted successfully"}
 

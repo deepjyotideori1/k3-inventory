@@ -2279,6 +2279,108 @@ async def auto_generate_invoice_from_sale(sale: dict, sale_type: str, user: dict
     return await _auto_generate_invoice(sale, sale_type, user)
 
 
+async def rebuild_linked_invoice_from_sale(sale: dict, sale_type: str, user: dict) -> Optional[dict]:
+    """Called when a sale is EDITED. Rebuilds the customer/line-item/payment fields
+    of the linked active GST invoice in place — preserves invoice_number and id
+    so downstream references stay valid. If no linked invoice exists (auto-gen
+    was off at create time), generates a fresh one."""
+    inv = await db.gst_invoices.find_one(
+        {"sale_id": sale.get("id"), "sale_type": sale_type, "status": "active"},
+        {"_id": 0},
+    )
+    if not inv:
+        return await _auto_generate_invoice(sale, sale_type, user)
+
+    # Rebuild line items using the same logic as _auto_generate_invoice for accessory sales
+    line_items: List[dict] = []
+    if sale_type == "accessory_sale":
+        for it in (sale.get("items") or []):
+            acc_name = it.get("accessory_name", "")
+            qty = float(it.get("quantity") or 0)
+            rate = float(it.get("unit_price") or 0)
+            if qty <= 0 or rate <= 0:
+                continue
+            gst_item = await db.gst_items.find_one(
+                {"name": {"$regex": f"^{re.escape(acc_name)}", "$options": "i"}}, {"_id": 0}
+            )
+            gst_rate = float(gst_item.get("gst_rate") if gst_item else 18)
+            hsn = gst_item.get("hsn") if gst_item else "84812000"
+            unit = gst_item.get("unit") if gst_item else "Nos"
+            taxable_per_unit = round(rate * 100.0 / (100.0 + gst_rate), 2)
+            line_items.append({
+                "item_name": acc_name,
+                "hsn": hsn,
+                "unit": unit,
+                "gst_rate": gst_rate,
+                "quantity": qty,
+                "rate": taxable_per_unit,
+            })
+    if not line_items:
+        return None
+
+    cfg = await db.gst_config.find_one({"key": "gst_config"}) or {}
+    tax_mode = (inv.get("tax_mode") or cfg.get("default_tax_mode") or "intra_state").lower()
+    totals = compute_totals(line_items, tax_mode)
+
+    # Derive per-mode cash/online for accessory sales the same way _auto_generate does
+    sale_cash = float(sale.get("cash_amount") or 0)
+    sale_online = float(sale.get("online_amount") or 0)
+    if sale_type == "accessory_sale" and (sale_cash + sale_online) == 0:
+        grand_for_split = float(sale.get("grand_total") or sale.get("amount") or totals.get("grand_total") or 0)
+        pm = (sale.get("payment_mode") or "cash").lower()
+        if pm == "online":
+            sale_online = grand_for_split
+        elif pm == "pending":
+            pass
+        else:
+            sale_cash = grand_for_split
+
+    pay = compute_payment_fields(totals["grand_total"], sale_cash, sale_online,
+                                 sale.get("payment_mode") or inv.get("payment_mode"))
+    update = {
+        "customer_name": sale.get("customer_name") or inv.get("customer_name") or "",
+        "customer_phone": sale.get("customer_phone") or inv.get("customer_phone") or "",
+        "customer_address": sale.get("customer_address") or inv.get("customer_address") or "",
+        "memo_no": sale.get("memo_no") or inv.get("memo_no") or "",
+        "invoice_date": sale.get("date") or inv.get("invoice_date"),
+        "line_items": line_items,
+        "sub_total": totals["sub_total"],
+        "total_gst": totals["total_gst"],
+        "total_cgst": totals.get("total_cgst", 0),
+        "total_sgst": totals.get("total_sgst", 0),
+        "total_igst": totals.get("total_igst", 0),
+        "grand_total": totals["grand_total"],
+        "cash_received": pay["cash_received"],
+        "online_received": pay["online_received"],
+        "pending_amount": pay["pending_amount"],
+        "payment_status": pay["payment_status"],
+        "payment_mode": sale.get("payment_mode") or inv.get("payment_mode"),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.gst_invoices.update_one({"id": inv["id"]}, {"$set": update})
+    return {**inv, **update}
+
+
+async def cancel_linked_invoice_from_sale(sale_id: str, sale_type: str, user: dict) -> None:
+    """When a sale is deleted, cancel any active auto-generated GST invoice
+    linked to it so it disappears from active reports/ledgers."""
+    inv = await db.gst_invoices.find_one(
+        {"sale_id": sale_id, "sale_type": sale_type, "status": "active"},
+        {"_id": 0, "id": 1},
+    )
+    if not inv:
+        return
+    await db.gst_invoices.update_one(
+        {"id": inv["id"]},
+        {"$set": {
+            "status": "cancelled",
+            "cancelled_at": datetime.now(timezone.utc).isoformat(),
+            "cancelled_by": user.get("id") or "",
+            "cancel_reason": f"Auto-cancelled: source {sale_type} deleted",
+        }},
+    )
+
+
 # ============ PDF EXPORT (single invoice - Tax Invoice format) ============
 @router.get("/gst/invoices/{invoice_id}/pdf")
 async def export_invoice_pdf(invoice_id: str, user: dict = Depends(require_admin)):
